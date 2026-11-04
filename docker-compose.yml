@@ -1,0 +1,117 @@
+# JobPilot portal: PostgreSQL + FastAPI backend + local web UI (+ optional ngrok tunnel).
+#
+#   ./deploy/start.sh          start everything (recommended; also publishes the tunnel URL)
+#   docker compose up -d --build                          start without the tunnel
+#   docker compose --profile tunnel up -d --build         start with the ngrok tunnel
+#   docker compose down        stop (data is kept). Never use `down -v`: it deletes the database volume.
+#
+# Restart policy is "on-failure": crashed containers restart, but nothing starts by itself at boot.
+
+name: jobpilot
+
+x-limits: &limits
+  restart: on-failure:5
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  postgres:
+    <<: *limits
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: jobpilot
+      POSTGRES_USER: jobpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No ports: the database is reachable only on the internal Docker network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobpilot -d jobpilot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+    networks: [internal]
+
+  backend:
+    <<: *limits
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: jobpilot-backend:latest
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql+psycopg://jobpilot:${POSTGRES_PASSWORD}@postgres:5432/jobpilot
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      REGISTRATION_INVITE_CODE: ${REGISTRATION_INVITE_CODE:-}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
+      REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-14}
+      AUTH_RATE_LIMIT_PER_MINUTE: ${AUTH_RATE_LIMIT_PER_MINUTE:-10}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-5}
+      TZ_NAME: ${TZ_NAME:-Asia/Kolkata}
+      LLM_PROVIDER: ${PORTAL_LLM_PROVIDER:-rule_based}
+      LLM_MODEL: ${PORTAL_LLM_MODEL:-claude-opus-5}
+      LLM_EFFORT: ${PORTAL_LLM_EFFORT:-medium}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      ADZUNA_COUNTRY: ${ADZUNA_COUNTRY:-in}
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      SCHEDULER_RUN_TIME: ${SCHEDULER_RUN_TIME:-09:00}
+    volumes:
+      - storage:/data        # resumes, Excel reports, logs (per user under /data/users/<id>)
+    ports:
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    deploy:
+      resources:
+        limits: { cpus: "1.5", memory: 1G }
+    networks: [internal, edge]
+
+  frontend:
+    <<: *limits
+    build:
+      context: ./frontend
+    image: jobpilot-frontend:latest
+    depends_on:
+      backend: { condition: service_healthy }
+    ports:
+      - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-3000}:80"
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128M }
+    networks: [edge]
+
+  ngrok:
+    <<: *limits
+    profiles: [tunnel]
+    image: ngrok/ngrok:3-alpine
+    depends_on:
+      backend: { condition: service_healthy }
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+      NGROK_DOMAIN: ${NGROK_DOMAIN:-}
+    # With a reserved/static domain the public URL never changes: set NGROK_DOMAIN in .env.
+    entrypoint: ["/bin/sh", "-c"]
+    # The image's ngrok.yml exposes the inspector API on 0.0.0.0:4040; the agent reads NGROK_AUTHTOKEN itself.
+    command: ["exec ngrok --config=/var/lib/ngrok/ngrok.yml http http://backend:8000 --log stdout --log-format logfmt $${NGROK_DOMAIN:+--url=$${NGROK_DOMAIN}}"]
+    ports:
+      - "127.0.0.1:${NGROK_INSPECT_PORT:-4041}:4040"   # local inspector/API, used by deploy/start.sh
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 128M }
+    networks: [edge]
+
+volumes:
+  pgdata:
+  storage:
+
+networks:
+  internal:
+    internal: true    # postgres has no route to the outside world
+  edge: {}

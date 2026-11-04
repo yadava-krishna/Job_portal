@@ -1,0 +1,11 @@
+# Web portal (backend) dependencies, in addition to ../requirements.txt
+fastapi>=0.115
+uvicorn[standard]>=0.30
+SQLAlchemy>=2.0.30
+psycopg[binary]>=3.2
+alembic>=1.13
+argon2-cffi>=23.1
+PyJWT>=2.9
+python-multipart>=0.0.9
+cryptography>=43
+email-validator>=2.2

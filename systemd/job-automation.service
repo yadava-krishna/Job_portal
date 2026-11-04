@@ -1,0 +1,27 @@
+# Optional: run the daily scheduler as a systemd *user* service.
+# Install (not done automatically):
+#   mkdir -p ~/.config/systemd/user
+#   cp systemd/job-automation.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now job-automation.service     # start now and at login
+#   journalctl --user -u job-automation -f                   # follow output
+# Stop / disable:
+#   systemctl --user disable --now job-automation.service
+[Unit]
+Description=Daily job discovery and application tracking (scheduler)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/job_automation
+ExecStart=%h/job_automation/.venv/bin/python main.py schedule
+Restart=on-failure
+RestartSec=60
+# SIGTERM lets the current run stop at its next checkpoint and record itself as interrupted.
+KillSignal=SIGTERM
+TimeoutStopSec=120
+Nice=10
+MemoryMax=1G
+
+[Install]
+WantedBy=default.target

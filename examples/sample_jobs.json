@@ -1,0 +1,13 @@
+[
+  {
+    "url": "https://www.linkedin.com/jobs/view/4123456789/",
+    "title": "Accounts Receivable Analyst",
+    "company": "Example Healthcare Services",
+    "location": "Bengaluru, Karnataka",
+    "work_mode": "Hybrid",
+    "posted_date": "1 day ago",
+    "salary": "6-9 LPA",
+    "description": "Paste the complete job description here.",
+    "screening_questions": ["How many years of experience do you have?", "What is your notice period?"]
+  }
+]

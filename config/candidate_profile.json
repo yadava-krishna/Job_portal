@@ -1,0 +1,16 @@
+{
+  "_comment": "Verified candidate facts used for screening answers. Leave a value null until the candidate confirms it; null answers are reported as NEEDS_CANDIDATE_INPUT and are never guessed.",
+  "verified_facts": {
+    "current_ctc": null,
+    "expected_ctc": null,
+    "notice_period": null,
+    "willing_to_relocate": null,
+    "work_authorization": null,
+    "earliest_start_date": null,
+    "shift_flexibility": null,
+    "preferred_contact_email": null,
+    "preferred_contact_phone": null
+  },
+  "_overrides_comment": "Optional corrections to the parsed resume profile. Keys replace the parsed value of the same name (e.g. certifications, experience). Only use facts that are on the resume.",
+  "profile_overrides": {}
+}

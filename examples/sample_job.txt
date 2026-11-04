@@ -1,0 +1,15 @@
+URL: https://www.naukri.com/job-listings-financial-analyst-example-bengaluru-3-to-6-years-031125012345
+Title: Financial Analyst
+Company: Example Finance Pvt Ltd
+Location: Bengaluru
+Experience: 3-6 Yrs
+Posted: 2026-11-03
+---
+Paste the complete job description below the --- line.
+===
+Title: MIS Analyst
+Platform: Indeed
+URL: https://in.indeed.com/viewjob?jk=0123456789abcdef
+Company: Another Example Ltd
+---
+A second job in the same file is separated by a line of ===.

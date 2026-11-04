@@ -1,0 +1,19 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+logs/
+output/
+storage/
+Job_Applications/
+*.db
+# personal data (resume path, candidate details)
+config/settings.local.yaml
+tests/test_real_resume_local.py
+frontend/node_modules/
+frontend/dist/
+.deploy/
