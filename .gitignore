@@ -17,3 +17,6 @@ tests/test_real_resume_local.py
 frontend/node_modules/
 frontend/dist/
 .deploy/
+
+# database/storage backups (personal data)
+backups/

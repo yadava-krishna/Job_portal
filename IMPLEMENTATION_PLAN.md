@@ -1,155 +1,107 @@
-# JobPilot: Multi-User Job Application Portal: Implementation Plan
+# JobPilot v2: Implementation Plan
 
-Extends the existing single-candidate automation in this repository into a multi-user web portal.
-The existing CLI (`main.py`, `scheduler.py`, SQLite) keeps working unchanged.
+v1 (delivered, commit `ba9b46e`/`a9aa1fc`): multi-user portal on top of the CLI engine. Its plan lives in git history.
+This plan covers the v2 brief. Companion documents: `REFERENCE_PROJECT_ANALYSIS.md`, `CURRENT_ARCHITECTURE.md`, `SECURITY_REVIEW.md`.
 
-## 0. Baseline (recorded before any change)
+## Ground rules (apply to every phase)
+- Existing data is preserved: **additive Alembic migrations only** (new tables, nullable columns, backfills). Before each migration: `pg_dump` backup → `alembic upgrade` → smoke test; `downgrade` written for each revision.
+- Never `docker compose down -v`; never recreate volumes.
+- All 121 backend and 14 frontend tests stay green. Every new feature gets API tests (incl. cross-user isolation) and frontend tests. The API suite also runs against Postgres.
+- No auto-submission, no background crawling of job boards, no cookie or password collection, no "Applied" without confirmation.
+- Each phase ends with: tests, migration on the live DB, a restart and persistence check, a short changelog, and a deploy (backend rebuild + Pages).
 
-| Item | Value |
+## Phase 1: Security fixes, foundations and data model (first)
+**Fixes:** S2 rate-limit bypass (trusted-proxy IP + per-account throttle + test) · S3 docs off in production · S1 credential rotation runbook executed with you (DB password, invite) · CSP groundwork.
+
+**Migrations (`0002_v2_foundations`):**
+| Table / column | Purpose |
 |---|---|
-| Test suite | `.venv/bin/python -m pytest` → **89 passed** (2026-11-04) |
-| Python | 3.14 venv (code targets 3.12+) |
-| Existing SQLite (`~/Job_Applications/database/job_applications.db`) | candidates 1, jobs 0, applications 0, daily_runs 1, platform_status 3 |
-| Lint | `ruff check --select F,E9` clean |
+| `users.role` (user/admin), `users.nickname`, `users.status`, `users.last_seen_at` | RBAC, fun identity, admin user list |
+| `invites` | per-invite tokens, expiry, email lock, max uses, revocation (replaces the shared code; the env code keeps working until revoked) |
+| `audit_logs` | admin actions and sensitive reads |
+| `jobs.discovered_at`, `jobs.last_verified_at`, `jobs.posted_at_confidence` (verified/estimated/unknown, backfilled from `posted_at_source`), `jobs.company_logo_url`, `jobs.industry`, `jobs.canonical_url` | posting-date accuracy, cards, cross-source dedup |
+| `job_sources` (registry: key, kind, enabled, config, health, last_ok_at, last_error) | admin-configurable sources and health |
+| `notifications` (+ `notification_prefs`) | in-app notifications with dedupe key and occurrences (JobSync pattern) |
+| `user_activity_sessions` / `activity_heartbeats` | accurate time tracking |
+| `job_views` | recently viewed, jobs-viewed metric |
+| `ai_calls` | AI usage and cost metrics |
+| `extension_tokens` | scoped, hashed, revocable tokens for the browser extension |
+| `interviews`, `offers`, `application_contacts`, `applications.follow_up_at`, `applications.notes` (editable), `application_stage_history` | pipeline depth (Waddington / App Pal) |
+| `saved_searches` (+ `saved_search_runs`) | scheduled discovery per user (JobSync automations) |
+| `user_achievements` | badges |
 
-## 1. Deployment topology (as requested by the owner)
+**As built (2026-11-04):** migration `0002` applied live; existing user and data verified intact (row hash identical to the pre-migration backup); upgrade → downgrade → upgrade rehearsed on a restored copy of the live database and covered by `tests/api/test_migrations.py`. Deviations from the table above, chosen to avoid two sources of truth:
+- `users.status` not added: `users.is_active` already is the enforced account status.
+- `activity_heartbeats` not added: heartbeats aggregate into `user_activity_sessions`, which keeps `active_seconds` and `heartbeats`.
+- `application_stage_history` not added: stage changes are already recorded as `STAGE_CHANGED` rows in `application_events`.
+- `saved_search_runs` not added: runs are `discovery_runs` rows with the new `saved_search_id`.
+- `applications.notes` already existed; only `follow_up_at` was added.
 
-```
- Browser ──HTTPS──► GitHub Pages (yadava-krishna/Job_portal, gh-pages branch)
-    │                 static React build + config.json { apiBaseUrl }
-    │
-    └──HTTPS──► ngrok edge ──tunnel──► [owner's Ubuntu machine, Docker Compose]
-                                          ngrok agent ─► backend (FastAPI :8000)
-                                                            │
-                                                     postgres:16 (internal only, no host port)
-                                          frontend-local (nginx, LAN mode, optional port)
-```
+**API contracts:** documented in `docs/API_V2.md` (generated from OpenAPI plus a narrative); all new routes under `/api/v1`, with admin under `/api/v1/admin/*` behind `require_admin`.
 
-* The **backend is the source of truth for availability**: the UI polls `GET /api/v1/health` every 7 s
-  (4 s timeout, retry with backoff) and shows the full-screen *JOB PORTAL OFFLINE* page when it fails.
-* The ngrok URL on this account is **random per start**. The frontend therefore resolves the backend URL
-  at runtime, in this order: `?api=` query parameter → value saved in the browser (Connection settings)
-  → `config.json` on GitHub Pages (re-published by `deploy/start.sh` whenever the tunnel URL changes)
-  → build-time `VITE_API_BASE_URL`. With a free *static* ngrok domain (`NGROK_DOMAIN`), the URL never changes.
-* Cross-site setup (github.io ↔ ngrok): bearer tokens, not cookies (third-party cookies are blocked by
-  Safari and increasingly by Chrome). CORS allows only the configured frontend origins. Every request
-  sends `ngrok-skip-browser-warning` to bypass ngrok's free-tier interstitial.
+**Exit:** migration applied to the live DB with the existing user intact; all tests green; S1–S3 closed.
 
-## 2. Existing module → backend service map
+## Phase 2: Discovery, dedup, matching, feed
+1. **ATS board discovery** (Greenhouse, Lever, Ashby): source adapters, company watchlist per user, default India-relevant directory (JobSync MIT data with notice), saved searches with schedule and threshold, run history. Background worker: an in-process queue with persisted job state and recovery on startup (no new infrastructure); Redis/RQ only if needed later.
+2. **Adzuna** keys (yours), plus an optional Jooble/Careerjet after terms check.
+3. **Posting-date model:** `verified` (API timestamp / listing page / user) · `estimated` (alert-email date, "x days ago" text) · `unknown`; filters Today, 24h, 3d, 7d, 30d, custom; "Today" only for verified.
+4. **Cross-source dedup:** canonical URL + (normalised company, title, location) fingerprint merges the same job from Adzuna, an ATS and a clip into one listing with multiple `job_sources` links.
+5. **Matching v2:** add components *title relevance, industry relevance, salary fit, employment-type fit*; weights configurable per user (defaults keep today's behaviour); a 1–2 sentence **AI suitability summary** when an LLM is configured, labelled "rule-based" otherwise; LLM-aware re-scoring in the background (fixes the overwrite debt).
+6. **Resume parsing v2:** industry, tools and technologies extraction from the taxonomy; DOCX support; optional LLM-assisted extraction where every item must be found in the resume text (anti-fabrication check).
+7. **Feed v2:** company logos (favicon service via domain, cached), industry and employment-type filters, salary filter, infinite scroll, recently viewed, share (copy link / Web Share API), AI summary line.
+**Exit:** discovery runs on a schedule for test users, dedup across sources verified, all filters tested.
 
-| Existing module | Portal service | Reuse |
+## Phase 3: Browser extension and application assistance
+- **JobPilot MV3 extension** (`extension/`): per-site extractors (LinkedIn, Indeed, Naukri, Foundit, Glassdoor, Wellfound, Greenhouse, Lever, Ashby) with JSON-LD first; Shadow-DOM floating button; SPA observer; shows "already in JobPilot · 82%" on the page.
+- **Auth:** Settings → "Connect browser" creates a scoped extension token (pairing code), revocable per device.
+- **Assisted apply:**
+  - On employer ATS forms (Greenhouse, Lever, Ashby; Workday later), "Fill with JobPilot" fills name, email, phone, links and resume upload, plus answers from verified facts, only on click. **The user reviews and submits.**
+  - On LinkedIn, Indeed, Naukri, Foundit, Glassdoor and Wellfound: **side panel with copy-ready answers** and a "Mark as submitted" button. No automated typing or clicking on those sites.
+- Confirmation stays explicit (button / reference ID / confirmation email). The bookmarklet stays as the no-install fallback.
+- Packaging: unpacked install guide now; Chrome Web Store / Edge listing later (needs your developer account).
+**Exit:** extension tested on recorded fixture pages per site + manual check on live pages by you.
+
+## Phase 4: User dashboard, pipeline, reminders
+- **Today view** (Waddington): *your move* (follow-ups due, prepared-but-unsent, decide on saved jobs), *coming up* (interviews), *waiting on them* (gone quiet after N days per stage).
+- Interviews (rounds, date, mode, outcome, iCal export), offers (compare), contacts, notes, follow-up date, stage history; configurable stages incl. Ghosted (re-openable).
+- **Time tracking:** client heartbeat every 30 s only when the tab is visible **and** there was input in the last 2 min; server aggregates sessions (gap > 5 min = new session). Metrics: active time, sessions, average session, jobs viewed/saved, applications completed, daily/weekly activity.
+- Charts: applications by day/platform, status breakdown, discovery trend, score distribution, weekly activity heatmap, interview/offer trend, **Sankey funnel**.
+- Data export (JSON + Excel) and account deletion (privacy).
+**Exit:** metrics verified against seeded fixtures; isolation tests.
+
+## Phase 5: Admin dashboard
+- Users (status, role, registration, last login, resume uploaded yes/no, onboarding, preferred platforms) with activate/deactivate and role change; invites (create/copy/revoke, usage); aggregate application analytics (by user, company, platform, date, status, interview/offer/rejection counts, top companies/titles); system analytics (jobs discovered/matched, duplicates prevented, AI usage, source health, failed integrations, discovery errors, confirmations); source configuration; logs viewer (redacted); usage stats; aggregate Excel export.
+- Privacy: admins see aggregates and per-user application *metadata*; resume files and profile contents only through an explicit, audited "view personal data" action.
+**Exit:** non-admin gets 403 on every admin route (test per route); audit entries verified.
+
+## Phase 6: Visual system, theme, delight
+- Design tokens; **light and dark themes** with a toggle; typography refresh; `motion` (Framer Motion) for page/card transitions with reduced-motion support; skeletons everywhere.
+- **"Voyage" theme (toggleable, default on):** discovery as a treasure hunt, saved jobs = treasure chest, application progress as a voyage map, bounty-style stats, achievements ("First voyage", "Ten treasures", "Crew assembled"…). **All artwork, icons and copy original**; light nods only (e.g. "the Grand Line"), with no character names, logos or show artwork.
+- **Context-aware loading messages** (pools per context: resume parsing, discovery, matching, prep, report, dashboard, reconnect; no immediate repeats).
+- **Nicknames** (adjective_noun, e.g. `Brave_Captain`), stored per user, regenerate button; never replaces real name in reports.
+- Onboarding v2 (9 steps as in the brief, resumable, no duplicate data entry), CSP meta tag.
+**Exit:** Lighthouse performance ≥ 85 on Discover/Dashboard, accessibility ≥ 90; visual check on mobile/tablet/desktop.
+
+## Phase 7: Notifications and reporting
+- In-app notification centre (bell, unread count, mark read, preferences/frequency): high-match jobs, posted-today jobs, saved-job reminders, follow-ups, interviews, status changes, failed integrations, profile updates.
+- Optional email digests via SMTP (your mailbox app password or a provider key); password reset by email.
+- Excel: weekly, monthly, history per user (reusing the generator) + admin aggregate workbook; the daily report gains the brief's columns (confirmation timestamp, reference ID, etc.).
+
+## Phase 8: Deployment and hardening
+- Nightly `pg_dump` + storage tarball (`deploy/backup.sh`, systemd timer or cron, retention), tested `deploy/restore.sh`.
+- Structured JSON logs, request IDs, error budget on discovery sources, health detail split (public minimal vs admin full).
+- Static ngrok domain (yours to claim) to stop URL churn; optional Cloudflare Tunnel alternative.
+- Full acceptance run (brief §18) and final documentation set.
+
+## Needs from you
+| Item | Why | When |
 |---|---|---|
-| `resume/resume_parser.py` | `backend/services/resume_service.py` | **As is** |
-| `resume/profile_builder.py` | `resume_service` | Small refactor: extract `build_profile_from_pdf(path, taxonomy, …)` so it no longer needs global `Settings`; `ProfileBuilder` keeps its API and calls it |
-| `core/skills.py` (taxonomy) | resume, matching, discovery | **As is** |
-| `intelligence/jd_analyzer.py` | `discovery_service` (JD parsing) | **As is** |
-| `intelligence/job_matcher.py` | `matching_service` | **As is**. Fed per-user `MatchingConfig`/`SearchConfig` built from the user's preferences |
-| `intelligence/eligibility.py` | `matching_service` | **As is** (per-user `EligibilityConfig`) |
-| `intelligence/cover_letter.py` | `application_service` | **As is** |
-| `applications/screening_answers.py` | `application_service` | **As is** (per-user verified facts) |
-| `applications/submission_verifier.py` | `application_service` | `check_candidate_evidence`, `match_confirmation_email` reused |
-| `applications/application_manager.py`, `approval_manager.py` | CLI only | Not used by the portal (SQLite-bound); same state-machine *rules* re-expressed for Postgres |
-| `discovery/sources.py` | `discovery_service` | `record_from_mapping`, `parse_text_jobs`, `parse_alert_email`, `EmailAlertSource` reused |
-| `discovery/job_extractor.py`, `deduplication.py` | `discovery_service` | **As is** (`JobExtractor.to_posting`, `job_key`, `fingerprint`) |
-| `platforms/*` | `platform_service` | **As is** (ID parsing, canonical URLs, search links, capabilities) |
-| `reports/excel_generator.py`, `summary_generator.py` | `report_service` | **As is**. A per-user adapter implements the same read methods (`report_rows`, `runs_on`, `errors_on`, `platform_status_on`) over Postgres |
-| `core/llm.py` | matching, cover letter | **As is** (provider from env) |
-| `database/db.py` (SQLite) | CLI only + one-time import script | Unchanged; `backend/scripts/import_sqlite.py` copies its data into a chosen portal user |
-| `main.py`, `scheduler.py`, `runner.py` | CLI | Unchanged |
+| Approve rotating the DB password and invite code (S1) | exposed in chat | Phase 1 |
+| `ANTHROPIC_API_KEY` (or local Ollama in Docker per your rule) | AI scoring and summaries; otherwise rule-based (clearly labelled) | Phase 2 |
+| Adzuna app ID/key | automated discovery with verified dates | Phase 2 |
+| ngrok static domain | stable backend URL | any time |
+| SMTP credentials (optional) | email notifications and password reset | Phase 7 |
+| Chrome Web Store developer account (optional) | publish the extension instead of unpacked install | Phase 3+ |
 
-## 3. New database (PostgreSQL, SQLAlchemy 2 + Alembic)
-
-| Table | Key columns | Constraints / indexes |
-|---|---|---|
-| `users` | email, password_hash (Argon2id), full_name, is_active, created_at, last_login_at | unique(email) |
-| `refresh_tokens` | user_id, token_hash (SHA-256), expires_at, revoked_at, replaced_by | unique(token_hash); rotation + reuse detection |
-| `resumes` | user_id, original_filename, stored_path, sha256, size_bytes, page_count, is_active | index(user_id) |
-| `candidate_profiles` | user_id, active_resume_id, parsed_profile JSON, confirmed_profile JSON, experience_months, verified_facts JSON, confirmed_at | unique(user_id) |
-| `job_preferences` | domains, industries, job_titles, title_keywords, locations, work_modes, salary_min/max, currency, experience_min/max, employment_types, notice_period, preferred/excluded_companies, min_match_score, weights, application_settings | unique(user_id) |
-| `platform_preferences` | user_id, platform, enabled, discovery_sources | unique(user_id, platform) |
-| `email_integrations` | user_id, imap_host/port/username, **encrypted** password (Fernet), folder, enabled, last_checked_at | unique(user_id) |
-| `jobs` (global public listing) | job_key, platform, external_job_id, fingerprint, company, title, location, work_mode, employment_type, salary/experience fields, description, skills/education JSON, job_url, posted_at, posted_at_source, source | unique(job_key); index(fingerprint), index(posted_at) |
-| `user_jobs` (private per user) | user_id, job_id, discovery_run_id, source, match_score, match_category, match JSON, matching/missing skills, eligibility, status (new/shortlisted/saved/dismissed/applied), saved_at, dismissed_at | unique(user_id, job_id); index(user_id, status), index(user_id, match_score) |
-| `applications` | user_id, job_id, user_job_id, status, stage, resume_id, resume_used, cover_letter, screening_answers, checklist, reference_id, confirmation_*, opened_at, submitted_at | unique(user_id, job_id), so duplicate applications are impossible |
-| `application_events` | application_id, user_id, event_type, from/to status, details | index(application_id) |
-| `discovery_runs` | user_id, trigger, status, started/completed, jobs_found/new/matched/duplicates, error_details, filters | index(user_id, started_at) |
-| `reports` | user_id, kind (daily/history), report_date, file_path, size | index(user_id, created_at) |
-
-**Isolation rule:** every query for user data goes through `scoped(select(Model), user)`, which adds
-`Model.user_id == current_user.id`. Routes never accept a `user_id` from the client. Cross-user access
-returns 404 (not 403), so existence isn't leaked. Tests cover each resource with two users.
-
-**Posting dates:** `posted_at_source` ∈ {`platform_api` (verified), `user_provided`, `alert_email`
-(approximate: on or before the alert), null}. "Today" filters use only verified dates
-(`platform_api`, `user_provided`). Anything else is labelled *Unknown* or *≤ alert date*.
-
-## 4. Discovery sources (permitted only)
-
-| Source | Platforms | Posting date |
-|---|---|---|
-| Paste URL + description (Quick Import) | LinkedIn / Indeed / Naukri | user-provided |
-| Upload JSON / CSV / TXT | all three | user-provided |
-| User's own job-alert emails (IMAP, read-only, password encrypted at rest) | all three | approximate |
-| Adzuna official API (optional, server keys `ADZUNA_APP_ID/KEY`) | "Other: official API" (aggregator) | verified |
-| Pre-filtered search links (manual search) | all three | n/a |
-
-No scraping, browser automation, private APIs or auto-submission. Job pages are never fetched;
-"is this still open?" is a checklist item for the user.
-
-## 5. Ideas adopted from alexmc2/jobs-tracker (JobOps)
-
-Concepts only; no code is copied (that project is AGPLv3 + Commons Clause). Its LinkedIn/Indeed scraping
-is deliberately **not** adopted.
-
-1. Post-application **pipeline board**: Applied → Screening → Interview → Offer / Rejected / Withdrawn, with an event log.
-2. **Manual import sheet**: paste URL + JD in one step (our primary discovery path).
-3. **Fit assessment** panel with a score indicator and component breakdown.
-4. **Keyboard shortcuts** on the discovery list (j/k move, o open JD, s save, d dismiss, a apply).
-5. **Analytics**: applications per day, funnel conversion, results by platform.
-6. **Onboarding gate**: the app routes to onboarding until resume, profile, preferences and platforms are confirmed.
-7. **Adzuna** official API as an extra legitimate source.
-8. **Search helpers**: per-platform pre-filtered search links plus a "company careers page" web search link.
-
-## 6. API (FastAPI, `/api/v1`, OpenAPI at `/api/docs`)
-
-auth: register, login, refresh, logout, me · health: health, health/ready · profile: get/put, resume upload/download, parse-resume, verified facts ·
-preferences get/put · platforms list / put preferences · integrations email get/put/test ·
-jobs: discover, import (single/file), list (filters), get, analysis, save/unsave, dismiss/restore, search-links ·
-applications: prepare, open, confirm, fail, withdraw, stage, list, get · reports: list, daily, history, download ·
-dashboard: summary, activity, analytics.
-
-## 7. Frontend (React 19 + TS + Vite + Tailwind v4 + shadcn/ui + React Router + TanStack Query)
-
-Pages: Login, Register, Onboarding (resume → review profile → preferences → platforms → confirm), Dashboard,
-Discover (workspace with filters, job cards, JD side sheet, Apply dialog), Saved, Applied (table + board), Reports, Settings,
-Offline screen, Connection settings. Uses a HashRouter (GitHub Pages has no SPA rewrites).
-
-## 8. Security
-
-Argon2id hashing, password policy, 15-min JWT access tokens, rotating refresh tokens (hashed, revocable,
-reuse detection), auth rate limiting, optional registration invite code (the backend is internet-reachable),
-CORS allowlist, upload validation (MIME + magic bytes + size + PyMuPDF open + sanitised name, stored under
-`storage/users/{id}/resumes/<uuid>.pdf`), path-traversal-safe file serving through DB ownership,
-Fernet-encrypted IMAP passwords, secrets in `.env`, redacted logs, Postgres with no host port.
-
-## 9. Phases and verification
-
-| Phase | Deliverable | Verified by |
-|---|---|---|
-| 1 | This plan + baseline | 89 tests |
-| 2 | Postgres schema (SQLAlchemy + Alembic), auth | auth/isolation tests |
-| 3 | Resume parser + matching integration | resume/matching API tests |
-| 4 | Onboarding: profile, preferences, platforms | API tests |
-| 5 | Discovery (import, email, Adzuna), dedup, filters | discovery tests |
-| 6–7 | React app: dashboard, discovery workspace, JD sheet, apply flow, saved/applied/board | `npm run build`, vitest |
-| 8 | Per-user Excel reports | report tests |
-| 9 | Health + offline/reconnect UI | backend health tests + frontend hook tests + live stop/start |
-| 10 | Docker (postgres, backend, ngrok, local nginx), start/stop scripts, Pages deploy | `docker compose up`, live curl through ngrok |
-| 11 | Full integration, persistence across restarts | restart test, end-to-end through the public URLs |
-
-## 10. Known constraints (stated up front)
-
-* No platform offers job-seeker search/apply APIs; discovery depends on user imports, the user's alert emails, and Adzuna.
-* Adzuna returns description *snippets*; full descriptions must be pasted by the user for high-confidence scoring.
-* GitHub Pages on a **private** repository requires a paid GitHub plan; on a free plan the repo must be public.
-* With a random ngrok URL, a change of address takes effect when `deploy/start.sh` republishes `config.json` (and the Pages CDN refreshes, up to ~10 min); a static ngrok domain avoids this.
+## Effort and order
+Phase 1 is a prerequisite for everything else. Phases 2 and 3 deliver the biggest user value. 4 → 5 → 6 → 7 → 8 follow. Each phase is shipped and verified on the live deployment before the next starts.

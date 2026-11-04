@@ -8,8 +8,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse
 
+from backend.api.deps import is_local_request
 from backend.api.routes import applications, auth, health, jobs, profile, reports
 from backend.config import VERSION, get_settings
 from backend.db import Base, get_engine, init_engine
@@ -43,7 +45,8 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
         title="JobPilot API", version=VERSION, lifespan=lifespan,
         description="Multi-user job discovery, matching and application tracking. "
                     "Uses only permitted sources; applications are always submitted by the user on the original platform.",
-        docs_url=f"{API_PREFIX}/docs", openapi_url=f"{API_PREFIX}/openapi.json", redoc_url=None,
+        # Docs routes are registered below so access can depend on DOCS_MODE and the caller.
+        docs_url=None, openapi_url=None, redoc_url=None,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -78,9 +81,28 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
     for r in (health.router, auth.router, profile.router, jobs.router, applications.router, reports.router):
         app.include_router(r, prefix=API_PREFIX)
 
+    def docs_allowed(request: Request) -> bool:
+        mode = settings.docs_mode
+        return mode == "public" or (mode == "local" and is_local_request(request, settings))
+
+    @app.get(f"{API_PREFIX}/openapi.json", include_in_schema=False)
+    def openapi_schema(request: Request):
+        if not docs_allowed(request):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        return JSONResponse(app.openapi())
+
+    @app.get(f"{API_PREFIX}/docs", include_in_schema=False)
+    def swagger_ui(request: Request):
+        if not docs_allowed(request):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        return get_swagger_ui_html(openapi_url=f"{API_PREFIX}/openapi.json", title="JobPilot API")
+
     @app.get("/", include_in_schema=False)
-    def root():
-        return {"service": "jobpilot-backend", "docs": f"{API_PREFIX}/docs", "health": f"{API_PREFIX}/health"}
+    def root(request: Request):
+        body = {"service": "jobpilot-backend", "health": f"{API_PREFIX}/health"}
+        if docs_allowed(request):
+            body["docs"] = f"{API_PREFIX}/docs"
+        return body
 
     return app
 

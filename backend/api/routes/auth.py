@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from backend.api.deps import CurrentUser, DbSession, SettingsDep, auth_rate_limit
+from backend.api.deps import CurrentUser, DbSession, SettingsDep, auth_rate_limit, check_account_lock, login_failure_key
 from backend.schemas.auth import AuthConfig, AuthResponse, LoginRequest, RefreshRequest, RegisterRequest, UserOut
+from backend.security import rate_limiter
 from backend.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -23,7 +24,14 @@ def register(req: RegisterRequest, request: Request, db: DbSession, settings: Se
 
 @router.post("/login", response_model=AuthResponse, dependencies=[Depends(auth_rate_limit)])
 def login(req: LoginRequest, request: Request, db: DbSession, settings: SettingsDep) -> AuthResponse:
-    user = auth_service.authenticate(db, req)
+    check_account_lock(req.email, settings)
+    try:
+        user = auth_service.authenticate(db, req)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+            rate_limiter.record(login_failure_key(req.email))
+        raise
+    rate_limiter.clear(login_failure_key(req.email))
     return auth_service.issue_tokens(db, settings, user, request.headers.get("user-agent"))
 
 

@@ -25,6 +25,12 @@ class BackendSettings(BaseModel):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"])
     registration_invite_code: str | None = None
     trust_proxy_headers: bool = True
+    # Only these peers may set X-Forwarded-For (ngrok/nginx containers on Docker networks, loopback).
+    trusted_proxy_cidrs: list[str] = Field(default_factory=lambda: ["127.0.0.0/8", "::1/128", "172.16.0.0/12"])
+    # API docs: "public" (dev), "local" (only from this machine / Docker networks), "off".
+    docs_mode: str = "public"
+    login_failures_per_account: int = 10
+    login_failure_window_minutes: int = 15
     max_upload_mb: int = 5
     auth_rate_limit_per_minute: int = 10
     timezone: str = "Asia/Kolkata"
@@ -38,6 +44,20 @@ class BackendSettings(BaseModel):
     adzuna_country: str = "in"
     scheduler_enabled: bool = True
     scheduler_run_time: str = "09:00"
+
+    @field_validator("trusted_proxy_cidrs", mode="before")
+    @classmethod
+    def _split_cidrs(cls, v):
+        if isinstance(v, str):
+            return [c.strip() for c in v.split(",") if c.strip()]
+        return v
+
+    @field_validator("docs_mode")
+    @classmethod
+    def _docs_mode(cls, v: str) -> str:
+        if v not in {"public", "local", "off"}:
+            raise ValueError("DOCS_MODE must be public, local or off")
+        return v
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -88,6 +108,10 @@ def get_settings() -> BackendSettings:
         "cors_origins": _env("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"),
         "registration_invite_code": _env("REGISTRATION_INVITE_CODE"),
         "trust_proxy_headers": _env("TRUST_PROXY_HEADERS", "true").lower() == "true",
+        "trusted_proxy_cidrs": _env("TRUSTED_PROXY_CIDRS", "127.0.0.0/8,::1/128,172.16.0.0/12"),
+        "docs_mode": _env("DOCS_MODE", "local" if environment == "production" else "public"),
+        "login_failures_per_account": int(_env("LOGIN_FAILURES_PER_ACCOUNT", 10)),
+        "login_failure_window_minutes": int(_env("LOGIN_FAILURE_WINDOW_MINUTES", 15)),
         "max_upload_mb": int(_env("MAX_UPLOAD_MB", 5)),
         "auth_rate_limit_per_minute": int(_env("AUTH_RATE_LIMIT_PER_MINUTE", 10)),
         "timezone": _env("TZ_NAME", "Asia/Kolkata"),

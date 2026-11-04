@@ -1,0 +1,64 @@
+# JobPilot: Security Review (Phase 0, 2026-11-04; updated Phase 1, 2026-11-04)
+
+Scope: backend API, data storage, deployment (Docker, ngrok, GitHub Pages), frontend, browser clipper.
+Findings marked **verified** were reproduced against the running system; the others are from code inspection.
+No secrets are reproduced in this document.
+
+## Summary
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| S1 | **High** | Database password and registration invite code were printed in a chat transcript | **Fixed (Phase 1)**: password and invite rotated, verified |
+| S2 | **High** | Auth rate limiting is bypassable with a forged `X-Forwarded-For` header (**verified**: 12/12 attempts unthrottled with spoofed header vs 429 after 10 without) | **Fixed (Phase 1)**: verified live and by regression tests |
+| S3 | Medium | OpenAPI docs and schema publicly reachable through the tunnel (**verified** 200 on `/api/v1/docs`, `/openapi.json`) | **Fixed (Phase 1)**: verified live and by tests |
+| S4 | Medium | Single shared invite code, no expiry or usage limit, no revocation per invitee | Replace with invites table (Phase 1/5) |
+| S5 | Medium | No role model: no admin separation, no audit log | Phase 1 + 5 |
+| S6 | Medium | Refresh token in `localStorage`: readable by any XSS on the Pages origin | Mitigate with CSP + no-HTML rendering; keep rotation and reuse detection |
+| S7 | Medium | No Content-Security-Policy on the GitHub Pages frontend | Add `<meta http-equiv="Content-Security-Policy">` (Phase 6) |
+| S8 | Low | No password reset or account deletion / data export (privacy rights) | Phase 4/7 |
+| S9 | Low | Health endpoint discloses version and scheduler timing publicly | Reduce public detail (Phase 8) |
+| S10 | Low | In-flight discovery runs lost on restart; stuck `running` rows | Phase 2 (job queue / recovery) |
+| S11 | Low | No automated database backup | Phase 8 (`pg_dump` timer + restore doc) |
+| S12 | Info | PDF parsing runs in the API process (PyMuPDF on untrusted files) | Size/page limits exist; consider a subprocess with timeout (Phase 8) |
+
+## Details and remediation
+
+**S1: Exposed credentials. FIXED (Phase 1).** The Postgres password and the invite code were shown in a conversation. Postgres is not reachable from outside Docker, which limited the impact, but both were treated as compromised.
+*Done (no data loss, new values never printed):*
+1. A backup was taken and verified first (`pg_dump -Fc` + storage tarball + SHA-256 sums). It was restored into a throwaway Postgres 16 with identical row counts. The backup stays local in `backups/`, which is gitignored.
+2. The role password was changed in the database with `ALTER ROLE jobpilot WITH PASSWORD …`, sent over stdin. Updating `POSTGRES_PASSWORD` alone does not change an existing role. `.env` was then synchronised and only postgres and backend were recreated; the volume is untouched.
+3. Verification ran over the Docker network from the backend container. The in-container loopback uses `trust` auth, so a local test proves nothing. Result: old password **rejected**, new password **accepted**; backend health shows the database connected; the existing user and their resume and profile rows are intact.
+4. `REGISTRATION_INVITE_CODE` was rotated. The old code returns 403 on registration and the new one is accepted. No probe accounts were created.
+5. Not rotated: `JWT_SECRET` (would sign everyone out) and the ngrok authtoken (never displayed). Both are optional.
+
+**S2: Rate-limit bypass. FIXED (Phase 1).** There were three layers to the cause:
+(a) `client_ip` used the *first* `X-Forwarded-For` entry, which the client controls.
+(b) uvicorn ran with `--forwarded-allow-ips='*'`, which does the same.
+(c) Found during live verification: **ngrok forwards the client's own `X-Forwarded-For` as a separate header line and appends its own line after it**, so `headers.get()` returned only the forged line.
+
+*Fix:*
+- uvicorn now runs with `--no-proxy-headers`.
+- `resolve_client_ip()` honours `X-Forwarded-For` only when the direct peer is in `TRUSTED_PROXY_CIDRS` (default loopback + 172.16.0.0/12, the Docker networks). It joins **all** header lines and walks the chain right to left, returning the first untrusted address. A malformed hop falls back to the peer.
+- Per-account throttling: after `LOGIN_FAILURES_PER_ACCOUNT` (10) failures within `LOGIN_FAILURE_WINDOW_MINUTES` (15), that email gets 429 from any address, including with the correct password, until the window passes. A successful login clears the counter.
+
+*Evidence:*
+- 8 integration tests in `tests/api/test_security.py`: untrusted peer with spoofed header; forged left entries behind the proxy; ngrok-style split header lines; separate buckets per real client; per-account lock across rotating addresses; case-insensitive lock key; reset on success; plus 13 resolver unit cases.
+- With the old header handling patched back in, the split-line tests fail. They pass with the fix.
+- Live through the tunnel: 13 logins with rotating forged `X-Forwarded-For` and a different email each time (so the account lock cannot mask the result) returned 401×10 then 429×3. Before the fix this was 12/12 unthrottled.
+
+**S3: Public API docs. FIXED (Phase 1).** `DOCS_MODE` is `public` / `local` / `off`. The default is `local` when `ENVIRONMENT=production` (the Docker image) and `public` in development. `local` serves `/api/v1/docs` and `/api/v1/openapi.json` only when the *resolved* client address is in `TRUSTED_PROXY_CIDRS`, which means this machine or its containers. ReDoc and the framework default `/docs`, `/redoc` and `/openapi.json` are disabled. The root endpoint advertises docs only to callers allowed to see them.
+*Evidence:*
+- Live through the tunnel: `/api/v1/docs` and `/openapi.json` return 404, including with forged `X-Forwarded-For: 127.0.0.1` or `172.20.0.1`. On `127.0.0.1:8000` they return 200; ReDoc returns 404.
+- 6 tests cover production public/tunnel/forged/local, `off` and development modes, and rejection of an invalid `DOCS_MODE`.
+- Note: the local web UI on `:3080` is published on the LAN. With Docker's default port publishing, nginx sees the LAN client's real address (untrusted), so docs stay hidden there too. If the userland proxy were in use, LAN clients would appear as the Docker gateway and could see the docs. That is acceptable for a home LAN and would be removed by setting `FRONTEND_BIND=127.0.0.1`.
+
+**S4: Invites.** Table `invites(token_hash, email?, role, max_uses, used_count, expires_at, created_by, revoked_at)`; admin UI to create, copy, revoke; registration consumes atomically.
+
+**S5: RBAC and audit.** `users.role ∈ {user, admin}` enforced by a backend dependency (`require_admin`); every admin read of user-level data and every admin action written to `audit_logs(actor_id, action, target_type, target_id, ip, at, details)`. Admin views of resumes and personal data require an explicit "view personal data" action that is itself audited. Frontend hiding is cosmetic only.
+
+**S6/S7: Token storage and XSS.** Keep bearer tokens (cross-site cookies between github.io and ngrok are unreliable), but: strict CSP (`default-src 'self'; connect-src 'self' https://*.ngrok-free.app https://*.ngrok.app; img-src 'self' data: https:; script-src 'self'`), never render job-description HTML (we render text only; keep it that way), short access-token TTL (15 min, already), refresh rotation with reuse detection (already).
+
+**Browser extension (Phase 3) security design.** Scoped, revocable **extension tokens** (scope `jobs:capture`, `profile:read-autofill`), shown once, hashed at rest, per-device name and expiry; minimal host permissions requested per site; content scripts never read cookies, storage or other tabs; autofill only on explicit click and never submits; no password or OTP fields are ever touched.
+
+## Controls already in place (verified in code/tests)
+Argon2id hashing with rehash-on-login · uniform timing on unknown emails · password policy · 15-min HS256 access JWT · rotating refresh tokens stored as SHA-256, family revocation on reuse · every user-data query scoped by `user_id`, cross-user access returns 404 (tested for each resource) · resume uploads: size, `%PDF` magic, PyMuPDF open, encryption and page checks, server-generated filenames, ownership plus path check on download · Fernet-encrypted IMAP passwords · CORS allowlist · security headers · Postgres on an internal-only network, backend bound to 127.0.0.1 · secrets in `.env` (600, gitignored) · log redaction of emails, phones, keys and passwords · history scanned clean of secrets and personal data before the repo went public.

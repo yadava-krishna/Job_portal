@@ -30,4 +30,6 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD python -c "import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=4); sys.exit(0 if r.status==200 else 1)"
 
 # Apply migrations, then serve. One worker: in-process scheduler and auth rate limiter.
-CMD ["sh", "-c", "alembic -c backend/alembic.ini upgrade head && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+# Proxy headers are NOT processed by uvicorn: the app resolves the client address itself and only
+# trusts X-Forwarded-For from configured proxy networks (see backend/api/deps.py::resolve_client_ip).
+CMD ["sh", "-c", "alembic -c backend/alembic.ini upgrade head && exec uvicorn backend.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers"]

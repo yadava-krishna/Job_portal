@@ -34,6 +34,16 @@ from platforms.base_platform import PlatformError
 
 log = logging.getLogger(__name__)
 VERIFIED_DATE_SOURCES = ("platform_api", "platform_page", "user_provided")
+ESTIMATED_DATE_SOURCES = ("alert_email",)
+
+
+def posted_confidence(posted_at: date | None, source: str | None) -> str:
+    """verified | estimated | unknown. Mirrors the backfill in migration 0002."""
+    if posted_at is None:
+        return "unknown"
+    if source in VERIFIED_DATE_SOURCES:
+        return "verified"
+    return "estimated" if source in ESTIMATED_DATE_SOURCES else "unknown"
 
 
 # ---- global job upsert ------------------------------------------------------------
@@ -55,7 +65,9 @@ def upsert_job(db: Session, key: str, cols: dict[str, Any], posted_at: date | No
     """Insert a public listing, or enrich an existing one. Returns (job, created)."""
     job = db.execute(select(Job).where(Job.job_key == key)).scalar_one_or_none()
     if job is None:
-        job = Job(job_key=key, posted_at=posted_at, posted_at_source=posted_source if posted_at else None, description_is_snippet=snippet, **cols)
+        job = Job(job_key=key, posted_at=posted_at, posted_at_source=posted_source if posted_at else None,
+                  posted_at_confidence=posted_confidence(posted_at, posted_source), discovered_at=utcnow(),
+                  description_is_snippet=snippet, **cols)
         db.add(job)
         try:
             db.flush()
@@ -78,6 +90,7 @@ def upsert_job(db: Session, key: str, cols: dict[str, Any], posted_at: date | No
     rank = {"platform_api": 4, "platform_page": 3, "user_provided": 2, "alert_email": 1, None: 0}
     if posted_at and rank.get(posted_source, 0) > rank.get(job.posted_at_source, 0):
         job.posted_at, job.posted_at_source = posted_at, posted_source
+        job.posted_at_confidence = posted_confidence(posted_at, posted_source)
     db.flush()
     return job, False
 

@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -44,6 +45,10 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # user | admin. Enforced by the backend (require_admin), never only by the UI.
+    role: Mapped[str] = mapped_column(String(20), default="user", server_default=text("'user'"), nullable=False)
+    nickname: Mapped[str | None] = mapped_column(String(60))
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class RefreshToken(Base):
@@ -164,6 +169,13 @@ class Job(Base):
     job_url: Mapped[str | None] = mapped_column(String(1000))
     posted_at: Mapped[date | None] = mapped_column(Date, index=True)
     posted_at_source: Mapped[str | None] = mapped_column(String(20))  # platform_api | user_provided | alert_email
+    # verified (API / listing page / user) | estimated (alert email, "x days ago") | unknown
+    posted_at_confidence: Mapped[str | None] = mapped_column(String(12))
+    discovered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    canonical_url: Mapped[str | None] = mapped_column(String(1000), index=True)
+    company_logo_url: Mapped[str | None] = mapped_column(String(1000))
+    industry: Mapped[str | None] = mapped_column(String(100))
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     application_method: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -186,6 +198,7 @@ class DiscoveryRun(Base):
     duplicates: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error_details: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False)
     platform_stats: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    saved_search_id: Mapped[int | None] = mapped_column(ForeignKey("saved_searches.id", ondelete="SET NULL", name="fk_discovery_runs_saved_search_id"), index=True)
 
 
 class UserJob(Base):
@@ -247,6 +260,7 @@ class Application(Base, TimestampMixin):
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
+    follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     job: Mapped[Job] = relationship(lazy="joined")
 
@@ -291,5 +305,214 @@ class RunError(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+# --- v2 foundations (migration 0002) ---------------------------------------------------------------
+
+class Invite(Base):
+    """Per-invitee registration token (stored hashed). The env REGISTRATION_INVITE_CODE keeps working alongside."""
+
+    __tablename__ = "invites"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(320))  # optional: only this address may use it
+    role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)
+    max_uses: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    used_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(200))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class AuditLog(Base):
+    """Admin actions and sensitive reads. Append-only; details never contain secrets or resume text."""
+
+    __tablename__ = "audit_logs"
+    __table_args__ = (Index("ix_audit_logs_target", "target_type", "target_id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    action: Mapped[str] = mapped_column(String(60), nullable=False)
+    target_type: Mapped[str | None] = mapped_column(String(40))
+    target_id: Mapped[str | None] = mapped_column(String(64))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    details: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+
+class JobSource(Base, TimestampMixin):
+    """Registry of discovery sources (ATS boards, APIs, clipper, email) with health, configurable by admins."""
+
+    __tablename__ = "job_sources"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)  # ats | api | clip | email
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)  # never secrets: keys stay in env
+    health: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)  # ok | degraded | failing | unknown
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint("user_id", "dedupe_key", name="uq_notifications_user_dedupe"),
+        Index("ix_notifications_user_read", "user_id", "read_at"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    body: Mapped[str | None] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(String(500))
+    dedupe_key: Mapped[str | None] = mapped_column(String(200))  # repeat events bump occurrences instead of piling up
+    occurrences: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
+class NotificationPref(Base, TimestampMixin):
+    __tablename__ = "notification_prefs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    kinds: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)  # kind -> {in_app, email}
+    email_digest: Mapped[str] = mapped_column(String(20), default="off", nullable=False)  # off | daily | weekly
+
+
+class UserActivitySession(Base):
+    """Active-time tracking: visible tab + recent input heartbeats, aggregated server-side (gap > 5 min = new session)."""
+
+    __tablename__ = "user_activity_sessions"
+    __table_args__ = (Index("ix_activity_sessions_user_started", "user_id", "started_at"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    active_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    heartbeats: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class JobView(Base):
+    """Recently viewed jobs and the jobs-viewed metric: one row per (user, job)."""
+
+    __tablename__ = "job_views"
+    __table_args__ = (
+        UniqueConstraint("user_id", "job_id", name="uq_job_views_user_job"),
+        Index("ix_job_views_user_last", "user_id", "last_viewed_at"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
+    first_viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_viewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    view_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+
+class AICall(Base):
+    """AI usage and cost metrics. Never stores prompts, responses or resume text."""
+
+    __tablename__ = "ai_calls"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    purpose: Mapped[str] = mapped_column(String(40), nullable=False)  # match_score | summary | cover_letter | ...
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(100))
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cost_usd: Mapped[float | None] = mapped_column(Float)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    success: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    error: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+
+class ExtensionToken(Base):
+    """Scoped, revocable browser-extension token (shown once, stored hashed)."""
+
+    __tablename__ = "extension_tokens"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class Interview(Base, TimestampMixin):
+    __tablename__ = "interviews"
+    __table_args__ = (Index("ix_interviews_user_scheduled", "user_id", "scheduled_at"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_name: Mapped[str | None] = mapped_column(String(100))
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    duration_minutes: Mapped[int | None] = mapped_column(Integer)
+    mode: Mapped[str | None] = mapped_column(String(20))  # video | phone | onsite
+    location: Mapped[str | None] = mapped_column(String(300))
+    interviewers: Mapped[str | None] = mapped_column(String(300))
+    outcome: Mapped[str] = mapped_column(String(20), default="scheduled", nullable=False)  # scheduled|passed|failed|cancelled
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class Offer(Base, TimestampMixin):
+    __tablename__ = "offers"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), unique=True, nullable=False)
+    base_salary: Mapped[float | None] = mapped_column(Float)
+    currency: Mapped[str] = mapped_column(String(8), default="INR", nullable=False)
+    bonus: Mapped[float | None] = mapped_column(Float)
+    equity: Mapped[str | None] = mapped_column(String(200))
+    joining_date: Mapped[date | None] = mapped_column(Date)
+    decision_deadline: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="received", nullable=False)  # received|negotiating|accepted|declined
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class ApplicationContact(Base, TimestampMixin):
+    __tablename__ = "application_contacts"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str | None] = mapped_column(String(100))
+    email: Mapped[str | None] = mapped_column(String(320))
+    phone: Mapped[str | None] = mapped_column(String(50))
+    profile_url: Mapped[str | None] = mapped_column(String(500))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class SavedSearch(Base, TimestampMixin):
+    """Scheduled discovery per user. Its runs are discovery_runs rows with saved_search_id set."""
+
+    __tablename__ = "saved_searches"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    criteria: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)  # keywords, locations, sources, filters
+    schedule: Mapped[str] = mapped_column(String(20), default="daily", nullable=False)  # manual | daily | weekly
+    min_match_score: Mapped[float | None] = mapped_column(Float)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserAchievement(Base):
+    __tablename__ = "user_achievements"
+    __table_args__ = (UniqueConstraint("user_id", "code", name="uq_user_achievements_user_code"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(50), nullable=False)
+    earned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 USER_OWNED_MODELS = (Resume, CandidateProfile, JobPreference, PlatformPreference, EmailIntegration, DiscoveryRun,
-                     UserJob, Application, ApplicationEvent, Report, RunError, RefreshToken)
+                     UserJob, Application, ApplicationEvent, Report, RunError, RefreshToken, Notification, NotificationPref,
+                     UserActivitySession, JobView, ExtensionToken, Interview, Offer, ApplicationContact, SavedSearch,
+                     UserAchievement)

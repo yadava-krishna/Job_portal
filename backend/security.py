@@ -124,6 +124,25 @@ class RateLimiter:
             hits.append(now)
             return None
 
+    def count(self, key: str, window_seconds: float) -> int:
+        """Hits recorded for `key` inside the window, without recording a new one."""
+        now = time.monotonic()
+        with self._lock:
+            hits = self._hits.get(key)
+            if not hits:
+                return 0
+            while hits and now - hits[0] > window_seconds:
+                hits.popleft()
+            return len(hits)
+
+    def record(self, key: str) -> None:
+        with self._lock:
+            self._hits[key].append(time.monotonic())
+
+    def clear(self, key: str) -> None:
+        with self._lock:
+            self._hits.pop(key, None)
+
     def reset(self) -> None:
         with self._lock:
             self._hits.clear()
