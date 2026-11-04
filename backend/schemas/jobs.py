@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field, HttpUrl
 PlatformName = Literal["LinkedIn", "Indeed", "Naukri"]
 
 
+class JobSourceOut(BaseModel):
+    source: str
+    platform: str | None
+    url: str | None
+    first_seen_at: datetime
+
+
 class JobListing(BaseModel):
     id: int
     platform: str
@@ -26,6 +33,14 @@ class JobListing(BaseModel):
     description_preview: str | None
     has_full_description: bool
     source: str
+    # verified (official API / listing page / you) | estimated (alert email) | unknown: never shown as "today"
+    posted_at_confidence: str = "unknown"
+    first_seen_at: datetime | None = None
+    last_verified_at: datetime | None = None
+    closed_at: datetime | None = None
+    industry: str | None = None
+    department: str | None = None
+    sources: list[JobSourceOut] = Field(default_factory=list)
 
 
 class UserJobOut(BaseModel):
@@ -86,6 +101,8 @@ class JobAnalysis(BaseModel):
 class JobList(BaseModel):
     items: list[UserJobOut]
     total: int
+    # Jobs that match every other filter but were left out by a posting-date filter because their date is unknown.
+    hidden_unknown_dates: int = 0
     page: int
     page_size: int
 
@@ -125,6 +142,9 @@ class DiscoveryRunOut(BaseModel):
     duplicates: int
     error_details: list[dict[str, Any]]
     platform_stats: dict[str, Any]
+    saved_search_id: int | None = None
+    source_results: dict[str, Any] = Field(default_factory=dict)
+    summary: str | None = None
 
 
 class ImportResult(BaseModel):

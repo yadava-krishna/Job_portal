@@ -173,6 +173,21 @@ export interface JobListing {
   description_preview: string | null;
   has_full_description: boolean;
   source: string;
+  /** verified (official API, listing page or you) | estimated (alert email) | unknown: never shown as recent. */
+  posted_at_confidence: PostedConfidence;
+  first_seen_at: string | null;
+  last_verified_at: string | null;
+  closed_at: string | null;
+  industry: string | null;
+  department: string | null;
+  sources: JobSource[];
+}
+export type PostedConfidence = "verified" | "estimated" | "unknown";
+export interface JobSource {
+  source: string;
+  platform: string | null;
+  url: string | null;
+  first_seen_at: string;
 }
 export interface UserJob {
   user_job_id: number;
@@ -235,6 +250,8 @@ export interface JobAnalysis {
 export interface JobList {
   items: UserJob[];
   total: number;
+  /** Jobs left out by a posting-date filter because their posting date is unknown. */
+  hidden_unknown_dates: number;
   page: number;
   page_size: number;
 }
@@ -251,6 +268,45 @@ export interface DiscoveryRun {
   duplicates: number;
   error_details: { type: string; platform: string | null; message: string }[];
   platform_stats: Record<string, Record<string, number>>;
+  saved_search_id?: number | null;
+  /** Per source: what happened, including why a source did not run. */
+  source_results: Record<string, SourceResult>;
+  /** While running: the current stage. When finished: a plain-language outcome. */
+  summary: string | null;
+}
+export type SourceResultStatus = "pending" | "ok" | "empty" | "partial" | "failed" | "not_configured" | "disabled";
+export interface SourceResult {
+  label: string;
+  status: SourceResultStatus;
+  message: string | null;
+  found: number;
+  new: number;
+  duplicates: number;
+  failed_requests: number;
+  boards_ok?: number;
+  boards_failed?: number;
+  listings_checked?: number;
+}
+export interface SourceHealth {
+  key: string;
+  label: string;
+  kind: "ats" | "api" | "email" | "manual";
+  enabled: boolean;
+  configured: boolean;
+  missing: string | null;
+  connection: "ok" | "degraded" | "failing" | "unknown" | "not_configured" | "disabled";
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  jobs_in_feed: number;
+  boards: { total: number; ok: number; failing: number; unchecked: number } | null;
+  last_run: (SourceResult & { run_id: number; at: string | null }) | null;
+}
+export interface SourcesOverview {
+  sources: SourceHealth[];
+  last_run: DiscoveryRun | null;
+  saved_searches: number;
+  enabled_searches: number;
 }
 export interface ImportResult {
   run: DiscoveryRun;
@@ -358,4 +414,78 @@ export interface Analytics {
   funnel: { stage: string; count: number }[];
   platforms: { platform: string; applied: number; responses: number; rejected: number; response_rate: number }[];
   status_counts: Record<string, number>;
+}
+
+export type AtsName = "greenhouse" | "lever" | "ashby";
+export type SearchSource = AtsName | "adzuna_api";
+export interface DirectoryCompany {
+  name: string;
+  ats: AtsName;
+  token: string;
+  industry: string | null;
+  domain: string | null;
+  curated: boolean;
+  company_id: number | null;
+  watched: boolean;
+}
+export interface Company {
+  id: number;
+  name: string;
+  ats: AtsName;
+  board_token: string;
+  region: string | null;
+  industry: string | null;
+  domain: string | null;
+  origin: "curated" | "jobsync" | "user";
+  board_url: string;
+  last_fetched_at: string | null;
+  last_status: "ok" | "empty" | "not_found" | "error" | null;
+  last_error: string | null;
+  job_count: number | null;
+}
+export interface SearchCriteria {
+  keywords: string[];
+  exclude_keywords: string[];
+  locations: string[];
+  remote_ok: boolean;
+  industries: string[];
+  experience_years: number | null;
+  employment_types: EmploymentType[];
+  work_modes: WorkMode[];
+  company_ids: number[];
+  use_watchlist: boolean;
+  include_suggested: boolean;
+  related_titles: boolean;
+  sources: SearchSource[];
+  max_age_days: number | null;
+}
+export interface SavedSearchInput {
+  name: string;
+  criteria: SearchCriteria;
+  schedule: "manual" | "daily" | "weekly";
+  min_match_score: number | null;
+  enabled: boolean;
+}
+export interface SavedSearch extends SavedSearchInput {
+  id: number;
+  origin: "user" | "starter";
+  created_at: string;
+  updated_at: string;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_run: DiscoveryRun | null;
+}
+export interface AppNotification {
+  id: number;
+  kind: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  occurrences: number;
+  read_at: string | null;
+  created_at: string;
+}
+export interface NotificationList {
+  items: AppNotification[];
+  unread: number;
 }

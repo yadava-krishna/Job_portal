@@ -8,7 +8,7 @@ import tempfile
 from datetime import date
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -16,14 +16,24 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
-from backend.models import Application, DiscoveryRun, EmailIntegration, Job, RunError, User, UserJob, utcnow
+from backend.models import Application, DiscoveryRun, EmailIntegration, Job, JobSourceLink, RunError, User, UserJob, utcnow
 from backend.schemas.jobs import ImportJobRequest
 from backend.security import CredentialCipher
 from backend.services import preference_service, resume_service
 from backend.services.adzuna import AdzunaClient, AdzunaError
 from backend.services.matching_service import UserMatcher
+from backend.services.normalization import (  # noqa: F401  (VERIFIED_DATE_SOURCES re-exported for routes)
+    ATS_SOURCES,
+    DATE_SOURCE_RANK,
+    VERIFIED_DATE_SOURCES,
+    NormalizedJob,
+    from_posting,
+    locations_compatible,
+    posted_confidence,
+)
 from core import timeutil
 from core.models import JobPosting, Platform, RawJobRecord
+from core.skills import normalize_text
 from core.settings import EmailAlertsConfig
 from discovery.deduplication import fingerprint
 from discovery.job_extractor import JobExtractor
@@ -33,66 +43,100 @@ from platforms import get_adapter
 from platforms.base_platform import PlatformError
 
 log = logging.getLogger(__name__)
-VERIFIED_DATE_SOURCES = ("platform_api", "platform_page", "user_provided")
-ESTIMATED_DATE_SOURCES = ("alert_email",)
 
 
-def posted_confidence(posted_at: date | None, source: str | None) -> str:
-    """verified | estimated | unknown. Mirrors the backfill in migration 0002."""
-    if posted_at is None:
-        return "unknown"
-    if source in VERIFIED_DATE_SOURCES:
-        return "verified"
-    return "estimated" if source in ESTIMATED_DATE_SOURCES else "unknown"
+# ---- global job upsert with cross-source deduplication -------------------------------------------
+
+def find_existing(db: Session, nj: NormalizedJob) -> tuple[Job | None, str | None]:
+    """The job this listing is a copy of, and how it was recognised (None when it is new).
+
+    1. the same source listing seen before, 2. the legacy job key, 3. the same canonical URL,
+    4. the same normalised company + title on a *different* source with compatible locations, or on the *same* source
+       board (same company) with exactly the same location (an employer re-posting one role). The same title in two
+       cities on one board stays two jobs; user imports from different platforms keep their own rows.
+    """
+    link = db.execute(select(JobSourceLink).where(JobSourceLink.source_key == nj.source_key)).scalar_one_or_none()
+    if link is not None:
+        return db.get(Job, link.job_id), "source_key"
+    job = db.execute(select(Job).where(Job.job_key == nj.key)).scalar_one_or_none()
+    if job is not None:
+        return job, "job_key"
+    canon = nj.canonical_url
+    if canon:
+        job = db.execute(select(Job).where(Job.canonical_url == canon).order_by(Job.id).limit(1)).scalar_one_or_none()
+        if job is not None:
+            return job, "canonical_url"
+    key = nj.dedup_key
+    if not key:
+        return None, None
+    candidates = db.execute(select(Job).where(Job.dedup_key == key).order_by(Job.id).limit(25)).scalars().all()
+    if not candidates:
+        return None, None
+    same_source = set(db.execute(select(JobSourceLink.job_id).where(
+        JobSourceLink.job_id.in_([c.id for c in candidates]), JobSourceLink.source == nj.source)).scalars())
+    here = normalize_text(nj.location)
+    reposted = [c for c in candidates if nj.source in ATS_SOURCES and nj.company_id is not None and c.company_id == nj.company_id
+                and (c.id in same_source or c.source == nj.source) and here and normalize_text(c.location) == here]
+    if reposted:
+        return reposted[0], "same_board_repost"
+    candidates = [c for c in candidates if c.id not in same_source and c.source != nj.source]
+    verdicts = [(c, locations_compatible(c.location, nj.location)) for c in candidates]
+    compatible = [c for c, ok in verdicts if ok is True]
+    if compatible:
+        return compatible[0], "company_title_location"
+    if len(candidates) == 1 and verdicts[0][1] is None:
+        return candidates[0], "company_title"
+    return None, None
 
 
-# ---- global job upsert ------------------------------------------------------------
-
-def _posting_columns(p: JobPosting) -> dict[str, Any]:
-    return dict(
-        platform=p.platform.value, external_job_id=p.platform_job_id, fingerprint=p.fingerprint or None, company=p.company or "",
-        title=p.title or "", location=p.location, work_mode=p.work_mode, employment_type=p.employment_type,
-        experience_required=p.experience_required, experience_min=p.exp_min_years, experience_max=p.exp_max_years,
-        salary_range=p.salary_range, salary_min_lpa=p.salary_min_lpa, salary_max_lpa=p.salary_max_lpa, description=p.description,
-        required_skills=p.required_skills, preferred_skills=p.preferred_skills, education_requirements=p.education_requirements,
-        mandatory_qualifications=p.mandatory_qualifications, screening_questions=p.screening_questions,
-        verification_flags=p.verification_flags, job_url=p.url, application_method=p.application_method, source=p.source,
-    )
-
-
-def upsert_job(db: Session, key: str, cols: dict[str, Any], posted_at: date | None, posted_source: str | None,
-               *, snippet: bool = False) -> tuple[Job, bool]:
-    """Insert a public listing, or enrich an existing one. Returns (job, created)."""
-    job = db.execute(select(Job).where(Job.job_key == key)).scalar_one_or_none()
-    if job is None:
-        job = Job(job_key=key, posted_at=posted_at, posted_at_source=posted_source if posted_at else None,
-                  posted_at_confidence=posted_confidence(posted_at, posted_source), discovered_at=utcnow(),
-                  description_is_snippet=snippet, **cols)
-        db.add(job)
-        try:
-            db.flush()
-            return job, True
-        except IntegrityError:  # concurrent insert of the same listing
-            db.rollback()
-            job = db.execute(select(Job).where(Job.job_key == key)).scalar_one()
-    # Enrich: fill gaps, upgrade a snippet to a full description, prefer a verified posting date.
+def _enrich_existing(job: Job, nj: NormalizedJob) -> None:
+    cols = nj.job_columns()
     for k, v in cols.items():
-        if v in (None, "", []) or k in ("source",):
+        if v in (None, "", []) or k in ("source", "platform", "company", "title"):
             continue
-        current = getattr(job, k)
-        if current in (None, "", []):
+        if getattr(job, k) in (None, "", []):
             setattr(job, k, v)
-    new_desc = cols.get("description")
-    if new_desc and not snippet and (job.description_is_snippet or not job.description or len(new_desc) > len(job.description or "")):
+    if nj.description and not nj.description_is_snippet and (
+            job.description_is_snippet or not job.description or len(nj.description) > len(job.description or "")):
         for k in ("description", "required_skills", "preferred_skills", "education_requirements", "mandatory_qualifications"):
             setattr(job, k, cols[k])
         job.description_is_snippet = False
-    rank = {"platform_api": 4, "platform_page": 3, "user_provided": 2, "alert_email": 1, None: 0}
-    if posted_at and rank.get(posted_source, 0) > rank.get(job.posted_at_source, 0):
-        job.posted_at, job.posted_at_source = posted_at, posted_source
-        job.posted_at_confidence = posted_confidence(posted_at, posted_source)
+    if nj.posted_at and DATE_SOURCE_RANK.get(nj.posted_at_source, 0) > DATE_SOURCE_RANK.get(job.posted_at_source, 0):
+        job.posted_at, job.posted_at_source = nj.posted_at, nj.posted_at_source
+        job.posted_at_confidence = posted_confidence(nj.posted_at, nj.posted_at_source)
+
+
+def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
+    """Insert a public listing, or merge it into the job it duplicates. Returns (job, created)."""
+    now = utcnow()
+    job, _how = find_existing(db, nj)
+    created = False
+    if job is None:
+        job = Job(job_key=nj.key, posted_at=nj.posted_at, posted_at_source=nj.posted_at_source if nj.posted_at else None,
+                  posted_at_confidence=posted_confidence(nj.posted_at, nj.posted_at_source), discovered_at=now,
+                  description_is_snippet=nj.description_is_snippet, **nj.job_columns())
+        db.add(job)
+        try:
+            with db.begin_nested():
+                db.flush()
+            created = True
+        except IntegrityError:  # concurrent insert of the same listing
+            job, _how = find_existing(db, nj)
+            if job is None:
+                raise
+    if not created:
+        _enrich_existing(job, nj)
+    if nj.source in ATS_SOURCES:
+        job.last_verified_at, job.closed_at = now, None  # listed on the employer's board right now
+    link = db.execute(select(JobSourceLink).where(JobSourceLink.source_key == nj.source_key)).scalar_one_or_none()
+    if link is None:
+        db.add(JobSourceLink(job_id=job.id, source=nj.source, platform=nj.platform, source_key=nj.source_key, url=nj.job_url,
+                             posted_at=nj.posted_at, posted_at_source=nj.posted_at_source if nj.posted_at else None,
+                             first_seen_at=now, last_seen_at=now))
+    else:
+        link.last_seen_at, link.url = now, nj.job_url or link.url
     db.flush()
-    return job, False
+    return job, created
 
 
 def add_to_feed(db: Session, user: User, job: Job, run: DiscoveryRun | None, source: str) -> tuple[UserJob, bool]:
@@ -109,8 +153,9 @@ def add_to_feed(db: Session, user: User, job: Job, run: DiscoveryRun | None, sou
 
 # ---- runs ---------------------------------------------------------------------------
 
-def start_run(db: Session, user: User, trigger: str, sources: list[str]) -> DiscoveryRun:
-    run = DiscoveryRun(user_id=user.id, trigger=trigger, sources=sources, status="running", error_details=[], platform_stats={})
+def start_run(db: Session, user: User, trigger: str, sources: list[str], saved_search_id: int | None = None) -> DiscoveryRun:
+    run = DiscoveryRun(user_id=user.id, trigger=trigger, sources=sources, status="running", error_details=[], platform_stats={},
+                       saved_search_id=saved_search_id)
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -133,9 +178,84 @@ def _stat(run: DiscoveryRun, platform: str, key: str, n: int = 1) -> None:
     run.platform_stats = stats
 
 
+SOURCE_LABELS = {
+    "greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby", "adzuna_api": "Adzuna", "alert_email": "Job-alert emails",
+    "company_boards": "Company job boards", "search": "Search settings",
+}
+RAN = ("ok", "empty", "partial")          # the source was reached and answered
+PROBLEM = ("failed", "partial")           # something that should have worked didn't
+WARNING_ERRORS = ("ADZUNA_NOT_CONFIGURED", "EMAIL_NOT_CONFIGURED", "NO_COMPANIES")
+
+
+def source_result(run: DiscoveryRun, key: str, *, status: str | None = None, message: str | None = None, **inc: int) -> dict:
+    """Create or update one source's outcome on a run. Counters in **inc are added."""
+    results = dict(run.source_results or {})
+    entry = dict(results.get(key) or {"label": SOURCE_LABELS.get(key, key), "status": "pending", "message": None,
+                                      "found": 0, "new": 0, "duplicates": 0, "failed_requests": 0})
+    for k, v in inc.items():
+        entry[k] = entry.get(k, 0) + v
+    if status:
+        entry["status"] = status
+    if message is not None:
+        entry["message"] = message[:500]
+    results[key] = entry
+    run.source_results = results
+    return entry
+
+
+def progress(db: Session, run: DiscoveryRun, text: str) -> None:
+    """While a run is in progress its summary is the current stage, so the UI can show real progress."""
+    if run.status == "running":
+        run.summary = text
+        db.commit()
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def summarize(run: DiscoveryRun) -> str | None:
+    """A plain-language outcome. Never just "0 jobs": says what ran, what didn't, and why."""
+    results = run.source_results or {}
+    if not results:
+        return None
+    ran = {k: e for k, e in results.items() if e["status"] in RAN}
+    notes = [f"{e['label']}: {e['message']}" for e in results.values() if e["status"] not in ("ok", "empty") and e.get("message")]
+    if run.status == "failed" and not ran:
+        return "Discovery could not run. " + " ".join(notes) if notes else "Discovery could not run."
+    found = sum(e.get("found", 0) for e in ran.values())
+    checked = sum(e.get("listings_checked", 0) for e in ran.values())
+    boards = sum(e.get("boards_ok", 0) for e in ran.values())
+    where = ", ".join(e["label"] for e in ran.values())
+    head = f"Checked {where}" + (f" ({_plural(boards, 'company board')}, {_plural(checked, 'listing')})" if boards else "") + ". "
+    if found == 0:
+        head += "No listings matched your titles and locations right now. Try broader titles or more locations, or add companies."
+    else:
+        head += f"{_plural(found, 'matching job')}: {run.jobs_new} new, {run.duplicates} already in your feed."
+    return head + (" " + " ".join(notes) if notes else "")
+
+
 def finish_run(db: Session, run: DiscoveryRun, failed: bool = False) -> DiscoveryRun:
     run.completed_at = utcnow()
-    run.status = "failed" if failed else ("partial" if run.error_details else "completed")
+    results = run.source_results or {}
+    if failed:
+        run.status = "failed"
+    elif results:
+        for key, e in results.items():  # a source that answered but matched nothing is "empty", not a success with jobs
+            if e["status"] == "ok" and e.get("found", 0) == 0:
+                source_result(run, key, status="empty")
+        results = run.source_results or {}
+        ran = [e for e in results.values() if e["status"] in RAN]
+        hard_errors = [e for e in run.error_details or [] if e["type"] not in WARNING_ERRORS]
+        if not ran:
+            run.status = "failed"  # nothing could run: unconfigured, disabled or failed everywhere
+        elif any(e["status"] in PROBLEM for e in results.values()) or hard_errors:
+            run.status = "partial"
+        else:
+            run.status = "completed"
+    else:
+        run.status = "partial" if run.error_details else "completed"
+    run.summary = summarize(run)
     db.commit()
     db.refresh(run)
     return run
@@ -143,38 +263,58 @@ def finish_run(db: Session, run: DiscoveryRun, failed: bool = False) -> Discover
 
 # ---- ingestion -------------------------------------------------------------------------
 
-def ingest_postings(db: Session, user: User, run: DiscoveryRun, items: Iterable[tuple[JobPosting, date | None, str | None, bool]],
-                    matcher: UserMatcher | None, source: str) -> list[UserJob]:
+USER_PROVIDED_SOURCES = ("user_job_url", "file_import", "browser_clipper")
+
+
+def ingest_normalized(db: Session, user: User, run: DiscoveryRun, items: Iterable[NormalizedJob], matcher: UserMatcher | None,
+                      *, notify_min_score: float | None = None, explicit_sources: bool = False) -> list[UserJob]:
+    """explicit_sources: the user chose these sources for this run (a saved search), so platform toggles don't apply."""
+    """The single ingest path for every source: dedup, add to the user's feed, score, notify once."""
+    from backend.services import notification_service
+
     enabled = preference_service.enabled_platform_names(db, user)
     out: list[UserJob] = []
-    for posting, posted_at, posted_source, snippet in items:
-        platform = posting.platform.value if source != "adzuna_api" else preference_service.ADZUNA
+    for nj in items:
+        platform = nj.platform
         _stat(run, platform, "records_seen")
         run.jobs_found += 1
-        if platform not in enabled and source not in ("user_job_url", "file_import", "browser_clipper"):
+        # Platform toggles govern the LinkedIn/Indeed/Naukri/Adzuna sources; ATS boards are chosen per saved search.
+        if not explicit_sources and platform not in enabled and nj.source not in USER_PROVIDED_SOURCES and nj.source not in ATS_SOURCES:
             _stat(run, platform, "skipped_platform_disabled")
             continue
-        cols = _posting_columns(posting)
-        if source == "adzuna_api":
-            cols["platform"] = preference_service.ADZUNA
-        job, _ = upsert_job(db, posting.job_key, cols, posted_at, posted_source, snippet=snippet)
-        uj, created = add_to_feed(db, user, job, run, source)
+        job, job_created = upsert_normalized(db, nj)
+        if job_created:
+            _stat(run, platform, "new_listings")
+        uj, created = add_to_feed(db, user, job, run, nj.source)
+        tracked = nj.source in (run.source_results or {})
         if created:
             run.jobs_new += 1
             _stat(run, platform, "new")
         else:
             run.duplicates += 1
             _stat(run, platform, "duplicates_skipped")
-        if matcher is not None and uj.status in ("new", "shortlisted") and (created or uj.match_score is None or not snippet):
+        if tracked:
+            source_result(run, nj.source, found=1, new=int(created), duplicates=int(not created))
+        if matcher is not None and uj.status in ("new", "shortlisted") and (created or uj.match_score is None or not nj.description_is_snippet):
             try:
-                matcher.apply(uj)
+                matcher.apply(uj, min_score=notify_min_score)
                 if uj.status == "shortlisted":
                     run.jobs_matched += 1
             except Exception as exc:  # scoring failure must not lose the job
-                _error(db, user, run, "SCORING_FAILED", f"{type(exc).__name__}: {exc}", platform=platform, job_key=posting.job_key)
+                _error(db, user, run, "SCORING_FAILED", f"{type(exc).__name__}: {exc}", platform=platform, job_key=nj.key)
+        if created and notify_min_score is not None and uj.match_score is not None and uj.match_score >= notify_min_score \
+                and job.closed_at is None:
+            notification_service.notify_new_match(db, user, uj)
         out.append(uj)
     db.commit()
     return out
+
+
+def ingest_postings(db: Session, user: User, run: DiscoveryRun, items: Iterable[tuple[JobPosting, date | None, str | None, bool]],
+                    matcher: UserMatcher | None, source: str) -> list[UserJob]:
+    """Legacy sources (clipper, URL/file import, alert emails, Adzuna) → the unified ingest path."""
+    normalized = (from_posting(p, posted_at, posted_source, snippet=snippet, source=source) for p, posted_at, posted_source, snippet in items)
+    return ingest_normalized(db, user, run, normalized, matcher)
 
 
 def _matcher_or_none(db: Session, settings: BackendSettings, user: User, run: DiscoveryRun) -> UserMatcher | None:
@@ -257,54 +397,93 @@ def _email_source(db: Session, settings: BackendSettings, user: User) -> tuple[E
 
 def run_discovery(db: Session, settings: BackendSettings, user: User, sources: list[str] | None, trigger: str = "manual",
                   run: DiscoveryRun | None = None, email_factory=None, adzuna_client: AdzunaClient | None = None) -> DiscoveryRun:
-    """Run automated sources (alert emails, Adzuna) for one user. Safe to call from a background thread."""
+    """Run the per-user automated sources (alert emails, Adzuna). Safe to call from a background thread."""
     wanted = sources or ["alert_email", "adzuna_api"]
     run = run or start_run(db, user, trigger, wanted)
+    run_id = run.id
     try:
         matcher = _matcher_or_none(db, settings, user, run)
-        enabled = preference_service.platform_rows(db, user)
-
-        if "alert_email" in wanted:
-            integ, source = email_factory(db, user) if email_factory else _email_source(db, settings, user)
-            email_platforms = [p for p in Platform if enabled.get(p.value) and enabled[p.value].enabled
-                               and "alert_email" in (enabled[p.value].discovery_sources or [])]
-            if source is None:
-                if email_platforms:
-                    _error(db, user, run, "EMAIL_NOT_CONFIGURED", "Job-alert email is selected but the mailbox is not configured in Settings.",
-                           recovery="CONFIGURE_EMAIL")
-            else:
-                items = []
-                for p in email_platforms:
-                    try:
-                        for rec in source.fetch(p):
-                            posting, posted_at, posted_source = _posting_from_record(rec, settings)
-                            items.append((posting, posted_at, posted_source, False))
-                    except PlatformError as exc:
-                        _error(db, user, run, "EMAIL_SOURCE", str(exc), platform=p.value)
-                ingest_postings(db, user, run, items, matcher, "alert_email")
-                try:
-                    _confirm_from_emails(db, user, source)
-                except PlatformError as exc:
-                    _error(db, user, run, "EMAIL_VERIFICATION", str(exc))
-                if integ is not None:
-                    integ.last_checked_at = utcnow()
-                    integ.last_error = "; ".join(e["message"] for e in run.error_details if e["type"].startswith("EMAIL")) or None
-
-        if "adzuna_api" in wanted:
-            adz = enabled.get(preference_service.ADZUNA)
-            if adz and adz.enabled:
-                if not settings.adzuna_enabled and adzuna_client is None:
-                    _error(db, user, run, "ADZUNA_NOT_CONFIGURED", "Adzuna is not configured on this server.", platform="Adzuna")
-                else:
-                    client = adzuna_client or AdzunaClient(settings.adzuna_app_id, settings.adzuna_app_key, settings.adzuna_country)  # type: ignore[arg-type]
-                    ingest_postings(db, user, run, _adzuna_items(db, user, run, client, settings), matcher, "adzuna_api")
+        legacy_sources(db, settings, user, run, wanted, matcher, email_factory=email_factory, adzuna_client=adzuna_client)
         return finish_run(db, run)
     except Exception as exc:
-        log.exception("Discovery run %s failed", run.id)
+        log.exception("Discovery run %s failed", run_id)
         db.rollback()
-        run = db.get(DiscoveryRun, run.id)
+        run = db.get(DiscoveryRun, run_id)
         _error(db, user, run, "DISCOVERY_FAILED", f"{type(exc).__name__}: {exc}")
         return finish_run(db, run, failed=True)
+
+
+def legacy_sources(db: Session, settings: BackendSettings, user: User, run: DiscoveryRun, wanted: list[str], matcher,
+                   *, email_factory=None, adzuna_client: AdzunaClient | None = None) -> None:
+    """Alert emails and preference-based Adzuna. Every requested source records an outcome, including why it didn't run."""
+    from backend.services import source_registry
+
+    enabled = preference_service.platform_rows(db, user)
+    if "alert_email" in wanted:
+        source_result(run, "alert_email")
+        integ, source = email_factory(db, user) if email_factory else _email_source(db, settings, user)
+        email_platforms = [p for p in Platform if enabled.get(p.value) and enabled[p.value].enabled
+                           and "alert_email" in (enabled[p.value].discovery_sources or [])]
+        if source is None:
+            source_result(run, "alert_email", status="not_configured",
+                          message="No mailbox is connected. Add one under Settings → Job-alert email to read LinkedIn, Indeed and Naukri alerts.")
+            if email_platforms:
+                _error(db, user, run, "EMAIL_NOT_CONFIGURED", "Job-alert email is selected but the mailbox is not configured in Settings.",
+                       recovery="CONFIGURE_EMAIL")
+        elif not email_platforms:
+            source_result(run, "alert_email", status="not_configured",
+                          message="A mailbox is connected, but no platform has 'Job-alert email' selected under Settings → Platforms.")
+        else:
+            items, failures = [], 0
+            for p in email_platforms:
+                try:
+                    for rec in source.fetch(p):
+                        posting, posted_at, posted_source = _posting_from_record(rec, settings)
+                        items.append((posting, posted_at, posted_source, False))
+                except PlatformError as exc:
+                    failures += 1
+                    _error(db, user, run, "EMAIL_SOURCE", str(exc), platform=p.value)
+            if failures == len(email_platforms):
+                source_result(run, "alert_email", status="failed", failed_requests=failures,
+                              message=f"Could not read the mailbox: {run.error_details[-1]['message']}")
+            else:
+                source_result(run, "alert_email", status="partial" if failures else "ok", failed_requests=failures)
+                ingest_postings(db, user, run, items, matcher, "alert_email")
+            source_registry.record(db, "alert_email", ok=failures < len(email_platforms),
+                                   error=None if failures < len(email_platforms) else run.error_details[-1]["message"])
+            try:
+                _confirm_from_emails(db, user, source)
+            except PlatformError as exc:
+                _error(db, user, run, "EMAIL_VERIFICATION", str(exc))
+            if integ is not None:
+                integ.last_checked_at = utcnow()
+                integ.last_error = "; ".join(e["message"] for e in run.error_details if e["type"].startswith("EMAIL")) or None
+
+    if "adzuna_api" in wanted:
+        source_result(run, "adzuna_api")
+        adz = enabled.get(preference_service.ADZUNA)
+        if not settings.adzuna_enabled and adzuna_client is None:
+            source_result(run, "adzuna_api", status="not_configured",
+                          message="Adzuna API credentials are not configured on this server (ADZUNA_APP_ID / ADZUNA_APP_KEY).")
+            if adz and adz.enabled:
+                _error(db, user, run, "ADZUNA_NOT_CONFIGURED", "Adzuna is not configured on this server.", platform="Adzuna")
+        elif not (adz and adz.enabled):
+            source_result(run, "adzuna_api", status="disabled", message="Adzuna is turned off in your Settings → Platforms.")
+        else:
+            client = adzuna_client or AdzunaClient(settings.adzuna_app_id, settings.adzuna_app_key, settings.adzuna_country)  # type: ignore[arg-type]
+            before = len(run.error_details or [])
+            items = _adzuna_items(db, user, run, client, settings)
+            errors = (run.error_details or [])[before:]
+            api_errors = [e for e in errors if e["type"] == "ADZUNA_API"]
+            if api_errors and not items:
+                source_result(run, "adzuna_api", status="failed", failed_requests=len(api_errors), message=api_errors[-1]["message"])
+                source_registry.record(db, "adzuna_api", ok=False, error=api_errors[-1]["message"])
+            elif any(e["type"] == "ADZUNA_NO_TITLES" for e in errors):
+                source_result(run, "adzuna_api", status="not_configured", message="Add preferred job titles to search Adzuna.")
+            else:
+                source_result(run, "adzuna_api", status="partial" if api_errors else "ok", failed_requests=len(api_errors))
+                source_registry.record(db, "adzuna_api", ok=True)
+                ingest_postings(db, user, run, items, matcher, "adzuna_api")
 
 
 def _adzuna_items(db: Session, user: User, run: DiscoveryRun, client: AdzunaClient, settings: BackendSettings):
@@ -314,39 +493,49 @@ def _adzuna_items(db: Session, user: User, run: DiscoveryRun, client: AdzunaClie
     if not titles:
         _error(db, user, run, "ADZUNA_NO_TITLES", "Add preferred job titles to search Adzuna.", platform="Adzuna", recovery="UPDATE_PREFERENCES")
         return []
-    analyzer = JDAnalyzer(resume_service.taxonomy(settings))
     seen: set[str] = set()
     items = []
     for title in titles:
         for loc in locations:
             try:
-                results = client.search(title, loc, max_days_old=2, results=20)
+                results = adzuna_postings(client, settings, title, loc, max_days_old=2)
             except AdzunaError as exc:
                 _error(db, user, run, "ADZUNA_API", str(exc), platform="Adzuna")
                 return items
-            for a in results:
-                if a.id in seen or not a.url:
-                    continue
-                seen.add(a.id)
-                analysis = analyzer.analyze(a.description, title=a.title)
-                sal = None
-                if a.salary_min or a.salary_max:
-                    lo, hi = (round(x / 1e5, 1) if x else None for x in (a.salary_min, a.salary_max))
-                    sal = f"{lo or '?'}-{hi or '?'} LPA"
-                posting = JobPosting(
-                    job_key=f"adzuna:{a.id}", platform=Platform.LINKEDIN, platform_job_id=a.id, company=a.company, title=a.title,
-                    url=a.url, location=a.location, work_mode=analysis.work_mode,
-                    employment_type={"full_time": "Full-time", "part_time": "Part-time"}.get(a.contract_time or "") or
-                    ("Contract" if a.contract_type == "contract" else None),
-                    experience_required=analysis.experience_text, exp_min_years=analysis.exp_min, exp_max_years=analysis.exp_max,
-                    salary_range=sal, salary_min_lpa=round(a.salary_min / 1e5, 2) if a.salary_min else None,
-                    salary_max_lpa=round(a.salary_max / 1e5, 2) if a.salary_max else None, description=a.description,
-                    required_skills=analysis.required_skills, preferred_skills=analysis.preferred_skills,
-                    education_requirements=analysis.education, mandatory_qualifications=analysis.mandatory_qualifications,
-                    application_method="Apply on the original listing (opened via Adzuna)", source="adzuna_api",
-                    fingerprint=fingerprint(a.company, a.title),
-                )
-                items.append((posting, a.created, "platform_api" if a.created else None, True))
+            for item in results:
+                if item[0].job_key not in seen:
+                    seen.add(item[0].job_key)
+                    items.append(item)
+    return items
+
+
+def adzuna_postings(client: AdzunaClient, settings: BackendSettings, title: str, location: str | None, *, max_days_old: int = 2,
+                    results: int = 20) -> list[tuple[JobPosting, date | None, str | None, bool]]:
+    """One Adzuna search → (posting, posted date, date source, is_snippet). Raises AdzunaError."""
+    analyzer = JDAnalyzer(resume_service.taxonomy(settings))
+    items = []
+    for a in client.search(title, location, max_days_old=max_days_old, results=results):
+        if not a.url:
+            continue
+        analysis = analyzer.analyze(a.description, title=a.title)
+        sal = None
+        if a.salary_min or a.salary_max:
+            lo, hi = (round(x / 1e5, 1) if x else None for x in (a.salary_min, a.salary_max))
+            sal = f"{lo or '?'}-{hi or '?'} LPA"
+        posting = JobPosting(
+            job_key=f"adzuna:{a.id}", platform=Platform.LINKEDIN, platform_job_id=a.id, company=a.company, title=a.title,
+            url=a.url, location=a.location, work_mode=analysis.work_mode,
+            employment_type={"full_time": "Full-time", "part_time": "Part-time"}.get(a.contract_time or "") or
+            ("Contract" if a.contract_type == "contract" else None),
+            experience_required=analysis.experience_text, exp_min_years=analysis.exp_min, exp_max_years=analysis.exp_max,
+            salary_range=sal, salary_min_lpa=round(a.salary_min / 1e5, 2) if a.salary_min else None,
+            salary_max_lpa=round(a.salary_max / 1e5, 2) if a.salary_max else None, description=a.description,
+            required_skills=analysis.required_skills, preferred_skills=analysis.preferred_skills,
+            education_requirements=analysis.education, mandatory_qualifications=analysis.mandatory_qualifications,
+            application_method="Apply on the original listing (opened via Adzuna)", source="adzuna_api",
+            fingerprint=fingerprint(a.company, a.title),
+        )
+        items.append((posting, a.created, "platform_api" if a.created else None, True))
     return items
 
 
@@ -376,6 +565,8 @@ def posted_label(job: Job, today: date | None = None) -> str:
         return "Unknown"
     if job.posted_at_source == "alert_email":
         return f"On or before {job.posted_at.strftime('%d %b')} (alert email)"
+    if posted_confidence(job.posted_at, job.posted_at_source) != "verified":
+        return f"Around {job.posted_at.strftime('%d %b %Y')} (unverified)"
     days = (today - job.posted_at).days
     suffix = {"user_provided": " (reported by you)", "platform_page": " (per listing)"}.get(job.posted_at_source or "", "")
     if days == 0:

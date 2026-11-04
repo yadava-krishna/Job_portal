@@ -4,6 +4,12 @@ import type {
   Analytics,
   ActivityItem,
   Application,
+  Company,
+  DirectoryCompany,
+  NotificationList,
+  SavedSearch,
+  SavedSearchInput,
+  SourcesOverview,
   ApplicationDetail,
   DashboardSummary,
   DiscoveryRun,
@@ -40,6 +46,12 @@ export const qk = {
   analytics: (days: number) => ["analytics", days] as const,
   runs: ["runs"] as const,
   links: ["search-links"] as const,
+  searches: ["saved-searches"] as const,
+  watchlist: ["watchlist"] as const,
+  suggested: ["suggested-companies"] as const,
+  directory: (q: string, ats: string) => ["company-directory", q, ats] as const,
+  notifications: ["notifications"] as const,
+  sources: ["discovery-sources"] as const,
 };
 
 export const useProfile = () => useQuery({ queryKey: qk.profile, queryFn: async () => (await api.get<ProfileResponse>("/profile")).data });
@@ -54,7 +66,15 @@ export interface JobQuery {
   view?: "feed" | "saved" | "dismissed" | "applied" | "all";
   q?: string;
   platform?: string[];
-  posted?: "any" | "today" | "24h" | "range";
+  posted?: "any" | "today" | "24h" | "3d" | "7d" | "30d" | "range";
+  include_estimated?: boolean;
+  confidence?: ("verified" | "estimated" | "unknown")[];
+  industry?: string;
+  employment_type?: string[];
+  company?: string;
+  saved_search_id?: number;
+  include_closed?: boolean;
+  include_unknown_dates?: boolean;
   date_from?: string;
   date_to?: string;
   domain?: string;
@@ -104,7 +124,8 @@ export const useAnalytics = (days = 30) =>
 export function useInvalidateWork() {
   const qc = useQueryClient();
   return () =>
-    Promise.all(["jobs", "job", "analysis", "applications", "application", "summary", "activity", "analytics", "runs"].map((k) =>
+    Promise.all(["jobs", "job", "analysis", "applications", "application", "summary", "activity", "analytics", "runs",
+      "discovery-sources", "saved-searches", "notifications", "watchlist"].map((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     ));
 }
@@ -282,3 +303,89 @@ export function useGenerateReport() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.reports }),
   });
 }
+
+// ---- saved searches, companies, notifications --------------------------------------------------------
+
+export const useSavedSearches = () =>
+  useQuery({ queryKey: qk.searches, queryFn: async () => (await api.get<SavedSearch[]>("/saved-searches")).data });
+
+export function useSaveSearch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, body }: { id?: number; body: SavedSearchInput }) =>
+      (id ? await api.put<SavedSearch>(`/saved-searches/${id}`, body) : await api.post<SavedSearch>("/saved-searches", body)).data,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.searches }),
+  });
+}
+
+export function useDeleteSearch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/saved-searches/${id}`); },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.searches }),
+  });
+}
+
+export function useRunSearch() {
+  return useMutation({ mutationFn: async (id: number) => (await api.post<DiscoveryRun>(`/saved-searches/${id}/run`)).data });
+}
+
+export const useWatchlist = () => useQuery({ queryKey: qk.watchlist, queryFn: async () => (await api.get<Company[]>("/companies/watchlist")).data });
+export const useSuggestedCompanies = () =>
+  useQuery({ queryKey: qk.suggested, queryFn: async () => (await api.get<DirectoryCompany[]>("/companies/suggested")).data });
+export const useCompanyDirectory = (q: string, ats: string) =>
+  useQuery({
+    queryKey: qk.directory(q, ats),
+    queryFn: async () => (await api.get<DirectoryCompany[]>("/companies/directory", { params: { q, ats: ats || undefined, limit: 25 } })).data,
+    enabled: q.trim().length >= 2,
+    placeholderData: keepPreviousData,
+  });
+
+function useInvalidateCompanies() {
+  const qc = useQueryClient();
+  return () => Promise.all([qk.watchlist, qk.suggested, ["company-directory"]].map((k) => qc.invalidateQueries({ queryKey: k })));
+}
+
+export function useWatchCompany() {
+  const invalidate = useInvalidateCompanies();
+  return useMutation({
+    mutationFn: async (body: { url?: string; ats?: string; token?: string; name?: string }) =>
+      (await api.post<Company>("/companies/watchlist", body, { timeout: 60_000 })).data,
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useWatchMany() {
+  const invalidate = useInvalidateCompanies();
+  return useMutation({
+    mutationFn: async (companies: { ats: string; token: string }[]) =>
+      (await api.post<Company[]>("/companies/watchlist/bulk", { companies }, { timeout: 120_000 })).data,
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useUnwatchCompany() {
+  const invalidate = useInvalidateCompanies();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/companies/watchlist/${id}`); },
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export const useNotifications = () =>
+  useQuery({
+    queryKey: qk.notifications,
+    queryFn: async () => (await api.get<NotificationList>("/notifications", { params: { limit: 20 } })).data,
+    refetchInterval: 60_000,
+  });
+
+export function useMarkNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id?: number) => { await api.post(id ? `/notifications/${id}/read` : "/notifications/read-all"); },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.notifications }),
+  });
+}
+
+export const useSourceHealth = () =>
+  useQuery({ queryKey: qk.sources, queryFn: async () => (await api.get<SourcesOverview>("/discovery/sources")).data });

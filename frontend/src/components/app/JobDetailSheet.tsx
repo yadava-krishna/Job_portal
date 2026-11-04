@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PlatformBadge, ScoreBadge, SkillChips } from "@/components/app/common";
 import { useAddDescription, useAnalysis, useJob } from "@/services/queries";
 import { errorMessage } from "@/lib/api";
-import { scoreTone } from "@/lib/format";
+import { formatDate, postedDisplay, scoreTone, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const componentNames: Record<string, string> = {
@@ -43,8 +43,22 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
               <div className="flex items-center gap-2"><PlatformBadge platform={d.job.platform} /><ScoreBadge score={d.match_score} category={d.match_category} /></div>
               <SheetTitle className="text-xl">{d.job.title}</SheetTitle>
               <SheetDescription>
-                {d.job.company} · {d.job.location ?? "Location not stated"}{d.job.work_mode ? ` · ${d.job.work_mode}` : ""} · Posted: {d.job.posted_label}
+                {d.job.company} · {d.job.location ?? "Location not stated"}{d.job.work_mode ? ` · ${d.job.work_mode}` : ""}
               </SheetDescription>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-1 text-sm" aria-label="Job provenance">
+                <dt className="text-muted-foreground">Posting date</dt>
+                <dd title={postedDisplay(d.job).title}>{postedDisplay(d.job).text} <span className="text-xs text-muted-foreground">({postedDisplay(d.job).badge.toLowerCase()})</span></dd>
+                <dt className="text-muted-foreground">Found by JobPilot</dt>
+                <dd>{formatDate(d.job.first_seen_at, true)}{d.job.last_verified_at ? ` · still listed ${timeAgo(d.job.last_verified_at)}` : ""}</dd>
+                {d.job.closed_at && <><dt className="text-muted-foreground">No longer listed</dt><dd>since {formatDate(d.job.closed_at, true)}</dd></>}
+                <dt className="text-muted-foreground">Seen on</dt>
+                <dd className="flex flex-wrap gap-x-3 gap-y-1">
+                  {(d.job.sources.length ? d.job.sources : [{ source: d.job.source, platform: d.job.platform, url: d.job.job_url, first_seen_at: "" }]).map((s) => (
+                    s.url ? <a key={s.source + s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline-offset-2 hover:underline">{s.platform ?? s.source}<ExternalLink className="size-3" /></a>
+                      : <span key={s.source}>{s.platform ?? s.source}</span>
+                  ))}
+                </dd>
+              </dl>
               <div className="flex flex-wrap gap-2 pt-2">
                 {d.job.job_url && (
                   <Button size="sm" variant="outline" render={<a href={d.job.job_url} target="_blank" rel="noopener noreferrer" />}>

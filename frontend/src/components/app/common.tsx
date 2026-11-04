@@ -38,6 +38,9 @@ const platformColors: Record<string, string> = {
   Indeed: "bg-[#2557a7]/10 text-[#2557a7] dark:text-blue-300",
   Naukri: "bg-[#4a90e2]/10 text-[#275df5] dark:text-blue-300",
   Adzuna: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  Greenhouse: "bg-lime-500/10 text-lime-800 dark:text-lime-300",
+  Lever: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  Ashby: "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
 };
 
 export function PlatformBadge({ platform }: { platform: string }) {

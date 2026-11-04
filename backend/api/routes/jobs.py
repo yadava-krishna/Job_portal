@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select
 from backend.api import serializers
 from backend.api.deps import CurrentUser, DbSession, SettingsDep
 from backend.db import session_factory
-from backend.models import DiscoveryRun, Job, User, UserJob, utcnow
+from backend.models import DiscoveryRun, Job, JobSourceLink, User, UserJob, utcnow
 from backend.schemas.jobs import DiscoverRequest, DiscoveryRunOut, ImportJobRequest, ImportResult, JobAnalysis, JobDetail, JobList, SearchLinkOut
 from backend.services import discovery_service, resume_service
 from backend.services.matching_service import UserMatcher
@@ -30,26 +30,33 @@ def _owned(db, user: User, user_job_id: int) -> UserJob:
 
 
 def _discover_bg(settings, user_id: int, run_id: int, sources: list[str] | None) -> None:
+    from backend.services import saved_search_service
+
     db = session_factory()()
     try:
         user = db.get(User, user_id)
         run = db.get(DiscoveryRun, run_id)
         if user and run:
-            discovery_service.run_discovery(db, settings, user, sources, run=run)
+            if sources:
+                discovery_service.run_discovery(db, settings, user, sources, run=run)
+            else:
+                saved_search_service.run_all(db, settings, user, run)
     finally:
         db.close()
 
 
 @router.post("/discover", response_model=DiscoveryRunOut, status_code=status.HTTP_202_ACCEPTED)
 def discover(body: DiscoverRequest, user: CurrentUser, db: DbSession, settings: SettingsDep, bg: BackgroundTasks) -> DiscoveryRunOut:
-    """Start a discovery run over the automated permitted sources (alert emails, Adzuna). Poll /jobs/runs/{id}."""
+    """Run discovery now: company job boards (your saved searches), Adzuna and alert emails. Poll /jobs/runs/{id}.
+
+    Every source reports an outcome on the run (`source_results`), including why it did not run.
+    """
     running = db.execute(select(DiscoveryRun).where(DiscoveryRun.user_id == user.id, DiscoveryRun.status == "running",
                                                     DiscoveryRun.started_at > utcnow() - timedelta(minutes=10))).scalars().first()
     if running:
         return serializers.run(running)
-    sources = body.sources or ["alert_email", "adzuna_api"]
-    run = discovery_service.start_run(db, user, "manual", list(sources))
-    bg.add_task(_discover_bg, settings, user.id, run.id, list(sources))
+    run = discovery_service.start_run(db, user, "manual", list(body.sources or ["all"]))
+    bg.add_task(_discover_bg, settings, user.id, run.id, list(body.sources) if body.sources else None)
     return serializers.run(run)
 
 
@@ -93,9 +100,17 @@ def list_jobs(
     user: CurrentUser, db: DbSession,
     view: Literal["feed", "saved", "dismissed", "applied", "all"] = "feed",
     q: str | None = Query(None, max_length=200, description="Search title, company or description"),
-    platform: list[str] | None = Query(None),
-    posted: Literal["any", "today", "24h", "range"] = "any",
+    platform: list[str] | None = Query(None, description="Matches any source the job was seen on (LinkedIn, Greenhouse, Adzuna…)"),
+    posted: Literal["any", "today", "24h", "3d", "7d", "30d", "range"] = "any",
+    include_estimated: bool = Query(False, description="Let estimated dates (alert emails) count in posted-date windows"),
+    confidence: list[Literal["verified", "estimated", "unknown"]] | None = Query(None),
     date_from: date | None = None, date_to: date | None = None,
+    industry: str | None = Query(None, max_length=100),
+    employment_type: list[str] | None = Query(None),
+    company: str | None = Query(None, max_length=200),
+    saved_search_id: int | None = None,
+    include_closed: bool = Query(False, description="Include jobs no longer listed on the employer's board"),
+    include_unknown_dates: bool = Query(False, description="With a posting-date filter, also list jobs whose posting date is unknown"),
     domain: str | None = Query(None, max_length=100),
     location: str | None = Query(None, max_length=100),
     work_mode: list[str] | None = Query(None),
@@ -118,18 +133,26 @@ def list_jobs(
         like = f"%{q.lower()}%"
         stmt = stmt.where(or_(func.lower(Job.title).like(like), func.lower(Job.company).like(like), func.lower(Job.description).like(like)))
     if platform:
-        stmt = stmt.where(Job.platform.in_(platform))
+        linked = select(JobSourceLink.id).where(JobSourceLink.job_id == Job.id, JobSourceLink.platform.in_(platform)).exists()
+        stmt = stmt.where(or_(Job.platform.in_(platform), linked))
     today = timeutil.today()
+    # Date filters only trust dates we can vouch for; an unknown date never counts as recent or in range. Such jobs are
+    # counted (hidden_unknown_dates) and can be listed with include_unknown_dates=true, labelled "Posting date unknown".
+    known = [*VERIFIED, "alert_email"]
+    trusted = Job.posted_at_source.in_(VERIFIED) if not include_estimated else Job.posted_at_source.in_(known)
+    unknown_date = Job.posted_at.is_(None) | Job.posted_at_source.is_(None) | Job.posted_at_source.not_in(known)
+    windows = {"today": 0, "24h": 1, "3d": 3, "7d": 7, "30d": 30}
+    date_cond = None
     if posted == "today":
-        stmt = stmt.where(Job.posted_at == today, Job.posted_at_source.in_(VERIFIED))
-    elif posted == "24h":
-        stmt = stmt.where(Job.posted_at >= today - timedelta(days=1), Job.posted_at_source.in_(VERIFIED))
-    elif posted == "range":
+        date_cond = (Job.posted_at == today) & Job.posted_at_source.in_(VERIFIED)
+    elif posted in windows:
+        date_cond = (Job.posted_at >= today - timedelta(days=windows[posted])) & trusted
+    elif posted == "range" and (date_from or date_to):  # "Date range" with no dates entered filters nothing
+        date_cond = Job.posted_at.is_not(None) & Job.posted_at_source.in_(known)
         if date_from:
-            stmt = stmt.where(Job.posted_at >= date_from)
+            date_cond = date_cond & (Job.posted_at >= date_from)
         if date_to:
-            stmt = stmt.where(Job.posted_at <= date_to)
-        stmt = stmt.where(Job.posted_at.is_not(None))
+            date_cond = date_cond & (Job.posted_at <= date_to)
     if domain:
         like = f"%{domain.lower()}%"
         stmt = stmt.where(or_(func.lower(Job.title).like(like), func.lower(Job.description).like(like)))
@@ -144,6 +167,35 @@ def list_jobs(
         stmt = stmt.where(or_(Job.salary_max_lpa >= salary_min_lpa, Job.salary_min_lpa >= salary_min_lpa))
     if min_score is not None:
         stmt = stmt.where(UserJob.match_score >= min_score)
+    if confidence:
+        conds = []
+        if "verified" in confidence:
+            conds.append(Job.posted_at.is_not(None) & Job.posted_at_source.in_(VERIFIED))
+        if "estimated" in confidence:
+            conds.append(Job.posted_at.is_not(None) & (Job.posted_at_source == "alert_email"))
+        if "unknown" in confidence:
+            conds.append(Job.posted_at.is_(None) | Job.posted_at_source.is_(None)
+                         | Job.posted_at_source.not_in([*VERIFIED, "alert_email"]))
+        stmt = stmt.where(or_(*conds))
+    if industry:
+        stmt = stmt.where(func.lower(Job.industry) == industry.lower())
+    if employment_type:
+        stmt = stmt.where(Job.employment_type.in_(employment_type))
+    if company:
+        stmt = stmt.where(func.lower(Job.company).like(f"%{company.lower()}%"))
+    if saved_search_id is not None:
+        found_by = select(DiscoveryRun.id).where(DiscoveryRun.id == UserJob.discovery_run_id, DiscoveryRun.saved_search_id == saved_search_id,
+                                                 DiscoveryRun.user_id == user.id).exists()
+        stmt = stmt.where(found_by)
+    if not include_closed and view == "feed":
+        stmt = stmt.where(Job.closed_at.is_(None))
+    hidden_unknown = 0
+    if date_cond is not None:
+        if include_unknown_dates:
+            stmt = stmt.where(date_cond | unknown_date)
+        else:
+            hidden_unknown = db.execute(select(func.count()).select_from(stmt.where(unknown_date).subquery())).scalar_one()
+            stmt = stmt.where(date_cond)
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     order = {
         "score": (UserJob.match_score.desc().nullslast(), UserJob.id.desc()),
@@ -151,7 +203,8 @@ def list_jobs(
         "discovered": (UserJob.discovered_at.desc(), UserJob.id.desc()),
     }[sort]
     rows = db.execute(stmt.order_by(*order).offset((page - 1) * page_size).limit(page_size)).unique().scalars().all()
-    return JobList(items=serializers.user_jobs(db, list(rows)), total=total, page=page, page_size=page_size)
+    return JobList(items=serializers.user_jobs(db, list(rows)), total=total, page=page, page_size=page_size,
+                   hidden_unknown_dates=hidden_unknown)
 
 
 @router.get("/{user_job_id}", response_model=JobDetail)

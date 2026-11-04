@@ -72,3 +72,30 @@ Routes: `/login`, `/register`, `/onboarding`, `/dashboard`, `/discover`, `/saved
 - Rate limiter and scheduler are in-process (fine for one worker; blocks horizontal scaling).
 - Adzuna jobs are stored with `platform="Adzuna"` but `job_to_posting` maps unknown platforms to LinkedIn internally (cosmetic only, but confusing).
 - `docs/` (user guide PDF) not committed; it contains screenshots of a test account only.
+
+
+## 5. Automated discovery (Phase 2, as built 2026-11-04)
+
+```
+scheduler (09:00 daily: run_all per user; every 15 min: starter creation + due saved searches)
+   │                         "Run discovery now" (POST /jobs/discover) ─┐
+   ▼                                                                   ▼
+saved_search_service.run_all / execute ── criteria (search ∪ preferences, related-title families)
+   ├─ company boards: company_service.refresh_board → ats.board_cache → ats.{greenhouse,lever,ashby}.fetch   (official public APIs)
+   │       └─ closed-job detection, company health, source_registry (job_sources)
+   ├─ Adzuna (when ADZUNA_APP_ID/KEY set)        ├─ alert emails (user mailbox)        (clipper/links/imports: user-initiated)
+   ▼
+normalization.NormalizedJob (one schema, plain-text descriptions, location/date/vocabulary normalisation)
+   ▼
+discovery_service.ingest_normalized → upsert_normalized (dedup: source key → job key → canonical URL → company+title+location;
+   │                                    same-board reposts) + job_source_links → add_to_feed (per-user user_jobs)
+   ▼
+matching_service.UserMatcher (rule-based, labelled; LLM when configured) → notifications (deduplicated) → run.source_results + summary
+```
+
+- **Shared versus private:** `jobs` and `job_source_links` are public listings, shared. `user_jobs`, `saved_searches`, `user_companies`, `discovery_runs` and `notifications` are per user and always scoped by `user_id`.
+- **Frontend:**
+  - Discover: latest-run card, explained empty states, source and date filters, unknown-date notice.
+  - Searches & sources: saved searches, companies (watchlist, suggested, directory, add by URL) and Source health.
+  - A notification bell.
+- **Not automated, by design:** LinkedIn, Indeed and Naukri. They are reached only through the clipper, links, paste, file import and alert emails.

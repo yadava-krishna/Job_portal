@@ -18,13 +18,15 @@ Browser ──► GitHub Pages (static app + config.json)            ┌─ post
 |---|---|
 | Accounts | Register (optional invite code), login, rotating refresh tokens, Argon2id passwords, per-user data isolation on every query |
 | Onboarding | Resume PDF upload → parsed with the existing parser → **editable** profile → preferences (multiple domains and roles) → platform selection → confirm |
-| Discovery sources | **Browser clipper** (one click on a LinkedIn/Indeed/Naukri page you are viewing, in your own logged-in browser) · paste URL + description · JSON/CSV/TXT import · your own **job-alert emails** (IMAP, read-only, encrypted app password) · optional **Adzuna official API** · pre-filtered search links |
+| Automated discovery | **Official employer job boards** (Greenhouse, Lever, Ashby public job-board APIs): every user gets a starter saved search built from their preferences over a curated, live-verified list of employers hiring in India, run daily and on demand ("Run discovery now"). Users can add any company by its careers-page link, browse a 5,400-board directory (JobSync data, MIT), and create their own saved searches. Jobs are normalised to one schema, deduplicated across sources, scored against the user's resume, and marked "No longer listed" when they leave the board |
+| Other sources | **Browser clipper** (one click on a LinkedIn/Indeed/Naukri page you are viewing, in your own logged-in browser) · paste URL + description · JSON/CSV/TXT import · your own **job-alert emails** (IMAP, read-only, encrypted app password) · optional **Adzuna official API** (needs `ADZUNA_APP_ID`/`ADZUNA_APP_KEY`) · pre-filtered search links |
+| Honest outcomes | Every discovery run records each source's result (found / reached-no-match / partly failed / failed / not configured / turned off) and a plain-language summary. A run where nothing could run is **failed**, never "completed". The **Source health** panel shows configuration, connection, last attempt/success, jobs found and what's missing |
 | Matching | Existing engine per user: skills 35, experience 25, responsibilities 20, education 10, location/preferences 10 (weights editable). Excellent ≥85, Good 70–84, Moderate 55–69, Low <55 |
-| Dates | "Posted today" only when the date is verified (platform API, the listing page itself, or entered by you). Otherwise it shows "Unknown" or "on or before <alert date>" |
+| Dates | Every card shows the posting date with a confidence chip (Verified / Estimated / Unknown) and when JobPilot found it. Date filters (today, 24 h, 3/7/30 days, range) only count dates we can vouch for; jobs with unknown dates are counted ("N hidden… show them") rather than silently dropped or shown as recent |
 | Apply | Prepare (checklist, screening answers with `NEEDS_CANDIDATE_INPUT` where unknown, resume, optional cover letter) → open the original listing → you submit there → come back and confirm. **Opening is never counted as applying** |
 | Tracking | Saved, Applications (list, **pipeline board**: Applied → Screening → Interview → Offer/Rejected, event history), dashboard analytics, per-user Excel reports (daily and full history) |
 | Availability | The UI polls `/api/v1/health` every 5–10 s. When the backend (or its database) is down it shows **JOB PORTAL OFFLINE**, disables everything, and reconnects automatically |
-| Not done | No scraping, crawling or browser automation of job sites, no use of anyone's session cookies, no automated submission, no CAPTCHA/OTP bypass |
+| Not done | No scraping, crawling or browser automation of LinkedIn, Indeed, Naukri or any job site (their terms prohibit it), no use of anyone's session cookies, no automated submission, no CAPTCHA/OTP bypass |
 
 Ideas adapted (not copied) from [alexmc2/jobs-tracker](https://github.com/alexmc2/jobs-tracker): pipeline board with event log, quick manual import, fit-assessment panel, keyboard shortcuts on the job list (`j`/`k`/`o`/`s`/`a`/`d`), funnel and per-source analytics, onboarding gate, and the Adzuna source. See `IMPLEMENTATION_PLAN.md`.
 
@@ -95,8 +97,10 @@ Argon2id hashing and a password policy · 15-minute JWT access tokens · rotatin
 ```bash
 .venv/bin/python -m pytest                       # CLI and API tests (SQLite)
 TEST_POSTGRES_URL=postgresql+psycopg://… .venv/bin/python -m pytest tests/api   # API tests on PostgreSQL + Alembic
-cd frontend && npm test && npm run build          # offline/reconnect logic, clipper, build
+cd frontend && npm test && npm run build          # cards, run outcomes, source health, offline logic, clipper, build
 ```
+
+Discovery documentation: `DISCOVERY_DIAGNOSTIC_REPORT.md` (why the feed was empty), `DISCOVERY_SOURCE_STATUS.md` (sources, companies, configuration), `DISCOVERY_TEST_REPORT.md` (tests and live verification).
 
 Moving the CLI's SQLite history into a portal account:
 

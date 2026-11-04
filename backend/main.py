@@ -12,7 +12,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse
 
 from backend.api.deps import is_local_request
-from backend.api.routes import applications, auth, health, jobs, profile, reports
+from backend.api.routes import applications, auth, discovery, health, jobs, profile, reports
 from backend.config import VERSION, get_settings
 from backend.db import Base, get_engine, init_engine
 from backend.services.scheduler_service import get_scheduler
@@ -78,7 +78,8 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
         log.error("Unhandled error on %s %s: %s", request.method, request.url.path, redact(repr(exc)), exc_info=exc)
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-    for r in (health.router, auth.router, profile.router, jobs.router, applications.router, reports.router):
+    for r in (health.router, auth.router, profile.router, jobs.router, applications.router, reports.router,
+              discovery.companies, discovery.searches, discovery.notifications, discovery.health):
         app.include_router(r, prefix=API_PREFIX)
 
     def docs_allowed(request: Request) -> bool:

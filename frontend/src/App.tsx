@@ -20,6 +20,7 @@ const SavedPage = lazy(() => import("@/pages/DiscoverPage").then((m) => ({ defau
 const OnboardingPage = lazy(() => import("@/pages/OnboardingPage").then((m) => ({ default: m.OnboardingPage })));
 const ReportsPage = lazy(() => import("@/pages/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const SearchesPage = lazy(() => import("@/pages/SearchesPage").then((m) => ({ default: m.SearchesPage })));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -101,6 +102,7 @@ export default function App() {
                       <Route element={<AppLayout />}>
                         <Route path="/dashboard" element={<DashboardPage />} />
                         <Route path="/discover" element={<DiscoverPage />} />
+                        <Route path="/searches" element={<SearchesPage />} />
                         <Route path="/saved" element={<SavedPage />} />
                         <Route path="/applied" element={<AppliedPage />} />
                         <Route path="/reports" element={<ReportsPage />} />

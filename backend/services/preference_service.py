@@ -148,5 +148,10 @@ def onboarding_status(db: Session, user: User) -> OnboardingStatus:
     if done and user.onboarding_completed_at is None:
         user.onboarding_completed_at = utcnow()
         db.commit()
+    if done and user.starter_search_created_at is None:
+        from backend.config import get_settings
+        from backend.services import saved_search_service
+
+        saved_search_service.ensure_starter(db, get_settings(), user)
     return OnboardingStatus(resume_uploaded=resume, profile_confirmed=confirmed, preferences_saved=prefs,
                             platforms_selected=platforms, completed=done)

@@ -41,15 +41,89 @@ This plan covers the v2 brief. Companion documents: `REFERENCE_PROJECT_ANALYSIS.
 
 **Exit:** migration applied to the live DB with the existing user intact; all tests green; S1–S3 closed.
 
-## Phase 2: Discovery, dedup, matching, feed
-1. **ATS board discovery** (Greenhouse, Lever, Ashby): source adapters, company watchlist per user, default India-relevant directory (JobSync MIT data with notice), saved searches with schedule and threshold, run history. Background worker: an in-process queue with persisted job state and recovery on startup (no new infrastructure); Redis/RQ only if needed later.
-2. **Adzuna** keys (yours), plus an optional Jooble/Careerjet after terms check.
-3. **Posting-date model:** `verified` (API timestamp / listing page / user) · `estimated` (alert-email date, "x days ago" text) · `unknown`; filters Today, 24h, 3d, 7d, 30d, custom; "Today" only for verified.
-4. **Cross-source dedup:** canonical URL + (normalised company, title, location) fingerprint merges the same job from Adzuna, an ATS and a clip into one listing with multiple `job_sources` links.
-5. **Matching v2:** add components *title relevance, industry relevance, salary fit, employment-type fit*; weights configurable per user (defaults keep today's behaviour); a 1–2 sentence **AI suitability summary** when an LLM is configured, labelled "rule-based" otherwise; LLM-aware re-scoring in the background (fixes the overwrite debt).
-6. **Resume parsing v2:** industry, tools and technologies extraction from the taxonomy; DOCX support; optional LLM-assisted extraction where every item must be found in the resume text (anti-fabrication check).
-7. **Feed v2:** company logos (favicon service via domain, cached), industry and employment-type filters, salary filter, infinite scroll, recently viewed, share (copy link / Web Share API), AI summary line.
-**Exit:** discovery runs on a schedule for test users, dedup across sources verified, all filters tested.
+## Phase 2: Automated job discovery (detailed, approved 2026-11-04)
+
+**Findings from inspecting Phase 0/1 code that shape this phase**
+- `upsert_job` merges only on the exact `job_key`, so the same role from Adzuna, an alert email and a clip becomes several `jobs` rows and several feed items. There is no cross-source dedup yet.
+- `ingest_postings` takes the CLI's `JobPosting`, whose `platform` is the LinkedIn/Indeed/Naukri enum. Adzuna works around this (`Platform.LINKEDIN`, then overwrites the column). ATS jobs need a backend-level normalised type instead of extending the CLI enum, which drives the CLI adapters.
+- `deduplication.normalize_company` feeds the stored `job_key` hash for jobs without an ID, so it must not change. Cross-source identity gets its own key.
+- Verified live: Greenhouse has `first_published` (real publish time; `updated_at` is *not* a posting date); Lever has `createdAt` (ms epoch); Ashby has `publishedAt` and `isListed`. A stale token returns 404, so a missing board is a normal, reportable state.
+- JobSync (MIT, commit `8c20325`) ships `{name, token}` directories: Greenhouse, Lever, Ashby. Mostly non-Indian employers; tokens can be stale.
+
+**2.1 Unified normalisation** (`backend/services/normalization.py`)
+- `NormalizedJob`: one schema for every source (source, source key, display platform, company, title, locations, work mode, employment type, experience, salary, plain-text description, skills, URLs, posted date + date source, industry, department).
+- Helpers: HTML to safe plain text (we never render source HTML), canonical URL, employment-type and work-mode vocabularies, ISO/epoch dates, location tokens with Indian city aliases (Bengaluru/Bangalore, Gurugram/Gurgaon, Mumbai/Bombay…), `company_key`/`title_key`.
+- Converters from the CLI `JobPosting` (clip, URL, file, alert email) and from Adzuna, so every source goes through one ingest path.
+
+**2.2 Official ATS integrations** (`backend/services/ats/`)
+- Greenhouse `boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true`, Lever `api.lever.co/v0/postings/{token}?mode=json` (+ EU host), Ashby `api.ashbyhq.com/posting-api/job-board/{token}?includeCompensation=true`. Read-only public endpoints that employers publish for their own careers pages; no auth, no scraping.
+- Errors classified as not-found / transient / invalid; response size cap; timeouts; an identifying User-Agent; in-process board cache (30 min) so many users and searches share one fetch.
+- Posting date: Greenhouse `first_published`, Lever `createdAt`, Ashby `publishedAt` → `verified`; absent → `unknown`, never "today". Ashby `isListed=false` is skipped.
+- A job that disappears from a board after a successful fetch gets `closed_at`, marked "No longer listed".
+
+**2.3 Cross-source deduplication**
+1. Same source key (`job_source_links.source_key`).
+2. Same `job_key` (legacy).
+3. Same canonical URL.
+4. Same `dedup_key` (normalised company + title) **and** compatible locations (overlapping cities, or exactly one candidate when a location is missing).
+
+On a match, the job is enriched (full description beats a snippet; better-ranked posting date wins) and the extra source is recorded as a link. One job means one feed item per user (existing unique constraint).
+
+**2.4 Companies and watchlists**
+- `companies` table: rows are created only when a company is used, so the 5,400-entry directory is not copied into the database.
+- Directory search over the JobSync data (with MIT notice in `backend/data/ats_companies/`), plus a small curated, **live-verified** India-relevant list with industries.
+- Add a company by board URL or token (validated by one probe call). Per-user watchlist.
+
+**2.5 Saved searches and scheduling**
+- CRUD under `/api/v1/saved-searches`. Criteria: titles/keywords, exclude keywords, locations, remote OK, industries, experience, employment types, work modes, companies (or the watchlist), sources (Greenhouse/Lever/Ashby/Adzuna), minimum match score, schedule (manual/daily/weekly).
+- "Run now" plus an in-process scheduler tick every 15 minutes for due searches. Each run is a `discovery_runs` row with `saved_search_id`. Per-search lock; runs left "running" across a restart are marked interrupted (S10).
+- The existing 09:00 daily job (alert emails, Adzuna) is unchanged.
+
+**2.6 Matching:** every new feed item is scored by the existing `UserMatcher` against the user's confirmed resume and preferences. Rule-based scoring remains the fallback and is labelled. The search's own minimum score decides shortlisting and notifications.
+
+**2.7 Adzuna:** saved searches can include Adzuna. The integration goes through the same normalisation and dedup. Without `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` in `.env`, runs report "not configured" (no invented credentials).
+
+**2.8 Notifications without duplicates:** one in-app notification per *newly added* feed item at or above the search's threshold, keyed `new_match:{job_id}` with a unique (user, key) constraint. Repeat runs find the existing feed item and notify nothing. API: list, unread count, mark read, read all. Minimal bell in the header (the full centre is Phase 7).
+
+**2.9 Feed:**
+- Each card shows source(s), discovery time, original posting date with a confidence chip (Verified / Estimated / Unknown), and a "No longer listed" badge.
+- Filters: source, posted window (today / 24h / 3d / 7d / 30d / range; verified dates only unless "include estimated"), confidence, industry, employment type, company, saved search, include closed.
+- Sorting: match, newest posting, recently found. Save/dismiss and match/matching/missing skills as before.
+- New **Searches** page (saved searches and run history) and **Companies** tab (watchlist, directory, suggested, add by URL).
+
+**Migration `0003_discovery`** (additive):
+- New tables: `companies`, `user_companies`, `job_source_links`.
+- New columns: `jobs.dedup_key` (indexed), `jobs.company_id`, `jobs.closed_at`, `jobs.department`.
+- Backfills: one source link per existing job and `dedup_key` for existing jobs.
+- A downgrade, and a migration test extended to 0003.
+
+**Tests:**
+- Normaliser unit tests.
+- ATS clients against mocked official feeds (`httpx.MockTransport`) with synthetic fixtures shaped like the live responses: 404, 5xx, malformed body, unlisted, missing dates, EU host, size cap.
+- API integration: saved search → run → scored feed; repeat runs produce no duplicate jobs or notifications; clip + Greenhouse merge into one item; closed jobs; Adzuna mocked and unconfigured; per-user isolation; scheduler due logic; feed filters; company add/validation.
+- Existing LinkedIn/Indeed/Naukri clip/import/email tests unchanged and green; SQLite + Postgres; frontend tests for cards and filters.
+
+**As built (2026-11-04).** Delivered as planned, plus the fixes from `DISCOVERY_DIAGNOSTIC_REPORT.md`:
+- Starter saved search per user (suggested employers, related-title families, experience from the resume).
+- "Run discovery now" across all sources, with staged progress.
+- Per-source run outcomes, a summary, honest run status, and a Source health panel.
+- The date-range fix and the hidden-unknown-dates count.
+- Same-board repost dedup.
+
+Migration `0003_discovery`, additive:
+- New tables: `companies`, `user_companies`, `job_source_links`.
+- `jobs`: `dedup_key`, `company_id`, `department`, `closed_at`.
+- `users.starter_search_created_at`, `saved_searches.origin`.
+- `discovery_runs`: `source_results`, `summary`.
+- Backfills: links, `dedup_key` and `canonical_url`.
+
+Known limits:
+- Coverage is only boards on Greenhouse, Lever and Ashby (many large Indian employers aren't).
+- Greenhouse gives no work mode, so it is inferred from text.
+- Scoring is rule-based until an LLM is configured.
+- Adzuna awaits credentials.
+
+**Out of scope here (later phases):** company logos (needs a privacy-safe favicon proxy), LLM-assisted extraction and AI summaries (Phase 3/6 with the local Docker model), Jooble/Careerjet, and admin source configuration (Phase 5).
 
 ## Phase 3: Browser extension and application assistance
 - **JobPilot MV3 extension** (`extension/`): per-site extractors (LinkedIn, Indeed, Naukri, Foundit, Glassdoor, Wellfound, Greenhouse, Lever, Ashby) with JSON-LD first; Shadow-DOM floating button; SPA observer; shows "already in JobPilot · 82%" on the page.

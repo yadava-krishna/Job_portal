@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ExternalLink, Keyboard, Link2, Loader2, Plus, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
+import { ExternalLink, Keyboard, Link2, Loader2, Plus, Radar, RefreshCw, Search, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,16 +15,27 @@ import { JobDetailSheet } from "@/components/app/JobDetailSheet";
 import { errorMessage } from "@/lib/api";
 import { takeClip, type ClippedJob } from "@/lib/clipper";
 import { cn } from "@/lib/utils";
-import { pollRun, useDiscover, useInvalidateWork, useJobAction, useJobs, useSearchLinks, type JobQuery } from "@/services/queries";
+import { pollRun, useDiscover, useInvalidateWork, useJobAction, useJobs, useSavedSearches, useSearchLinks, useSourceHealth, type JobQuery } from "@/services/queries";
+import { FeedEmptyState, RunSummary } from "@/components/app/discovery";
 import type { UserJob } from "@/types/api";
 
-const PLATFORMS = ["LinkedIn", "Indeed", "Naukri", "Adzuna"];
+const PLATFORMS = ["LinkedIn", "Indeed", "Naukri", "Greenhouse", "Lever", "Ashby", "Adzuna"];
+const POSTED: [NonNullable<JobQuery["posted"]>, string][] = [
+  ["any", "Any date"], ["today", "Posted today"], ["24h", "24 hours"], ["3d", "3 days"], ["7d", "7 days"], ["30d", "30 days"], ["range", "Date range"],
+];
+const EMPTY_QUERY: JobQuery = { view: "feed", posted: "any", sort: "score", platform: [] };
 
 /** Shared list + JD sheet + apply dialog, used by Discover and Saved. */
-export function JobWorkspace({ query, emptyTitle, emptyBody, toolbar }: { query: JobQuery; emptyTitle: string; emptyBody?: React.ReactNode; toolbar?: React.ReactNode }) {
+export function JobWorkspace({ query, emptyTitle, emptyBody, toolbar, empty, initialDetailId = null, onShowUnknownDates }: {
+  query: JobQuery; emptyTitle: string; emptyBody?: React.ReactNode; toolbar?: React.ReactNode;
+  /** Replaces the generic empty state (Discover explains *why* the feed is empty). */
+  empty?: React.ReactNode;
+  initialDetailId?: number | null;
+  onShowUnknownDates?: () => void;
+}) {
   const jobs = useJobs(query);
   const action = useJobAction();
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(initialDetailId);
   const [applyItem, setApplyItem] = useState<UserJob | null>(null);
   const [cursor, setCursor] = useState(0);
   const items = jobs.data?.items ?? [];
@@ -74,12 +85,18 @@ export function JobWorkspace({ query, emptyTitle, emptyBody, toolbar }: { query:
         <span>{jobs.data ? `${jobs.data.total} job${jobs.data.total === 1 ? "" : "s"}` : "Loading…"} {jobs.isFetching && <Loader2 className="ml-1 inline size-3 animate-spin" />}</span>
         <span className="hidden items-center gap-1 md:flex"><Keyboard className="size-3.5" /> j/k move · o open · s save · a apply · d dismiss</span>
       </div>
+      {!!jobs.data?.hidden_unknown_dates && (
+        <p className="mb-3 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground" data-testid="hidden-unknown-dates">
+          {jobs.data.hidden_unknown_dates} job{jobs.data.hidden_unknown_dates === 1 ? " is" : "s are"} hidden by the date filter because the source didn't publish a posting date.
+          {onShowUnknownDates && <> <Button variant="link" className="h-auto p-0" onClick={onShowUnknownDates}>Show them (labelled “Posting date unknown”)</Button></>}
+        </p>
+      )}
       {jobs.isLoading ? (
         <div className="grid gap-4 lg:grid-cols-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-56" />)}</div>
       ) : jobs.isError ? (
         <p className="text-sm text-destructive">{errorMessage(jobs.error)}</p>
       ) : items.length === 0 ? (
-        <EmptyState icon={<Search className="size-8" />} title={emptyTitle}>{emptyBody}</EmptyState>
+        empty ?? <EmptyState icon={<Search className="size-8" />} title={emptyTitle}>{emptyBody}</EmptyState>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           {items.map((it, i) => (
@@ -102,12 +119,19 @@ export function DiscoverPage() {
   const discover = useDiscover();
   const invalidate = useInvalidateWork();
   const links = useSearchLinks();
+  const searches = useSavedSearches();
+  const health = useSourceHealth();
+  const initialJob = Number(new URLSearchParams(location.search).get("job")) || null;
   const [importOpen, setImportOpen] = useState(false);
   const [linksOpen, setLinksOpen] = useState(false);
   const [clip, setClip] = useState<ClippedJob | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
-  const [draft, setDraft] = useState<JobQuery>({ view: "feed", posted: "any", sort: "score", platform: [] });
+  const [draft, setDraft] = useState<JobQuery>(() => {
+    // Arriving from a saved search ("View matches") pre-filters the feed to what it found.
+    const sid = Number(new URLSearchParams(location.search).get("search"));
+    return sid ? { ...EMPTY_QUERY, saved_search_id: sid } : EMPTY_QUERY;
+  });
   const [query, setQuery] = useState<JobQuery>(draft);
 
   // A job captured by the browser clipper arrives here for review.
@@ -128,16 +152,31 @@ export function DiscoverPage() {
 
   const runDiscovery = () => discover.mutate(undefined, {
     onSuccess: async (run) => {
-      setRunning("Checking your job-alert emails and connected sources…");
-      const done = await pollRun(run.id, (r) => setRunning(`Checking sources… ${r.jobs_found} found, ${r.jobs_new} new`));
+      setRunning("Connecting to sources…");
+      const done = await pollRun(run.id, (r) => setRunning(r.status === "running" ? r.summary ?? "Connecting to sources…" : null), 300_000);
       setRunning(null);
       void invalidate();
-      if (done.status === "failed") toast.error("Discovery failed. See Reports → errors.");
-      else toast.success(`${done.jobs_new} new job(s), ${done.jobs_matched} shortlisted, ${done.duplicates} already in your feed`);
-      done.error_details.slice(0, 3).forEach((e) => toast.warning(e.message));
+      // Report what actually happened: a failure, a run that found nothing (and why), or the new jobs.
+      if (done.status === "running") toast.warning("Discovery is taking longer than usual; results will appear when it finishes.");
+      else if (done.status === "failed") toast.error(done.summary ?? "Discovery could not run.");
+      else if (done.jobs_found === 0) toast.info(done.summary ?? "No listings matched your search right now.");
+      else toast.success(`${done.jobs_new} new job${done.jobs_new === 1 ? "" : "s"}, ${done.duplicates} already in your feed${done.status === "partial" ? " (some sources had problems)" : ""}`);
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+
+  // First visit after onboarding: start discovery automatically, once, so a new user never meets a blank feed.
+  useEffect(() => {
+    if (!health.data || health.data.last_run || running || discover.isPending) return;
+    try {
+      if (sessionStorage.getItem("jobpilot:auto-discovery")) return;
+      sessionStorage.setItem("jobpilot:auto-discovery", "1");
+    } catch { /* storage unavailable: still run once per mount */ }
+    runDiscovery();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [health.data]);
+  const lastRun = health.data?.last_run;
+  const filtered = JSON.stringify({ ...query, page: undefined }) !== JSON.stringify({ ...EMPTY_QUERY, page: undefined });
 
   const grouped = useMemo(() => {
     const g: Record<string, typeof links.data> = {};
@@ -166,13 +205,19 @@ export function DiscoverPage() {
             </button>
           ))}
           <span className="mx-1 h-4 w-px bg-border" />
-          {([["any", "Any date"], ["today", "Posted today"], ["24h", "Last 24 hours"], ["range", "Date range"]] as const).map(([v, l]) => (
+          {POSTED.map(([v, l]) => (
             <button key={v} type="button" onClick={() => { set("posted", v); if (v !== "range") setQuery({ ...draft, posted: v, page: 1 }); }} aria-pressed={draft.posted === v}
                     className={cn("rounded-full border px-3 py-1 text-xs font-medium", draft.posted === v ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted")}>
               {l}
             </button>
           ))}
         </div>
+        {draft.posted !== "any" && draft.posted !== "today" && (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" checked={!!draft.include_estimated} onChange={(e) => { const next = { ...draft, include_estimated: e.target.checked || undefined }; setDraft(next); setQuery({ ...next, page: 1 }); }} className="accent-primary" />
+            Include estimated dates (alert emails). Jobs with unknown posting dates are never counted as recent.
+          </label>
+        )}
         {draft.posted === "range" && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <Input type="date" className="w-auto" value={draft.date_from ?? ""} onChange={(e) => set("date_from", e.target.value)} aria-label="Posted from" />
@@ -187,20 +232,31 @@ export function DiscoverPage() {
             <Input type="number" min={0} step={0.5} value={draft.experience ?? ""} onChange={(e) => set("experience", e.target.value === "" ? undefined : Number(e.target.value))} placeholder="Your years of experience" aria-label="Experience" />
             <NativeSelect ariaLabel="Work mode" value={draft.work_mode?.[0] ?? ""} onChange={(v) => set("work_mode", v ? [v] : [])}
                           options={[{ value: "", label: "Any work mode" }, { value: "Remote", label: "Remote" }, { value: "Hybrid", label: "Hybrid" }, { value: "On-site", label: "On-site" }]} />
+            <Input value={draft.company ?? ""} onChange={(e) => set("company", e.target.value)} placeholder="Company" aria-label="Company" />
+            <Input value={draft.industry ?? ""} onChange={(e) => set("industry", e.target.value)} placeholder="Industry (e.g. Fintech)" aria-label="Industry" />
+            <NativeSelect ariaLabel="Employment type" value={draft.employment_type?.[0] ?? ""} onChange={(v) => set("employment_type", v ? [v] : [])}
+                          options={[{ value: "", label: "Any employment type" }, ...["Full-time", "Part-time", "Contract", "Internship", "Temporary"].map((t) => ({ value: t, label: t }))]} />
+            <NativeSelect ariaLabel="Posting date confidence" value={draft.confidence?.[0] ?? ""} onChange={(v) => set("confidence", v ? [v as "verified"] : [])}
+                          options={[{ value: "", label: "Any date confidence" }, { value: "verified", label: "Verified dates" }, { value: "estimated", label: "Estimated dates" }, { value: "unknown", label: "Unknown dates" }]} />
+            <NativeSelect ariaLabel="Found by saved search" value={draft.saved_search_id ? String(draft.saved_search_id) : ""} onChange={(v) => set("saved_search_id", v ? Number(v) : undefined)}
+                          options={[{ value: "", label: "Any saved search" }, ...(searches.data ?? []).map((s) => ({ value: String(s.id), label: s.name }))]} />
             <NativeSelect ariaLabel="Sort" value={draft.sort ?? "score"} onChange={(v) => set("sort", v as JobQuery["sort"])}
                           options={[{ value: "score", label: "Best match" }, { value: "posted", label: "Newest posting" }, { value: "discovered", label: "Recently added" }]} />
-            <label className="flex items-center gap-3 text-sm sm:col-span-2 lg:col-span-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={!!draft.include_closed} onChange={(e) => set("include_closed", e.target.checked || undefined)} className="accent-primary" />
+              Show jobs no longer listed
+            </label>
+            <label className="flex items-center gap-3 text-sm sm:col-span-2 lg:col-span-2">
               <span className="shrink-0">Min match: <strong>{draft.min_score ?? 0}%</strong></span>
               <input type="range" min={0} max={100} step={5} value={draft.min_score ?? 0} onChange={(e) => set("min_score", Number(e.target.value) || undefined)} className="w-full accent-primary" aria-label="Minimum match score" />
             </label>
             <div className="flex gap-2 lg:col-span-2 lg:justify-end">
-              <Button type="button" variant="ghost" onClick={() => { const reset: JobQuery = { view: "feed", posted: "any", sort: "score", platform: [] }; setDraft(reset); setQuery(reset); }}>Reset</Button>
+              <Button type="button" variant="ghost" onClick={() => { setDraft(EMPTY_QUERY); setQuery(EMPTY_QUERY); }}>Reset</Button>
               <Button type="submit">Apply filters</Button>
             </div>
           </div>
         )}
       </form>
-      {running && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {running}</p>}
     </Card>
   );
 
@@ -208,15 +264,28 @@ export function DiscoverPage() {
     <>
       <PageHeader
         title="Discover jobs"
-        description="Jobs from your alert emails, imports and connected sources, scored against your confirmed profile."
+        description="Jobs from employer job boards, your saved searches, alert emails and imports, scored against your confirmed profile."
         actions={<>
+          <Button variant="outline" onClick={() => navigate("/searches")}><Radar /> Searches</Button>
           <Button variant="outline" onClick={() => setLinksOpen(true)}><Link2 /> Search links</Button>
-          <Button variant="outline" onClick={runDiscovery} disabled={discover.isPending || !!running}>{running ? <Loader2 className="animate-spin" /> : <RefreshCw />} Check sources</Button>
+          <Button variant="outline" onClick={runDiscovery} disabled={discover.isPending || !!running}>{running ? <Loader2 className="animate-spin" /> : <RefreshCw />} Run discovery now</Button>
           <Button onClick={() => { setClip(null); setImportOpen(true); }}><Plus /> Add job</Button>
         </>}
       />
-      <JobWorkspace query={query} toolbar={toolbar} emptyTitle="No jobs match yet"
-                    emptyBody={<>Add a job with <strong>Add job</strong>, use the browser clipper on a LinkedIn, Indeed or Naukri page, or press <strong>Check sources</strong> to read your job-alert emails.</>} />
+      {(lastRun || running) && (
+        <Card className="mb-5 gap-2 p-4" data-testid="discovery-status">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Latest discovery</h2>
+            <Button size="sm" variant="ghost" onClick={() => navigate("/searches?tab=sources")}>Source health</Button>
+          </div>
+          {running ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {running}</p>
+            : lastRun && <RunSummary run={lastRun} compact={lastRun.status === "completed"} />}
+        </Card>
+      )}
+      <JobWorkspace query={query} toolbar={toolbar} emptyTitle="No jobs match yet" initialDetailId={initialJob}
+                    onShowUnknownDates={() => { const next = { ...draft, include_unknown_dates: true }; setDraft(next); setQuery({ ...next, page: 1 }); }}
+                    empty={<FeedEmptyState lastRun={lastRun} filtered={filtered} running={!!running || discover.isPending} onRun={runDiscovery}
+                                           onClearFilters={() => { setDraft(EMPTY_QUERY); setQuery(EMPTY_QUERY); }} />} />
       <ImportDialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) { setClip(null); if (location.pathname !== "/discover") navigate("/discover"); } }} clip={clip} />
       <Dialog open={linksOpen} onOpenChange={setLinksOpen}>
         <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">

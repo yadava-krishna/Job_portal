@@ -17,7 +17,8 @@ No secrets are reproduced in this document.
 | S7 | Medium | No Content-Security-Policy on the GitHub Pages frontend | Add `<meta http-equiv="Content-Security-Policy">` (Phase 6) |
 | S8 | Low | No password reset or account deletion / data export (privacy rights) | Phase 4/7 |
 | S9 | Low | Health endpoint discloses version and scheduler timing publicly | Reduce public detail (Phase 8) |
-| S10 | Low | In-flight discovery runs lost on restart; stuck `running` rows | Phase 2 (job queue / recovery) |
+| S10 | Low | In-flight discovery runs lost on restart; stuck `running` rows | **Mitigated (Phase 2)**: runs left running >30 min are marked failed "interrupted by restart" at startup; a durable queue is still Phase 8 |
+| S13 | Medium | Phase 2 adds outbound HTTP to job-board APIs from the server, partly driven by user input (board URLs/tokens) | **Controlled**: see details |
 | S11 | Low | No automated database backup | Phase 8 (`pg_dump` timer + restore doc) |
 | S12 | Info | PDF parsing runs in the API process (PyMuPDF on untrusted files) | Size/page limits exist; consider a subprocess with timeout (Phase 8) |
 
@@ -59,6 +60,14 @@ No secrets are reproduced in this document.
 **S6/S7: Token storage and XSS.** Keep bearer tokens (cross-site cookies between github.io and ngrok are unreliable), but: strict CSP (`default-src 'self'; connect-src 'self' https://*.ngrok-free.app https://*.ngrok.app; img-src 'self' data: https:; script-src 'self'`), never render job-description HTML (we render text only; keep it that way), short access-token TTL (15 min, already), refresh rotation with reuse detection (already).
 
 **Browser extension (Phase 3) security design.** Scoped, revocable **extension tokens** (scope `jobs:capture`, `profile:read-autofill`), shown once, hashed at rest, per-device name and expiry; minimal host permissions requested per site; content scripts never read cookies, storage or other tabs; autofill only on explicit click and never submits; no password or OTP fields are ever touched.
+
+**S13: Outbound job-board requests (Phase 2).**
+- User input never becomes a URL. A board link is parsed to one of three fixed API hosts (Greenhouse, Lever with an EU variant, Ashby), and the token must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$` (no `/`, `..` or spaces). Anything else is rejected before any request is made, so there is no SSRF to internal addresses.
+- Requests carry an identifying User-Agent and no cookies or credentials.
+- Limits: 25-second timeout, 25 MB body cap, JSON only. Not-found boards are cached for 6 hours to avoid hammering.
+- Job descriptions are converted to plain text on the server (scripts and styles dropped) and are never rendered as HTML.
+- Users cannot read each other's saved searches, runs, watchlists, notifications or feed items (tests return 404, never 403). Job rows are public listings shared between users; all per-user state lives in `user_jobs`.
+- Tests: `test_bad_tokens_rejected_before_any_request`, `test_parse_board_url_rejects_other_sites`, `test_response_size_cap`, `test_saved_searches_watchlists_and_notifications_are_private`, `test_two_users_get_independent_matches_from_shared_boards`. In the test suite, any request not explicitly mocked fails, so no test can reach a real board by accident.
 
 ## Controls already in place (verified in code/tests)
 Argon2id hashing with rehash-on-login · uniform timing on unknown emails · password policy · 15-min HS256 access JWT · rotating refresh tokens stored as SHA-256, family revocation on reuse · every user-data query scoped by `user_id`, cross-user access returns 404 (tested for each resource) · resume uploads: size, `%PDF` magic, PyMuPDF open, encryption and page checks, server-generated filenames, ownership plus path check on download · Fernet-encrypted IMAP passwords · CORS allowlist · security headers · Postgres on an internal-only network, backend bound to 127.0.0.1 · secrets in `.env` (600, gitignored) · log redaction of emails, phones, keys and passwords · history scanned clean of secrets and personal data before the repo went public.

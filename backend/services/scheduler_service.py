@@ -9,6 +9,7 @@ from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 
 from backend.config import BackendSettings
@@ -16,6 +17,7 @@ from backend.db import session_factory
 from backend.models import User
 
 log = logging.getLogger(__name__)
+SEARCH_TICK_MINUTES = 15
 
 
 class PortalScheduler:
@@ -23,7 +25,9 @@ class PortalScheduler:
         self.settings = settings
         self.scheduler: BackgroundScheduler | None = None
         self.last_run: dict[str, Any] | None = None
+        self.last_search_tick: dict[str, Any] | None = None
         self._lock = threading.Lock()
+        self._search_lock = threading.Lock()
 
     def start(self) -> None:
         if not self.settings.scheduler_enabled or self.scheduler is not None:
@@ -32,6 +36,9 @@ class PortalScheduler:
         self.scheduler = BackgroundScheduler(timezone=self.settings.timezone)
         self.scheduler.add_job(self.run_all, CronTrigger(hour=hour, minute=minute, timezone=self.settings.timezone),
                                id="daily_discovery", max_instances=1, coalesce=True, misfire_grace_time=6 * 3600)
+        self.scheduler.add_job(self.run_due_searches, IntervalTrigger(minutes=SEARCH_TICK_MINUTES, timezone=self.settings.timezone),
+                               id="saved_searches", max_instances=1, coalesce=True)
+        self._close_interrupted_runs()
         self.scheduler.start()
         log.info("Portal scheduler started: daily discovery at %s %s", self.settings.scheduler_run_time, self.settings.timezone)
 
@@ -49,8 +56,42 @@ class PortalScheduler:
             "last_run": self.last_run,
         }
 
+    def _close_interrupted_runs(self) -> None:
+        from backend.services import saved_search_service
+
+        db = session_factory()()
+        try:
+            n = saved_search_service.mark_interrupted(db)
+            if n:
+                log.warning("Marked %d discovery run(s) interrupted by the last restart.", n)
+        except Exception:
+            log.exception("Could not close interrupted discovery runs")
+        finally:
+            db.close()
+
+    def run_due_searches(self) -> None:
+        """Saved searches whose schedule is due (daily/weekly), one at a time."""
+        from backend.services import saved_search_service
+
+        if not self._search_lock.acquire(blocking=False):
+            return
+        started = datetime.now().isoformat(timespec="seconds")
+        done = 0
+        try:
+            db = session_factory()()
+            try:
+                done = saved_search_service.run_due(db, self.settings)
+            except Exception:
+                db.rollback()
+                log.exception("Saved-search tick failed")
+            finally:
+                db.close()
+        finally:
+            self.last_search_tick = {"at": started, "searches_run": done}
+            self._search_lock.release()
+
     def run_all(self) -> None:
-        from backend.services import discovery_service, report_service
+        from backend.services import discovery_service, report_service, saved_search_service
 
         if not self._lock.acquire(blocking=False):
             log.warning("Scheduled discovery already running; skipped.")
@@ -63,7 +104,8 @@ class PortalScheduler:
                 users = db.execute(select(User).where(User.is_active.is_(True), User.onboarding_completed_at.is_not(None))).scalars().all()
                 for user in users:
                     try:
-                        discovery_service.run_discovery(db, self.settings, user, None, trigger="scheduled")
+                        run = discovery_service.start_run(db, user, "scheduled", ["all"])
+                        saved_search_service.run_all(db, self.settings, user, run, scheduled=True)
                         report_service.generate(db, self.settings, user, "daily")
                         done += 1
                     except Exception:

@@ -1,6 +1,7 @@
 import { Suspense, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BarChart3, Loader2, Bookmark, Briefcase, FileSpreadsheet, LayoutDashboard, LogOut, Menu, Search, Settings, X } from "lucide-react";
+import { BarChart3, Loader2, Bookmark, Briefcase, FileSpreadsheet, LayoutDashboard, LogOut, Menu, Radar, Search, Settings, X } from "lucide-react";
+import { NotificationBell } from "@/components/app/discovery";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConnection } from "@/contexts/ConnectionContext";
@@ -10,6 +11,7 @@ import { timeAgo } from "@/lib/format";
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/discover", label: "Discover jobs", icon: Search },
+  { to: "/searches", label: "Searches & sources", icon: Radar },
   { to: "/saved", label: "Saved", icon: Bookmark },
   { to: "/applied", label: "Applications", icon: Briefcase },
   { to: "/reports", label: "Reports", icon: FileSpreadsheet },
@@ -70,7 +72,10 @@ export function AppLayout() {
             <Button size="icon-sm" variant="ghost" className="lg:hidden" onClick={() => setOpen(true)} aria-label="Open menu"><Menu /></Button>
             <div className="lg:hidden"><Brand compact /></div>
           </div>
-          <BackendIndicator />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <BackendIndicator />
+          </div>
         </header>
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
           {/* Keeps the navigation visible while a page chunk loads. */}

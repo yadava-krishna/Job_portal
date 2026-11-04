@@ -49,6 +49,8 @@ class User(Base, TimestampMixin):
     role: Mapped[str] = mapped_column(String(20), default="user", server_default=text("'user'"), nullable=False)
     nickname: Mapped[str | None] = mapped_column(String(60))
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set once a starter saved search has been created, so deleting it doesn't make it reappear.
+    starter_search_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class RefreshToken(Base):
@@ -176,6 +178,12 @@ class Job(Base):
     canonical_url: Mapped[str | None] = mapped_column(String(1000), index=True)
     company_logo_url: Mapped[str | None] = mapped_column(String(1000))
     industry: Mapped[str | None] = mapped_column(String(100))
+    # Cross-source identity: normalised company + title (see services/normalization.dedup_key).
+    dedup_key: Mapped[str | None] = mapped_column(String(400), index=True)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL", name="fk_jobs_company_id"), index=True)
+    department: Mapped[str | None] = mapped_column(String(200))
+    # Set when a successful board fetch no longer lists the job.
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     application_method: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -199,6 +207,9 @@ class DiscoveryRun(Base):
     error_details: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False)
     platform_stats: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
     saved_search_id: Mapped[int | None] = mapped_column(ForeignKey("saved_searches.id", ondelete="SET NULL", name="fk_discovery_runs_saved_search_id"), index=True)
+    # Per source: {status: ok|empty|partial|failed|not_configured|disabled, message, found, new, duplicates, ...}
+    source_results: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
+    summary: Mapped[str | None] = mapped_column(Text)  # plain-language outcome, shown instead of a bare "0 jobs"
 
 
 class UserJob(Base):
@@ -495,12 +506,63 @@ class SavedSearch(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    origin: Mapped[str] = mapped_column(String(20), default="user", server_default=text("'user'"), nullable=False)  # user | starter
     criteria: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)  # keywords, locations, sources, filters
     schedule: Mapped[str] = mapped_column(String(20), default="daily", nullable=False)  # manual | daily | weekly
     min_match_score: Mapped[float | None] = mapped_column(Float)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Company(Base, TimestampMixin):
+    """An employer with a public ATS job board. Rows are created on first use (watch, search, add by URL)."""
+
+    __tablename__ = "companies"
+    __table_args__ = (UniqueConstraint("ats", "board_token", name="uq_companies_ats_token"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    ats: Mapped[str] = mapped_column(String(20), nullable=False)  # greenhouse | lever | ashby
+    board_token: Mapped[str] = mapped_column(String(120), nullable=False)
+    region: Mapped[str | None] = mapped_column(String(10))  # Lever: "eu" for api.eu.lever.co
+    industry: Mapped[str | None] = mapped_column(String(100))
+    domain: Mapped[str | None] = mapped_column(String(200))
+    origin: Mapped[str] = mapped_column(String(20), default="user", nullable=False)  # curated | jobsync | user
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_status: Mapped[str | None] = mapped_column(String(20))  # ok | empty | not_found | error
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    job_count: Mapped[int | None] = mapped_column(Integer)
+
+
+class UserCompany(Base):
+    """A user's company watchlist."""
+
+    __tablename__ = "user_companies"
+    __table_args__ = (UniqueConstraint("user_id", "company_id", name="uq_user_companies_user_company"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    company: Mapped[Company] = relationship(lazy="joined")
+
+
+class JobSourceLink(Base):
+    """Every source a (deduplicated) job was seen on."""
+
+    __tablename__ = "job_source_links"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(30), nullable=False)
+    platform: Mapped[str | None] = mapped_column(String(20), index=True)  # LinkedIn, Greenhouse, Adzuna, ...
+    source_key: Mapped[str] = mapped_column(String(300), unique=True, nullable=False)
+    url: Mapped[str | None] = mapped_column(String(1000))
+    posted_at: Mapped[date | None] = mapped_column(Date)
+    posted_at_source: Mapped[str | None] = mapped_column(String(20))
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 class UserAchievement(Base):
@@ -515,4 +577,4 @@ class UserAchievement(Base):
 USER_OWNED_MODELS = (Resume, CandidateProfile, JobPreference, PlatformPreference, EmailIntegration, DiscoveryRun,
                      UserJob, Application, ApplicationEvent, Report, RunError, RefreshToken, Notification, NotificationPref,
                      UserActivitySession, JobView, ExtensionToken, Interview, Offer, ApplicationContact, SavedSearch,
-                     UserAchievement)
+                     UserAchievement, UserCompany)

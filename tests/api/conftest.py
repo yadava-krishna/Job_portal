@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,10 +46,17 @@ def app_env(tmp_path, monkeypatch):
     from backend.config import get_settings
     from backend.security import rate_limiter
 
+    from backend.services.ats import base as ats_base
+    from backend.services.ats import board_cache
+
     get_settings.cache_clear()
     rate_limiter.reset()
+    board_cache.clear()
+    # No test may reach a real job board: unmocked requests fail loudly.
+    monkeypatch.setattr(ats_base, "transport_override", httpx.MockTransport(lambda r: httpx.Response(599, text="network disabled in tests")))
     yield tmp_path
     get_settings.cache_clear()
+    board_cache.clear()
 
 
 @pytest.fixture

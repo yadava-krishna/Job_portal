@@ -85,7 +85,7 @@ def test_0002_upgrade_downgrade_preserves_data(engine):
         _seed_v1(conn)
         before = _v1_snapshot(conn)
 
-    _alembic("upgrade", "head")
+    _alembic("upgrade", "0002")
     with engine.begin() as conn:
         assert _v1_snapshot(conn) == before
         assert conn.execute(text("SELECT role FROM users WHERE id = 1")).scalar() == "user"
@@ -101,9 +101,44 @@ def test_0002_upgrade_downgrade_preserves_data(engine):
     assert not V2_TABLES & set(insp.get_table_names())
     assert "role" not in {c["name"] for c in insp.get_columns("users")}
 
-    _alembic("upgrade", "head")
+    _alembic("upgrade", "0002")
     with engine.begin() as conn:
         assert _v1_snapshot(conn) == before
+
+
+V3_TABLES = {"companies", "user_companies", "job_source_links"}
+
+
+def test_0003_backfills_links_and_keys_and_downgrades_cleanly(engine):
+    from sqlalchemy import inspect, text
+
+    from backend.services.normalization import canonical_url, dedup_key
+
+    _alembic("upgrade", "0001")
+    with engine.begin() as conn:
+        _seed_v1(conn)
+        conn.execute(text("UPDATE jobs SET job_url = 'https://www.linkedin.com/jobs/view/42/?trk=abc', company = 'Acme Technologies Pvt Ltd', "
+                          "title = 'Sr. Accounts Receivable Analyst' WHERE id = 1"))
+        before = _v1_snapshot(conn)
+    _alembic("upgrade", "0002")
+    _alembic("upgrade", "0003")
+    with engine.begin() as conn:
+        assert _v1_snapshot(conn) == before
+        links = conn.execute(text("SELECT job_id, source, platform, source_key FROM job_source_links ORDER BY job_id")).all()
+        assert [(l[0], l[1], l[2], l[3]) for l in links] == [(i, "clip", "linkedin", f"clip:k{i}") for i in range(1, 6)]
+        row = conn.execute(text("SELECT dedup_key, canonical_url FROM jobs WHERE id = 1")).one()
+        # The migration's frozen rules agree with the application's normaliser.
+        assert row == (dedup_key("Acme Technologies Pvt Ltd", "Sr. Accounts Receivable Analyst"),
+                       canonical_url("https://www.linkedin.com/jobs/view/42/?trk=abc"))
+        assert row[0] == "acme|senior accounts receivable analyst" and row[1] == "linkedin.com/jobs/view/42"
+    assert V3_TABLES <= set(inspect(engine).get_table_names())
+
+    _alembic("downgrade", "0002")
+    with engine.begin() as conn:
+        assert _v1_snapshot(conn) == before
+    assert not V3_TABLES & set(inspect(engine).get_table_names())
+    assert "dedup_key" not in {c["name"] for c in inspect(engine).get_columns("jobs")}
+    _alembic("upgrade", "head")
 
 
 def test_migrated_schema_matches_models(engine):

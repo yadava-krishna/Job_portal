@@ -72,3 +72,21 @@ export const stageLabels: Record<string, string> = {
 export function lines(text: string): string[] {
   return text.split("\n").map((l) => l.trim()).filter(Boolean);
 }
+
+/** How a job's posting date is shown. An unknown date is never presented as recent. */
+export function postedDisplay(job: { posted_at: string | null; posted_label: string; posted_at_confidence?: string; platform: string }): {
+  text: string; badge: "Verified" | "Estimated" | "Unknown"; title: string;
+} {
+  const confidence = job.posted_at ? job.posted_at_confidence ?? "unknown" : "unknown";
+  if (confidence === "verified")
+    return { text: `Posted ${job.posted_label.replace(/^(Today|Yesterday)/, (m) => m.toLowerCase())}`, badge: "Verified",
+             title: "Posting date from the employer's or platform's own data" };
+  if (confidence === "estimated")
+    return { text: job.posted_label, badge: "Estimated", title: "Estimated from the date of a job-alert email; the job may be older" };
+  return { text: "Posting date unknown", badge: "Unknown", title: "The source did not publish a posting date" };
+}
+
+/** Distinct platforms a (deduplicated) job was seen on, first-seen first. */
+export function seenOn(job: { platform: string; sources?: { platform: string | null }[] }): string[] {
+  return Array.from(new Set([job.platform, ...(job.sources ?? []).map((s) => s.platform).filter((p): p is string => !!p)]));
+}

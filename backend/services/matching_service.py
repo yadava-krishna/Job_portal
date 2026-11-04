@@ -110,7 +110,8 @@ class UserMatcher:
         elig = evaluate_eligibility(posting, self.eligibility, self.search, self.candidate_years, timeutil.today())
         return match, elig
 
-    def apply(self, uj: UserJob) -> UserJob:
+    def apply(self, uj: UserJob, *, min_score: float | None = None) -> UserJob:
+        """Score and (re)classify. min_score overrides the preference threshold (a saved search's own threshold)."""
         match, elig = self.score(uj.job)
         uj.match_score = match.overall_score
         uj.match_category = match.category
@@ -122,7 +123,8 @@ class UserMatcher:
         uj.scoring_method = match.scoring_method
         uj.scored_at = utcnow()
         if uj.status in ("new", "shortlisted"):
-            shortlisted = (match.overall_score >= self.matching.min_match_score and elig.status != EligibilityStatus.INELIGIBLE
+            threshold = self.matching.min_match_score if min_score is None else min_score
+            shortlisted = (match.overall_score >= threshold and elig.status != EligibilityStatus.INELIGIBLE
                            and bool(uj.job.description) and len(uj.job.description.strip()) >= 80)
             uj.status = "shortlisted" if shortlisted else "new"
         return uj

@@ -1,0 +1,216 @@
+{
+ "verified_on": "2026-11-04",
+ "note": "Each board answered the official API with listed jobs located in India (or remote) on verified_on.",
+ "companies": [
+  {
+   "name": "Razorpay",
+   "ats": "greenhouse",
+   "token": "razorpaysoftwareprivatelimited",
+   "industry": "Fintech",
+   "domain": "razorpay.com"
+  },
+  {
+   "name": "Groww",
+   "ats": "greenhouse",
+   "token": "groww",
+   "industry": "Fintech",
+   "domain": "groww.in"
+  },
+  {
+   "name": "slice",
+   "ats": "greenhouse",
+   "token": "slice",
+   "industry": "Fintech",
+   "domain": "sliceit.com"
+  },
+  {
+   "name": "InMobi",
+   "ats": "greenhouse",
+   "token": "inmobi",
+   "industry": "AdTech",
+   "domain": "inmobi.com"
+  },
+  {
+   "name": "Observe.AI",
+   "ats": "greenhouse",
+   "token": "observeai",
+   "industry": "AI",
+   "domain": "observe.ai"
+  },
+  {
+   "name": "Druva",
+   "ats": "greenhouse",
+   "token": "druva",
+   "industry": "SaaS",
+   "domain": "druva.com"
+  },
+  {
+   "name": "Rubrik",
+   "ats": "greenhouse",
+   "token": "rubrik",
+   "industry": "Cybersecurity",
+   "domain": "rubrik.com"
+  },
+  {
+   "name": "Harness",
+   "ats": "greenhouse",
+   "token": "harnessinc",
+   "industry": "SaaS",
+   "domain": "harness.io"
+  },
+  {
+   "name": "Databricks",
+   "ats": "greenhouse",
+   "token": "databricks",
+   "industry": "Data & Analytics",
+   "domain": "databricks.com"
+  },
+  {
+   "name": "Stripe",
+   "ats": "greenhouse",
+   "token": "stripe",
+   "industry": "Fintech",
+   "domain": "stripe.com"
+  },
+  {
+   "name": "Okta",
+   "ats": "greenhouse",
+   "token": "okta",
+   "industry": "Cybersecurity",
+   "domain": "okta.com"
+  },
+  {
+   "name": "Twilio",
+   "ats": "greenhouse",
+   "token": "twilio",
+   "industry": "SaaS",
+   "domain": "twilio.com"
+  },
+  {
+   "name": "Coinbase",
+   "ats": "greenhouse",
+   "token": "coinbase",
+   "industry": "Fintech",
+   "domain": "coinbase.com"
+  },
+  {
+   "name": "GitLab",
+   "ats": "greenhouse",
+   "token": "gitlab",
+   "industry": "SaaS",
+   "domain": "gitlab.com"
+  },
+  {
+   "name": "MongoDB",
+   "ats": "greenhouse",
+   "token": "mongodb",
+   "industry": "Data & Analytics",
+   "domain": "mongodb.com"
+  },
+  {
+   "name": "Samsara",
+   "ats": "greenhouse",
+   "token": "samsara",
+   "industry": "IoT",
+   "domain": "samsara.com"
+  },
+  {
+   "name": "Glean",
+   "ats": "greenhouse",
+   "token": "gleanwork",
+   "industry": "AI",
+   "domain": "glean.com"
+  },
+  {
+   "name": "Airbnb",
+   "ats": "greenhouse",
+   "token": "airbnb",
+   "industry": "Travel",
+   "domain": "airbnb.com"
+  },
+  {
+   "name": "CRED",
+   "ats": "lever",
+   "token": "cred",
+   "industry": "Fintech",
+   "domain": "cred.club"
+  },
+  {
+   "name": "Meesho",
+   "ats": "lever",
+   "token": "meesho",
+   "industry": "E-commerce",
+   "domain": "meesho.com"
+  },
+  {
+   "name": "Paytm",
+   "ats": "lever",
+   "token": "paytm",
+   "industry": "Fintech",
+   "domain": "paytm.com"
+  },
+  {
+   "name": "Mindtickle",
+   "ats": "lever",
+   "token": "mindtickle",
+   "industry": "SaaS",
+   "domain": "mindtickle.com"
+  },
+  {
+   "name": "Zeta",
+   "ats": "lever",
+   "token": "zeta",
+   "industry": "Fintech",
+   "domain": "zeta.tech"
+  },
+  {
+   "name": "FamPay",
+   "ats": "lever",
+   "token": "fampay",
+   "industry": "Fintech",
+   "domain": "famapp.in"
+  },
+  {
+   "name": "Hevo Data",
+   "ats": "lever",
+   "token": "hevodata",
+   "industry": "Data & Analytics",
+   "domain": "hevodata.com"
+  },
+  {
+   "name": "Pocket FM",
+   "ats": "lever",
+   "token": "pocketfm",
+   "industry": "Media",
+   "domain": "pocketfm.com"
+  },
+  {
+   "name": "Sarvam AI",
+   "ats": "ashby",
+   "token": "sarvam",
+   "industry": "AI",
+   "domain": "sarvam.ai"
+  },
+  {
+   "name": "Atlan",
+   "ats": "ashby",
+   "token": "atlan",
+   "industry": "Data & Analytics",
+   "domain": "atlan.com"
+  },
+  {
+   "name": "Composio",
+   "ats": "ashby",
+   "token": "composio",
+   "industry": "AI",
+   "domain": "composio.dev"
+  },
+  {
+   "name": "Headout",
+   "ats": "ashby",
+   "token": "headout",
+   "industry": "Travel",
+   "domain": "headout.com"
+  }
+ ]
+}
