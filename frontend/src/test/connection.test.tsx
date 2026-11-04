@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConnectionProvider, FAILURES_BEFORE_OFFLINE, OFFLINE_POLL_MS, ONLINE_POLL_MS, probeHealth, useConnection } from "@/contexts/ConnectionContext";
+import { CONFIRM_FAILURE_MS, ConnectionProvider, FAILURES_BEFORE_OFFLINE, OFFLINE_POLL_MS, ONLINE_POLL_MS, probeHealth, useConnection } from "@/contexts/ConnectionContext";
 
 const BASE = "https://backend.example.test";
 const healthy = { status: "ok", service: "jobpilot-backend", version: "1.0.0", timestamp: "", database: { connected: true, error: null }, scheduler: { enabled: true, running: true, next_run: null, last_run: null } };
@@ -56,9 +56,11 @@ describe("backend availability", () => {
 
     backendUp = false;
     await flush(ONLINE_POLL_MS);
-    // one missed beat is tolerated
+    // one missed beat is tolerated...
     expect(FAILURES_BEFORE_OFFLINE).toBeGreaterThan(1);
-    await flush(ONLINE_POLL_MS + OFFLINE_POLL_MS);
+    expect(screen.getByTestId("state").textContent).toBe("online");
+    // ...and confirmed quickly: offline within one interval plus the confirmation delay
+    await flush(CONFIRM_FAILURE_MS);
     expect(screen.getByTestId("state").textContent).toBe("offline");
 
     backendUp = true;

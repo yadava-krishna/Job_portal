@@ -26,7 +26,8 @@ interface ConnectionValue {
 
 const ConnectionContext = createContext<ConnectionValue | null>(null);
 
-export const ONLINE_POLL_MS = 10_000;
+export const ONLINE_POLL_MS = 7_000;
+export const CONFIRM_FAILURE_MS = 2_000;
 export const OFFLINE_POLL_MS = 5_000;
 export const HEALTH_TIMEOUT_MS = 4_000;
 export const FAILURES_BEFORE_OFFLINE = 2;
@@ -134,7 +135,8 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   const schedule = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
-    const delay = stateRef.current === "online" ? ONLINE_POLL_MS : OFFLINE_POLL_MS;
+    // While online, a single failed check is confirmed quickly instead of waiting a full interval.
+    const delay = stateRef.current === "online" ? (failuresRef.current > 0 ? CONFIRM_FAILURE_MS : ONLINE_POLL_MS) : OFFLINE_POLL_MS;
     timer.current = setTimeout(async () => {
       await check();
       schedule();
