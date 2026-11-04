@@ -1,0 +1,1 @@
+import{Et as e,kn as t}from"./queries-DpYmfNn4.js";var n=t();function r({className:t,...r}){return(0,n.jsx)(`div`,{"data-slot":`skeleton`,className:e(`animate-pulse rounded-md bg-muted`,t),...r})}export{r as t};
