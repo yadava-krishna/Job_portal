@@ -99,3 +99,25 @@ matching_service.UserMatcher (rule-based, labelled; LLM when configured) → not
   - Searches & sources: saved searches, companies (watchlist, suggested, directory, add by URL) and Source health.
   - A notification bell.
 - **Not automated, by design:** LinkedIn, Indeed and Naukri. They are reached only through the clipper, links, paste, file import and alert emails.
+
+
+## 6. Phase 3 additions (as built 2026-11-05)
+
+- **Extension** (`extension/`): MV3 with no build step.
+  - The service worker holds the device credential in IndexedDB and is the only part that calls the API.
+  - Content scripts (fieldmap, core, panel, Greenhouse/Lever/Ashby adapters) are injected only after a click, only
+    into allow-listed frames.
+  - Tests: vitest (jsdom), and Playwright end-to-end runs (offline, `--live`, and `prod_check.py`).
+- **Backend:**
+  - `api/routes/extension.py` plus `services/extension_service.py`: pairing, devices, rotation, revocation, audit,
+    autofill profile, page matching via `job_source_links.source_key`, and the verified Greenhouse-hosted form.
+  - `services/answer_service.py`: Verified, Suggested or Needs-input classification over `ScreeningAnswerer`, which
+    now also uses the answer bank in `verified_facts.custom_answers`.
+  - `services/ats/smartrecruiters.py` and `ats/recruitee.py`, plus `services/careers_page.py` (request-forgery-safe
+    board detection).
+  - Resume versions in `resume_service`; tracking notes and follow-up; Assessment and Archived stages; notification
+    preferences in `notification_prefs.kinds`; scheduler catch-up for a missed daily run.
+- **Database:** no new migration (head still `0003`). Uses the existing `extension_tokens`, `audit_logs` and
+  `notification_prefs` tables, and JSON columns.
+- **Deployment:** `restart: unless-stopped`, health checks on all four services, and `deploy/url_watch.sh`
+  (republishes the tunnel URL; cron entry to be added by the owner). See DEPLOYMENT.md.

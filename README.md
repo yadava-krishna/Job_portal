@@ -86,7 +86,9 @@ PostgreSQL never has a host port. The backend binds to `127.0.0.1` only and is r
 
 ## API
 
-OpenAPI docs: `http://127.0.0.1:8000/api/v1/docs` (or `<tunnel>/api/v1/docs`). Main groups: `auth`, `health`, `profile` / `preferences` / `platforms` / `integrations`, `jobs` (discover, import, list with filters, detail, analysis, save, dismiss, description), `applications` (prepare, open, confirm, pending, fail, withdraw, stage), `reports`, `dashboard`.
+OpenAPI docs: `http://127.0.0.1:8000/api/v1/docs` (or `<tunnel>/api/v1/docs`). Main groups: `auth`, `health`, `profile` / `preferences` / `platforms` / `integrations`, `jobs` (discover, import, list with filters, detail, analysis, save, dismiss, description), `applications` (prepare, open, confirm, pending, fail, withdraw, stage, tracking, apply-options), `reports`, `dashboard`, `companies` / `saved-searches` / `notifications` (incl. preferences) / `discovery/sources`, and `extension` (pairing-codes, devices, pair, rotate, disconnect, status, match, autofill-profile, answers, resume, applications/start, applications/{id}/confirm). Profile also has `profile/resumes` (versions, default, rename, file, delete).
+
+**Fill with JobPilot** browser extension: see [extension/README.md](extension/README.md). Discovery sources and their limits: [SOURCE_CAPABILITY_MATRIX.md](SOURCE_CAPABILITY_MATRIX.md). Deploy, recovery and rollback: [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Security summary
 

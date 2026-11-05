@@ -20,6 +20,7 @@ No secrets are reproduced in this document.
 | S10 | Low | In-flight discovery runs lost on restart; stuck `running` rows | **Mitigated (Phase 2)**: runs left running >30 min are marked failed "interrupted by restart" at startup; a durable queue is still Phase 8 |
 | S13 | Medium | Phase 2 adds outbound HTTP to job-board APIs from the server, partly driven by user input (board URLs/tokens) | **Controlled**: see details |
 | S11 | Low | No automated database backup | Phase 8 (`pg_dump` timer + restore doc) |
+| S14 | Medium | Phase 3: browser-extension credentials and a server fetch of user-supplied careers-page URLs | **Controlled**: see details |
 | S12 | Info | PDF parsing runs in the API process (PyMuPDF on untrusted files) | Size/page limits exist; consider a subprocess with timeout (Phase 8) |
 
 ## Details and remediation
@@ -59,7 +60,22 @@ No secrets are reproduced in this document.
 
 **S6/S7: Token storage and XSS.** Keep bearer tokens (cross-site cookies between github.io and ngrok are unreliable), but: strict CSP (`default-src 'self'; connect-src 'self' https://*.ngrok-free.app https://*.ngrok.app; img-src 'self' data: https:; script-src 'self'`), never render job-description HTML (we render text only; keep it that way), short access-token TTL (15 min, already), refresh rotation with reuse detection (already).
 
-**Browser extension (Phase 3) security design.** Scoped, revocable **extension tokens** (scope `jobs:capture`, `profile:read-autofill`), shown once, hashed at rest, per-device name and expiry; minimal host permissions requested per site; content scripts never read cookies, storage or other tabs; autofill only on explicit click and never submits; no password or OTP fields are ever touched.
+**S14: Browser extension and careers-page fetch (Phase 3, implemented 2026-11-05).**
+
+*Extension credentials:*
+- **Pairing code:** 8 characters, single use, 5 minutes, hashed, ≤ 3 live, rate-limited. It is exchanged for a `jpx_` device credential (256-bit, hashed at rest) with scopes `autofill:read` and `applications:track`.
+- **Lifetime:** 90 days, rotated monthly with a 2-minute grace period, revocable from Settings or the extension. Every request is checked; revoked credentials are refused immediately.
+- **Separation:** device credentials are accepted only on `/extension/*`, and user JWTs are not accepted there.
+- **What the extension can read:** the minimal autofill profile, classified answers, and the resume (on click, no-store, rate-limited, audited).
+- **Storage:** the credential lives in the extension's IndexedDB, out of content scripts' reach.
+- **Permissions:** activeTab, scripting, storage and the three ATS hosts only.
+- **Behaviour on employer pages:** never submits (`safeClick` allows only choice inputs, listbox options and `type=button` buttons); never fills sensitive, consent, password, OTP or CAPTCHA fields.
+
+*Careers-page fetch:*
+- **Request-forgery protection:** https on port 443 only; no IP literals or credentials; every resolved address must be global; the connection is pinned to the vetted IP with TLS verified against the hostname; each redirect is re-checked (≤ 3).
+- **Limits:** 2 MB and 10 s per page, 20 checks per hour per user. Only that one page is read. Bot-protected pages are reported, never evaded.
+
+Details: extension/SECURITY.md, SOURCE_CAPABILITY_MATRIX.md, tests in tests/api/test_extension.py and test_discovery_expansion.py.
 
 **S13: Outbound job-board requests (Phase 2).**
 - User input never becomes a URL. A board link is parsed to one of three fixed API hosts (Greenhouse, Lever with an EU variant, Ashby), and the token must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$` (no `/`, `..` or spaces). Anything else is rejected before any request is made, so there is no SSRF to internal addresses.

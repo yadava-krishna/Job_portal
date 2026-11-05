@@ -126,6 +126,16 @@ Known limits:
 **Out of scope here (later phases):** company logos (needs a privacy-safe favicon proxy), LLM-assisted extraction and AI summaries (Phase 3/6 with the local Docker model), Jooble/Careerjet, and admin source configuration (Phase 5).
 
 ## Phase 3: Browser extension and application assistance
+**Status (2026-11-05): delivered for Greenhouse, Lever and Ashby forms**, plus unified tracking, SmartRecruiters and Recruitee discovery, careers-page detection, resume versions, answer bank, notification preferences and restart recovery. See PHASE3_TEST_REPORT.md.
+
+**Not delivered (by design or pending you):**
+- **LinkedIn, Indeed and Naukri extractors and side panel:** not built. The bookmarklet and alert e-mails remain the path for these sites.
+- **Workday:** no documented API.
+- **Direct application through APIs:** needs employer keys.
+- **E-mail notifications:** need SMTP.
+- **AI scoring:** an optional layer, designed, not built.
+
+Original plan, for reference:
 - **JobPilot MV3 extension** (`extension/`): per-site extractors (LinkedIn, Indeed, Naukri, Foundit, Glassdoor, Wellfound, Greenhouse, Lever, Ashby) with JSON-LD first; Shadow-DOM floating button; SPA observer; shows "already in JobPilot · 82%" on the page.
 - **Auth:** Settings → "Connect browser" creates a scoped extension token (pairing code), revocable per device.
 - **Assisted apply:**
@@ -173,7 +183,8 @@ Known limits:
 | Approve rotating the DB password and invite code (S1) | exposed in chat | Phase 1 |
 | `ANTHROPIC_API_KEY` (or local Ollama in Docker per your rule) | AI scoring and summaries; otherwise rule-based (clearly labelled) | Phase 2 |
 | Adzuna app ID/key | automated discovery with verified dates | Phase 2 |
-| ngrok static domain | stable backend URL | any time |
+| ngrok static domain (free: dashboard → Domains) | stable backend URL; until then add the cron entry in DEPLOYMENT.md §3 | **now** |
+| Decision: Workable widget, Remotive/Himalayas attribution terms, Jooble/Careerjet keys | more discovery sources (SOURCE_CAPABILITY_MATRIX.md) | any time |
 | SMTP credentials (optional) | email notifications and password reset | Phase 7 |
 | Chrome Web Store developer account (optional) | publish the extension instead of unpacked install | Phase 3+ |
 
