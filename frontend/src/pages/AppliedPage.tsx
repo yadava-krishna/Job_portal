@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -9,10 +11,11 @@ import { EmptyState, NativeSelect, PageHeader, PlatformBadge, ScoreBadge, StageB
 import { ApplyDialog } from "@/components/app/ApplyDialog";
 import { errorMessage } from "@/lib/api";
 import { formatDate, stageLabels, statusLabels } from "@/lib/format";
-import { useApplication, useApplicationAction, useApplications } from "@/services/queries";
+import { useApplication, useApplicationAction, useApplications, useUpdateTracking } from "@/services/queries";
 import type { Application, Stage, UserJob } from "@/types/api";
 
-const STAGES: Stage[] = ["applied", "screening", "interview", "offer", "rejected"];
+const STAGES: Stage[] = ["applied", "screening", "assessment", "interview", "offer", "rejected"];
+const MOVE_TO: Stage[] = [...STAGES, "archived"];
 const STATUS_FILTERS = ["all", "PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"];
 
 function asUserJob(a: Application): UserJob {
@@ -85,7 +88,7 @@ export function AppliedPage() {
 
         <TabsContent value="board" className="pt-4">
           {!submitted.length ? <EmptyState title="No submitted applications yet">After you confirm a submission it appears here. Move it along as you hear back.</EmptyState> : (
-            <div className="grid gap-4 overflow-x-auto md:grid-cols-5">
+            <div className="grid gap-4 overflow-x-auto md:grid-cols-3 xl:grid-cols-6">
               {STAGES.map((stage) => {
                 const col = submitted.filter((a) => (a.stage ?? "applied") === stage);
                 return (
@@ -97,7 +100,7 @@ export function AppliedPage() {
                           <button className="text-left text-sm font-medium hover:underline" onClick={() => setDetailId(a.id)}>{a.job.title}</button>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">{a.job.company} <PlatformBadge platform={a.job.platform} /></div>
                           <NativeSelect ariaLabel="Move to stage" value={a.stage ?? "applied"} onChange={(v) => moveStage(a, v as Stage)} className="h-7 w-full text-xs"
-                                        options={STAGES.map((s) => ({ value: s, label: stageLabels[s] }))} />
+                                        options={MOVE_TO.map((s) => ({ value: s, label: stageLabels[s] }))} />
                         </Card>
                       ))}
                     </div>
@@ -146,10 +149,11 @@ function ApplicationDetailDialog({ id, onClose }: { id: number | null; onClose: 
               <dt className="text-muted-foreground">Prepared</dt><dd>{formatDate(data.created_at, true)}</dd>
               <dt className="text-muted-foreground">Submitted</dt><dd>{data.submitted_at ? formatDate(data.submitted_at, true) : "—"}</dd>
               <dt className="text-muted-foreground">Reference</dt><dd>{data.reference_id ?? "—"}</dd>
-              <dt className="text-muted-foreground">Confirmed by</dt><dd>{data.confirmation_source ?? "—"}</dd>
+              <dt className="text-muted-foreground">How you applied</dt><dd>{data.submission_method ?? "—"}</dd>
               <dt className="text-muted-foreground">Resume used</dt><dd>{data.resume_used ?? "—"}</dd>
               {data.job.job_url && <><dt className="text-muted-foreground">Original listing</dt><dd><a className="underline" href={data.job.job_url} target="_blank" rel="noopener noreferrer">Open</a></dd></>}
             </dl>
+            <TrackingForm id={data.id} notes={data.notes} followUp={data.follow_up_at ?? null} />
             <div>
               <h4 className="mb-2 text-sm font-medium">History</h4>
               <ol className="space-y-1.5 border-l pl-4 text-sm">
@@ -168,5 +172,27 @@ function ApplicationDetailDialog({ id, onClose }: { id: number | null; onClose: 
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TrackingForm({ id, notes, followUp }: { id: number; notes: string | null; followUp: string | null }) {
+  const save = useUpdateTracking();
+  const [n, setN] = useState(notes ?? "");
+  const [f, setF] = useState(followUp ? followUp.slice(0, 10) : "");
+  useEffect(() => { setN(notes ?? ""); setF(followUp ? followUp.slice(0, 10) : ""); }, [id, notes, followUp]);
+  return (
+    <div className="space-y-2 rounded-lg border p-3">
+      <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+        <label className="text-sm"><span className="mb-1 block text-muted-foreground">Notes</span>
+          <Textarea rows={2} value={n} onChange={(e) => setN(e.target.value)} placeholder="Contacts, interview prep, anything to remember" /></label>
+        <label className="text-sm"><span className="mb-1 block text-muted-foreground">Follow up on</span>
+          <Input type="date" value={f} onChange={(e) => setF(e.target.value)} /></label>
+      </div>
+      <div className="flex justify-end">
+        <Button size="sm" variant="outline" disabled={save.isPending}
+                onClick={() => save.mutate({ id, notes: n || null, follow_up_at: f ? `${f}T09:00:00` : null },
+                  { onSuccess: () => toast.success("Saved"), onError: (e) => toast.error(errorMessage(e)) })}>Save notes</Button>
+      </div>
+    </div>
   );
 }

@@ -1,0 +1,31 @@
+:root { color-scheme: light dark; --bg: #fff; --fg: #111827; --muted: #6b7280; --line: #e5e7eb; --brand: #4f46e5; --brand-fg: #fff;
+        --warn-bg: #fffbeb; --warn-fg: #92400e; --ok-bg: #ecfdf5; --ok-fg: #065f46; --bad-bg: #fef2f2; --bad-fg: #991b1b; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #111827; --fg: #f9fafb; --muted: #9ca3af; --line: #374151; --warn-bg: #451a03; --warn-fg: #fde68a; --ok-bg: #022c22;
+          --ok-fg: #a7f3d0; --bad-bg: #450a0a; --bad-fg: #fecaca; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; width: 360px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--fg); }
+header, footer { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+footer { border-top: 1px solid var(--line); border-bottom: 0; justify-content: space-between; }
+header #who { margin-left: auto; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+main { padding: 12px 14px; display: grid; gap: 10px; max-height: 480px; overflow: auto; }
+.muted { color: var(--muted); }
+h2 { font-size: 14px; margin: 0; }
+p { margin: 0; }
+button { font: inherit; cursor: pointer; border-radius: 8px; padding: 7px 10px; border: 1px solid var(--line); background: transparent; color: var(--fg); }
+button.primary { background: var(--brand); border-color: var(--brand); color: var(--brand-fg); font-weight: 600; }
+button:disabled { opacity: .55; cursor: default; }
+button.link { border: 0; padding: 0; color: var(--brand); text-decoration: underline; background: none; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > button { flex: 1; }
+input[type=text] { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); }
+input.code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .2em; text-align: center; text-transform: uppercase; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+.note { border-radius: 8px; padding: 8px 10px; }
+.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.bad { background: var(--bad-bg); color: var(--bad-fg); }
+ul { margin: 0; padding-left: 18px; }
+label.check { display: flex; gap: 6px; align-items: flex-start; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); }

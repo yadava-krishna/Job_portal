@@ -16,7 +16,7 @@ from backend.models import CandidateProfile, Company, DiscoveryRun, SavedSearch,
 from backend.schemas.discovery import SavedSearchIn, SavedSearchOut, SearchCriteria
 from backend.services import discovery_service, preference_service, resume_service, source_registry
 from backend.services.adzuna import AdzunaClient, AdzunaError
-from backend.services.ats import AtsError
+from backend.services.ats import AtsError, smartrecruiters
 from backend.services.company_service import curated, get_or_create, refresh_board
 from backend.services.normalization import (
     ATS_SOURCES,
@@ -241,6 +241,7 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
             if not crit.title_ok(nj.title) or not crit.location_ok(nj):
                 continue
             nj = _copy(nj, company)
+            smartrecruiters.complete(nj, company.board_token)  # full job ad, fetched only for postings this search kept
             enrich(nj, analyzer)
             if crit.details_ok(nj, today):
                 items.append(nj)
@@ -408,7 +409,7 @@ def ensure_starter(db: Session, settings: BackendSettings, user: User) -> SavedS
         return None  # nothing to search for yet; retried after onboarding
     prof = db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id)).scalar_one_or_none()
     years = round(prof.experience_months / 12, 1) if prof and prof.experience_months else None
-    sources = ["greenhouse", "lever", "ashby"] + (["adzuna_api"] if settings.adzuna_enabled else [])
+    sources = ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"] + (["adzuna_api"] if settings.adzuna_enabled else [])
     criteria = SearchCriteria(include_suggested=True, use_watchlist=True, related_titles=True, remote_ok=True,
                               experience_years=years, sources=sources)
     row = SavedSearch(user_id=user.id, name=STARTER_NAME, origin="starter", criteria=criteria.model_dump(mode="json"),

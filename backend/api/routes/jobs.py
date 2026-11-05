@@ -5,12 +5,12 @@ from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 
 from backend.api import serializers
 from backend.api.deps import CurrentUser, DbSession, SettingsDep
 from backend.db import session_factory
-from backend.models import DiscoveryRun, Job, JobSourceLink, User, UserJob, utcnow
+from backend.models import Application, DiscoveryRun, Job, JobSourceLink, User, UserJob, utcnow
 from backend.schemas.jobs import DiscoverRequest, DiscoveryRunOut, ImportJobRequest, ImportResult, JobAnalysis, JobDetail, JobList, SearchLinkOut
 from backend.services import discovery_service, resume_service
 from backend.services.matching_service import UserMatcher
@@ -117,6 +117,8 @@ def list_jobs(
     experience: float | None = Query(None, ge=0, le=60, description="Show jobs whose experience range includes this many years"),
     salary_min_lpa: float | None = Query(None, ge=0),
     min_score: float | None = Query(None, ge=0, le=100),
+    skill: str | None = Query(None, max_length=100, description="Jobs that ask for this skill (in requirements or description)"),
+    application_status: list[Literal["none", "PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"]] | None = Query(None),
     sort: Literal["score", "posted", "discovered"] = "score",
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
 ) -> JobList:
@@ -167,6 +169,16 @@ def list_jobs(
         stmt = stmt.where(or_(Job.salary_max_lpa >= salary_min_lpa, Job.salary_min_lpa >= salary_min_lpa))
     if min_score is not None:
         stmt = stmt.where(UserJob.match_score >= min_score)
+    if skill:
+        like = f"%{skill.lower()}%"
+        stmt = stmt.where(or_(func.lower(cast(Job.required_skills, String)).like(like), func.lower(cast(Job.preferred_skills, String)).like(like),
+                              func.lower(Job.description).like(like)))
+    if application_status:
+        app_status = select(Application.status).where(Application.user_id == user.id, Application.job_id == Job.id).scalar_subquery()
+        conds = [app_status.in_([s for s in application_status if s != "none"])] if any(s != "none" for s in application_status) else []
+        if "none" in application_status:
+            conds.append(~select(Application.id).where(Application.user_id == user.id, Application.job_id == Job.id).exists())
+        stmt = stmt.where(or_(*conds))
     if confidence:
         conds = []
         if "verified" in confidence:

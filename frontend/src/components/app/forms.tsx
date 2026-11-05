@@ -75,6 +75,17 @@ export function ProfileForm({ profile, onSaved, submitLabel = "Save profile" }: 
         <Field label="Professional summary" htmlFor="pf-sum" className="sm:col-span-2"><Textarea id="pf-sum" rows={4} value={p.summary ?? ""} onChange={(e) => set("summary", e.target.value)} /></Field>
       </div>
 
+      <div>
+        <h3 className="mb-1 text-sm font-semibold">Links (optional)</h3>
+        <p className="mb-3 text-xs text-muted-foreground">Application forms often ask for these. They are filled only when you click Fill with JobPilot.</p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="LinkedIn URL" htmlFor="pf-li"><Input id="pf-li" inputMode="url" value={p.linkedin_url ?? ""} placeholder="https://www.linkedin.com/in/…" onChange={(e) => set("linkedin_url", e.target.value || null)} /></Field>
+          <Field label="GitHub URL" htmlFor="pf-gh"><Input id="pf-gh" inputMode="url" value={p.github_url ?? ""} placeholder="https://github.com/…" onChange={(e) => set("github_url", e.target.value || null)} /></Field>
+          <Field label="Portfolio URL" htmlFor="pf-pf"><Input id="pf-pf" inputMode="url" value={p.portfolio_url ?? ""} onChange={(e) => set("portfolio_url", e.target.value || null)} /></Field>
+          <Field label="Personal website" htmlFor="pf-web"><Input id="pf-web" inputMode="url" value={p.website_url ?? ""} onChange={(e) => set("website_url", e.target.value || null)} /></Field>
+        </div>
+      </div>
+
       <Field label="Skills" hint="Only skills you actually have. These drive the match score.">
         <TagInput value={p.skills} onChange={(v) => set("skills", v)} placeholder="Add a skill and press Enter" />
       </Field>

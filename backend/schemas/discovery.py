@@ -9,8 +9,9 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.schemas.jobs import DiscoveryRunOut
 
-AtsName = Literal["greenhouse", "lever", "ashby"]
-SearchSource = Literal["greenhouse", "lever", "ashby", "adzuna_api"]
+LEGACY_ALL_BOARDS = {"greenhouse", "lever", "ashby"}
+AtsName = Literal["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"]
+SearchSource = Literal["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "adzuna_api"]
 WorkModeName = Literal["Remote", "Hybrid", "On-site"]
 EmploymentTypeName = Literal["Full-time", "Part-time", "Contract", "Internship", "Temporary"]
 
@@ -84,7 +85,7 @@ class SearchCriteria(BaseModel):
     use_watchlist: bool = True
     include_suggested: bool = Field(default=False, description="Also search JobPilot's curated, verified employer boards")
     related_titles: bool = Field(default=True, description="Also match related titles (e.g. Collections Analyst for AR roles)")
-    sources: list[SearchSource] = Field(default_factory=lambda: ["greenhouse", "lever", "ashby"])
+    sources: list[SearchSource] = Field(default_factory=lambda: ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"])
     max_age_days: int | None = Field(default=None, ge=1, le=365, description="Skip postings older than this (unknown dates are kept)")
 
     @field_validator("keywords", "exclude_keywords", "locations", "industries")
@@ -97,7 +98,12 @@ class SearchCriteria(BaseModel):
     def _sources(cls, v: list[str]) -> list[str]:
         if not v:
             raise ValueError("Choose at least one source.")
-        return list(dict.fromkeys(v))
+        out = list(dict.fromkeys(v))
+        # Searches saved before SmartRecruiters and Recruitee were added stored the then-default "all job boards"
+        # (exactly these three). They keep meaning "all job boards".
+        if set(out) - {"adzuna_api"} == LEGACY_ALL_BOARDS:
+            out = [s for s in out if s != "adzuna_api"] + ["smartrecruiters", "recruitee"] + [s for s in out if s == "adzuna_api"]
+        return out
 
 
 class SavedSearchIn(BaseModel):
@@ -127,6 +133,14 @@ class NotificationOut(BaseModel):
     occurrences: int
     read_at: datetime | None
     created_at: datetime
+
+
+class NotificationPrefs(BaseModel):
+    new_matches: bool = True
+    delivery: Literal["immediate", "daily_digest"] = "immediate"
+    min_score: float | None = Field(default=None, ge=0, le=100, description="Only notify at or above this score (default: each search's own threshold)")
+    sources: list[str] = Field(default_factory=list, max_length=20, description="Only these sources (empty = all)")
+    email: Literal["off"] = Field(default="off", description="E-mail delivery needs an SMTP server; not configured yet")
 
 
 class NotificationList(BaseModel):

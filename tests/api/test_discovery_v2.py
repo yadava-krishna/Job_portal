@@ -348,7 +348,7 @@ def test_saved_search_crud_and_validation(client, boards, resume_bytes):
     assert client.post(f"{API}/saved-searches", headers=h, json={"name": "x", "criteria": {"sources": []}}).status_code == 422
     assert client.post(f"{API}/saved-searches", headers=h, json={"name": "x", "schedule": "hourly"}).status_code == 422
     created = client.post(f"{API}/saved-searches", headers=h, json=SEARCH).json()
-    assert created["next_run_at"] and created["last_run"] is None and created["criteria"]["sources"] == ["greenhouse", "lever", "ashby"]
+    assert created["next_run_at"] and created["last_run"] is None and created["criteria"]["sources"] == ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"]
     upd = client.put(f"{API}/saved-searches/{created['id']}", headers=h, json={**SEARCH, "schedule": "manual", "name": "Renamed"}).json()
     assert upd["name"] == "Renamed" and upd["next_run_at"] is None
     assert [s["name"] for s in client.get(f"{API}/saved-searches", headers=h).json()] == ["Renamed"]
@@ -527,7 +527,7 @@ def test_starter_search_is_created_once_from_preferences(client, boards, resume_
     assert (s["name"], s["origin"], s["schedule"], s["enabled"]) == ("Jobs matching my profile", "starter", "daily", True)
     c = s["criteria"]
     assert c["include_suggested"] and c["related_titles"] and c["keywords"] == [] and c["locations"] == []
-    assert c["sources"] == ["greenhouse", "lever", "ashby"]  # Adzuna only once credentials exist
+    assert c["sources"] == ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"]  # Adzuna only once credentials exist
     assert c["experience_years"] and s["next_run_at"]
     client.delete(f"{API}/saved-searches/{s['id']}", headers=h)
     assert client.get(f"{API}/saved-searches", headers=h).json() == []  # deleting it is respected
@@ -623,7 +623,7 @@ def test_source_health_before_and_after_a_run(client, boards, resume_bytes, monk
     h = onboard(client, "health@example.com", resume_bytes)
     client.get(f"{API}/onboarding", headers=h)
     before = {s["key"]: s for s in client.get(f"{API}/discovery/sources", headers=h).json()["sources"]}
-    assert set(before) == {"greenhouse", "lever", "ashby", "adzuna_api", "alert_email", "manual"}
+    assert set(before) == {"greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "adzuna_api", "alert_email", "manual"}
     assert before["greenhouse"]["configured"] and before["greenhouse"]["boards"] == {"total": 1, "ok": 0, "failing": 0, "unchecked": 1}
     assert before["ashby"]["configured"] is False and "No Ashby companies" in before["ashby"]["missing"]
     assert before["adzuna_api"]["connection"] == "not_configured" and "ADZUNA_APP_ID" in before["adzuna_api"]["missing"]

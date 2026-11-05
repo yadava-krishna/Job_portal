@@ -179,7 +179,7 @@ def _stat(run: DiscoveryRun, platform: str, key: str, n: int = 1) -> None:
 
 
 SOURCE_LABELS = {
-    "greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby", "adzuna_api": "Adzuna", "alert_email": "Job-alert emails",
+    "greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby", "smartrecruiters": "SmartRecruiters", "recruitee": "Recruitee", "adzuna_api": "Adzuna", "alert_email": "Job-alert emails",
     "company_boards": "Company job boards", "search": "Search settings",
 }
 RAN = ("ok", "empty", "partial")          # the source was reached and answered
@@ -304,7 +304,7 @@ def ingest_normalized(db: Session, user: User, run: DiscoveryRun, items: Iterabl
                 _error(db, user, run, "SCORING_FAILED", f"{type(exc).__name__}: {exc}", platform=platform, job_key=nj.key)
         if created and notify_min_score is not None and uj.match_score is not None and uj.match_score >= notify_min_score \
                 and job.closed_at is None:
-            notification_service.notify_new_match(db, user, uj)
+            notification_service.notify_new_match(db, user, uj, nj.source)
         out.append(uj)
     db.commit()
     return out

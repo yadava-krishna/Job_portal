@@ -18,6 +18,21 @@ def _clean_list(values: list[str], max_items: int = 50, max_len: int = 120) -> l
     return out[:max_items]
 
 
+def _clean_url(v: str | None) -> str | None:
+    """Profile links: optional, http(s) only, no credentials or scripts. Bare domains get https://."""
+    v = (v or "").strip()
+    if not v:
+        return None
+    if "://" not in v:
+        v = "https://" + v
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(v)
+    if parts.scheme not in ("http", "https") or not parts.hostname or "." not in parts.hostname or parts.username or parts.password:
+        raise ValueError("Enter a web address such as https://www.linkedin.com/in/your-name")
+    return v
+
+
 class ResumeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -66,6 +81,16 @@ class EditableProfile(BaseModel):
     projects: list[ProjectItem] = Field(default_factory=list)
     achievements: list[str] = Field(default_factory=list)
     languages: list[str] = Field(default_factory=list)
+    # Optional public links. Used only to fill the matching fields of application forms, and only when you click Fill.
+    linkedin_url: str | None = Field(default=None, max_length=300)
+    github_url: str | None = Field(default=None, max_length=300)
+    portfolio_url: str | None = Field(default=None, max_length=300)
+    website_url: str | None = Field(default=None, max_length=300)
+
+    @field_validator("linkedin_url", "github_url", "portfolio_url", "website_url")
+    @classmethod
+    def _url(cls, v: str | None) -> str | None:
+        return _clean_url(v)
 
     @field_validator("skills", "certifications", "languages")
     @classmethod
@@ -76,6 +101,10 @@ class EditableProfile(BaseModel):
     @classmethod
     def _clean_ach(cls, v: list[str]) -> list[str]:
         return _clean_list(v, 50, 1000)
+
+
+class ResumeRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
 
 
 class ExperienceSummary(BaseModel):
@@ -98,6 +127,13 @@ class ProfileOut(BaseModel):
     verified_facts: dict[str, Any] = Field(default_factory=dict)
 
 
+class CustomAnswer(BaseModel):
+    """An answer the user wrote and approved for a question applications keep asking."""
+
+    question: str = Field(min_length=3, max_length=300)
+    answer: str = Field(min_length=1, max_length=2000)
+
+
 class VerifiedFacts(BaseModel):
     """Facts only the candidate can confirm. Null means 'ask me' (NEEDS_CANDIDATE_INPUT)."""
 
@@ -108,6 +144,9 @@ class VerifiedFacts(BaseModel):
     work_authorization: str | None = Field(default=None, max_length=200)
     earliest_start_date: str | None = Field(default=None, max_length=100)
     shift_flexibility: str | None = Field(default=None, max_length=200)
+    requires_sponsorship: bool | None = None
+    relevant_experience: str | None = Field(default=None, max_length=200)
+    custom_answers: list[CustomAnswer] = Field(default_factory=list, max_length=50)
 
 
 class Weights(BaseModel):

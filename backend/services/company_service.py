@@ -25,6 +25,8 @@ BOARD_URLS = {
     "greenhouse": "https://job-boards.greenhouse.io/{token}",
     "lever": "https://jobs.lever.co/{token}",
     "ashby": "https://jobs.ashbyhq.com/{token}",
+    "smartrecruiters": "https://jobs.smartrecruiters.com/{token}",
+    "recruitee": "https://{token}.recruitee.com",
 }
 
 
@@ -120,6 +122,34 @@ def get_or_create(db: Session, ats: str, token: str, *, name: str | None = None,
     return row
 
 
+SUPPORTED = "Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee"
+
+
+def _from_careers_page(db: Session, user: User, req: WatchRequest) -> Company:
+    """A careers-page URL: find the official job board it uses and add that (checked through the provider's API)."""
+    from backend.security import rate_limiter
+    from backend.services import careers_page
+
+    if rate_limiter.check(f"careers-page:{user.id}", 20, 3600) is not None:
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "Too many careers pages checked. Try again in an hour.")
+    try:
+        _, html = careers_page.fetch_page(req.url or "")
+    except careers_page.CareersPageError as exc:
+        raise HTTPException(422, str(exc)) from None
+    candidates = careers_page.find_boards(html)
+    if not candidates:
+        raise HTTPException(422, f"No {SUPPORTED} job board was found on that page. JobPilot can only search companies that "
+                                 "publish their jobs through one of these providers' official job-board APIs.")
+    last: Exception | None = None
+    for ats, token in candidates:
+        try:
+            return get_or_create(db, ats, token, name=req.name, industry=req.industry, user=user)
+        except (HTTPException, AtsError) as exc:
+            last = exc
+    detail = getattr(last, "detail", None) or str(last)
+    raise HTTPException(422, f"The page links to a job board, but it could not be verified: {detail}")
+
+
 def watchlist(db: Session, user: User) -> list[Company]:
     rows = db.execute(select(UserCompany).where(UserCompany.user_id == user.id).order_by(UserCompany.id)).unique().scalars()
     return [r.company for r in rows]
@@ -129,14 +159,18 @@ def watch(db: Session, user: User, req: WatchRequest) -> Company:
     if req.url:
         try:
             ats, token, region = parse_board_url(req.url)
-        except AtsError as exc:
-            raise HTTPException(422, str(exc)) from None
+        except AtsError:
+            company = _from_careers_page(db, user, req)
+        else:
+            company = None
     else:
         ats, token, region = req.ats, req.token, None  # type: ignore[assignment]
-    try:
-        company = get_or_create(db, ats, token, name=req.name, industry=req.industry, region=region, user=user)
-    except AtsError as exc:
-        raise HTTPException(422, str(exc)) from None
+        company = None
+    if company is None:
+        try:
+            company = get_or_create(db, ats, token, name=req.name, industry=req.industry, region=region, user=user)
+        except AtsError as exc:
+            raise HTTPException(422, str(exc)) from None
     exists = db.execute(select(UserCompany).where(UserCompany.user_id == user.id, UserCompany.company_id == company.id)).unique().scalar_one_or_none()
     if exists is None:
         count = db.execute(select(func.count()).select_from(UserCompany).where(UserCompany.user_id == user.id)).scalar_one()

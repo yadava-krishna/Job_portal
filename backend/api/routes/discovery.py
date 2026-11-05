@@ -15,6 +15,7 @@ from backend.schemas.discovery import (
     CompanyOut,
     DirectoryCompany,
     NotificationList,
+    NotificationPrefs,
     NotificationOut,
     SavedSearchIn,
     SavedSearchOut,
@@ -42,7 +43,7 @@ def sources(user: CurrentUser, db: DbSession, settings: SettingsDep) -> source_h
 
 @companies.get("/directory", response_model=list[DirectoryCompany])
 def directory(user: CurrentUser, db: DbSession, q: str | None = Query(None, max_length=100),
-              ats: Literal["greenhouse", "lever", "ashby"] | None = None, limit: int = Query(30, ge=1, le=100)) -> list[DirectoryCompany]:
+              ats: Literal["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"] | None = None, limit: int = Query(30, ge=1, le=100)) -> list[DirectoryCompany]:
     """Search known employer boards: JobPilot's curated India list first, then the JobSync directory (MIT)."""
     return company_service.search_directory(db, user, q, ats, limit)
 
@@ -133,6 +134,16 @@ def search_runs(search_id: int, user: CurrentUser, db: DbSession, limit: int = Q
 
 
 # ---- notifications --------------------------------------------------------------------------------
+
+@notifications.get("/preferences", response_model=NotificationPrefs)
+def get_notification_prefs(user: CurrentUser, db: DbSession) -> NotificationPrefs:
+    return NotificationPrefs(**notification_service.prefs(db, user))
+
+
+@notifications.put("/preferences", response_model=NotificationPrefs)
+def put_notification_prefs(body: NotificationPrefs, user: CurrentUser, db: DbSession) -> NotificationPrefs:
+    return NotificationPrefs(**notification_service.save_prefs(db, user, body.model_dump()))
+
 
 @notifications.get("", response_model=NotificationList)
 def list_notifications(user: CurrentUser, db: DbSession, unread_only: bool = False,

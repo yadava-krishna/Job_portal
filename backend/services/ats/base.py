@@ -72,10 +72,30 @@ def valid_token(token: str) -> str:
     return token
 
 
-def fetch_board(ats: str, token: str, *, company_name: str | None = None, region: str | None = None) -> BoardResult:
-    from backend.services.ats import ashby, greenhouse, lever
+def get_page(url: str, *, max_bytes: int = 2 * 1024 * 1024) -> tuple[int, str]:
+    """(status, text) of a public page, without following redirects (a redirect means "not this page")."""
+    try:
+        with httpx.Client(timeout=TIMEOUT, transport=transport_override, follow_redirects=False,
+                          headers={"User-Agent": USER_AGENT, "Accept": "text/html"}) as client:
+            with client.stream("GET", url) as r:
+                body = bytearray()
+                if r.status_code == 200:
+                    for chunk in r.iter_bytes():
+                        body += chunk
+                        if len(body) > max_bytes:
+                            raise AtsError("invalid", "Page is too large.")
+                return r.status_code, bytes(body).decode("utf-8", "replace")
+    except httpx.TimeoutException as exc:
+        raise AtsError("transient", "Page timed out.") from exc
+    except httpx.HTTPError as exc:
+        raise AtsError("transient", f"Page unreachable ({type(exc).__name__}).") from exc
 
-    fetchers: dict[str, Callable[..., BoardResult]] = {"greenhouse": greenhouse.fetch, "lever": lever.fetch, "ashby": ashby.fetch}
+
+def fetch_board(ats: str, token: str, *, company_name: str | None = None, region: str | None = None) -> BoardResult:
+    from backend.services.ats import ashby, greenhouse, lever, recruitee, smartrecruiters
+
+    fetchers: dict[str, Callable[..., BoardResult]] = {"greenhouse": greenhouse.fetch, "lever": lever.fetch, "ashby": ashby.fetch,
+                                                        "smartrecruiters": smartrecruiters.fetch, "recruitee": recruitee.fetch}
     if ats not in fetchers:
         raise AtsError("invalid", f"Unsupported job board type: {ats}")
     return fetchers[ats](valid_token(token), company_name=company_name, region=region)
@@ -86,7 +106,10 @@ _BOARD_PATTERNS = (
     ("greenhouse", re.compile(r"^boards-api\.greenhouse\.io$"), 2),  # /v1/boards/{token}/...
     ("lever", re.compile(r"^jobs\.(?:eu\.)?lever\.co$"), 0),
     ("ashby", re.compile(r"^jobs\.ashbyhq\.com$"), 0),
+    ("smartrecruiters", re.compile(r"^(?:jobs|careers)\.smartrecruiters\.com$"), 0),
+    ("smartrecruiters", re.compile(r"^api\.smartrecruiters\.com$"), 2),  # /v1/companies/{token}/postings
 )
+_RECRUITEE = re.compile(r"^([a-z0-9][a-z0-9-]{0,62})\.recruitee\.com$")
 
 
 def parse_board_url(url: str) -> tuple[str, str, str | None]:
@@ -104,4 +127,7 @@ def parse_board_url(url: str) -> tuple[str, str, str | None]:
                 token = dict(p.split("=", 1) for p in parts.query.split("&") if "=" in p).get("for", "")
             region = "eu" if ats == "lever" and host.startswith("jobs.eu.") else None
             return ats, valid_token(token), region
-    raise AtsError("invalid", "Use a Greenhouse, Lever or Ashby job-board link (e.g. https://jobs.lever.co/company).")
+    m = _RECRUITEE.match(host)
+    if m and m.group(1) not in ("www", "app", "api", "docs"):
+        return "recruitee", valid_token(m.group(1)), None
+    raise AtsError("invalid", "Use a Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee job-board link (e.g. https://jobs.lever.co/company).")

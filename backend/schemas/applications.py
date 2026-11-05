@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from backend.schemas.jobs import JobListing
 
 ApplicationStatusName = Literal["PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"]
-StageName = Literal["applied", "screening", "interview", "offer", "rejected", "withdrawn"]
+StageName = Literal["applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "archived"]
 
 
 class PrepareRequest(BaseModel):
@@ -25,6 +25,11 @@ class ConfirmRequest(BaseModel):
 
 class StatusChangeRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
+
+
+class TrackingUpdate(BaseModel):
+    notes: str | None = Field(default=None, max_length=5000)
+    follow_up_at: datetime | None = None
 
 
 class StageRequest(BaseModel):
@@ -55,6 +60,8 @@ class ApplicationOut(BaseModel):
     created_at: datetime
     opened_at: datetime | None
     submitted_at: datetime | None
+    submission_method: str | None = None
+    follow_up_at: datetime | None = None
     job: JobListing
 
 
@@ -65,6 +72,15 @@ class ApplicationDetail(ApplicationOut):
     needs_candidate_input: list[str]
     notes: str | None
     events: list[EventOut]
+
+
+class ApplyOptions(BaseModel):
+    original_url: str | None
+    original_supported: bool = Field(description="Fill with JobPilot works on the original listing page")
+    platform: str | None
+    hosted_form_url: str | None = Field(default=None, description="Verified Greenhouse-hosted application form, when the listing is on the employer's own site")
+    direct_apply: bool = Field(default=False, description="Submitting through an official API: not authorised for any source today")
+    message: str
 
 
 class OpenResponse(BaseModel):

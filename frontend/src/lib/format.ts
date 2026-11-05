@@ -63,10 +63,12 @@ export const statusLabels: Record<string, string> = {
 export const stageLabels: Record<string, string> = {
   applied: "Applied",
   screening: "Screening",
+  assessment: "Assessment",
   interview: "Interview",
   offer: "Offer",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
+  archived: "Archived",
 };
 
 export function lines(text: string): string[] {

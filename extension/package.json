@@ -1,0 +1,15 @@
+{
+  "name": "fill-with-jobpilot",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Fill with JobPilot browser extension (tests and packaging only; the extension itself has no runtime dependencies)",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "package": "node scripts/package.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "vitest": "^3.2.4"
+  }
+}

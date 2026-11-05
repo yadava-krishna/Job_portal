@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Fill with JobPilot",
+  "short_name": "JobPilot",
+  "version": "1.0.0",
+  "description": "Fills Greenhouse, Lever and Ashby application forms from your JobPilot profile when you click Fill. You review and submit yourself.",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyCA/gMwSOF/dhjhHJdHJ6XsFd3JGrmTw8nVacbyHUpTTrLnSx2x9CozY7V9V3nYcX95u/6hB17kqbJ/1Pj1eXP1NE//t1nFFj/lMFFdGjLaHWz2gDf22uu99lIDZR1uQ+/lo/gISVMTmimnQ3bAyOBTB9abpug/o1DL4Suw3RYZp64rk8CzpoywdWxgvn3DEV2uHKaEH5joEdxwkYJ/tTVMZl9KeIqHhNliNEhg6Q0foJ6zRtqjY9LJGbYFR9ckamG8G1iy5PmqxavCb0tTGDEHC5gIIalaerPgKH97UzMGxhYRIFZBTQHpENa+MjGi1/lLZAu2b3F7eDrO/6cYL3wIDAQAB",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://job-boards.greenhouse.io/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.eu.greenhouse.io/*",
+    "https://boards.eu.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://jobs.eu.lever.co/*",
+    "https://jobs.ashbyhq.com/*"
+  ],
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "action": {
+    "default_title": "Fill with JobPilot",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" }
+}

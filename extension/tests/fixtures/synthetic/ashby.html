@@ -1,0 +1,19 @@
+<!doctype html><html><body>
+<!-- Synthetic form written for tests; mirrors Ashby's hosted /application form structure (data-field-path entries). -->
+<h1>Finance Associate</h1>
+<div class="ashby-application-form-container">
+  <div class="autofill"><input type="file" class="autofill-from-resume"><p>Autofill from resume</p></div>
+  <div data-field-path="_systemfield_name"><label class="ashby-application-form-question-title" for="_systemfield_name">Name</label><input id="_systemfield_name" name="_systemfield_name" type="text" required></div>
+  <div data-field-path="_systemfield_email"><label class="ashby-application-form-question-title" for="_systemfield_email">Email</label><input id="_systemfield_email" name="_systemfield_email" type="email" required></div>
+  <div data-field-path="_systemfield_resume"><label class="ashby-application-form-question-title" for="_systemfield_resume">Resume</label><input id="_systemfield_resume" type="file" accept="application/pdf,.pdf"></div>
+  <div data-field-path="phone_number"><label class="ashby-application-form-question-title" for="phone_number">Phone Number</label><input id="phone_number" name="phone_number" type="text"></div>
+  <div data-field-path="q_li"><label class="ashby-application-form-question-title" for="q_li">LinkedIn Profile:</label><input id="q_li" name="q_li" type="text"></div>
+  <div data-field-path="q_reloc"><fieldset><label class="ashby-application-form-question-title" for="q_reloc">Are you willing to relocate to Bengaluru?</label>
+    <div><input type="radio" id="r0" name="u_q_reloc"><label for="r0">Yes</label></div><div><input type="radio" id="r1" name="u_q_reloc"><label for="r1">No</label></div></fieldset></div>
+  <div data-field-path="q_exp"><fieldset><label class="ashby-application-form-question-title" for="q_exp">Total years of experience</label>
+    <div><input type="radio" id="e0" name="u_q_exp"><label for="e0">0-2 years</label></div><div><input type="radio" id="e1" name="u_q_exp"><label for="e1">2.1-4 years</label></div><div><input type="radio" id="e2" name="u_q_exp"><label for="e2">4.1 years and above</label></div></fieldset></div>
+  <div data-field-path="q_sponsor"><label class="ashby-application-form-question-title">Will you require visa sponsorship?</label>
+    <div><button type="button" class="yes">Yes</button><button type="button" class="no">No</button></div></div>
+  <div data-field-path="q_ctc"><label class="ashby-application-form-question-title" for="q_ctc">What is your current fixed compensation? (Lakhs per annum)</label><input id="q_ctc" name="q_ctc" type="text"></div>
+  <button type="submit" class="ashby-application-form-submit-button">Submit Application</button>
+</div></body></html>

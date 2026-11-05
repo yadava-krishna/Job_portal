@@ -1,0 +1,31 @@
+<!doctype html><html><body>
+<!-- Synthetic form written for tests; mirrors Lever's hosted /apply form structure. -->
+<div class="posting-header"><h2>Accounts Receivable Executive</h2></div>
+<form id="application-form" method="POST" action="/test/apply">
+  <ul>
+    <li class="application-question resume"><div class="application-label">Resume/CV<span class="required">✱</span></div>
+      <div class="application-field"><input type="file" name="resume" id="resume-upload-input"><span class="filename"></span></div></li>
+    <li class="application-question"><div class="application-label">Full name<span class="required">✱</span></div><div class="application-field"><input type="text" name="name" required></div></li>
+    <li class="application-question"><div class="application-label">Email<span class="required">✱</span></div><div class="application-field"><input type="email" name="email" required></div></li>
+    <li class="application-question"><div class="application-label">Phone<span class="required">✱</span></div><div class="application-field"><input type="text" name="phone" required></div></li>
+    <li class="application-question"><div class="application-label">Current location</div><div class="application-field"><input type="text" name="location" id="location-input"><input type="hidden" name="selectedLocation"></div></li>
+    <li class="application-question"><div class="application-label">Current company<span class="required">✱</span></div><div class="application-field"><input type="text" name="org" required></div></li>
+    <li class="application-question"><div class="application-label">LinkedIn URL</div><div class="application-field"><input type="text" name="urls[LinkedIn]"></div></li>
+    <li class="application-question"><div class="application-label">Twitter URL</div><div class="application-field"><input type="text" name="urls[Twitter]"></div></li>
+    <li class="application-question"><div class="application-label">GitHub URL</div><div class="application-field"><input type="text" name="urls[GitHub]"></div></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">Please select your gender<span class="required">✱</span></div></div>
+      <ul><li><label><input type="radio" name="cards[c1][field0]" value="Male"><span>Male</span></label></li><li><label><input type="radio" name="cards[c1][field0]" value="Female"><span>Female</span></label></li></ul></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">Total Years of experience<span class="required">✱</span></div></div>
+      <div class="application-field"><input type="text" name="cards[c1][field1]" placeholder="Type your response" required></div></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">What is your notice period?<span class="required">✱</span></div></div>
+      <ul><li><label><input type="radio" name="cards[c1][field2]" value="Less than 15 days"><span>Less than 15 days</span></label></li>
+          <li><label><input type="radio" name="cards[c1][field2]" value="16 to 30 days"><span>16 to 30 days</span></label></li>
+          <li><label><input type="radio" name="cards[c1][field2]" value="31 to 60 days"><span>31 to 60 days</span></label></li></ul></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">Expected CTC (LPA)<span class="required">✱</span></div></div>
+      <div class="application-field"><select name="cards[c1][field3]" required><option value="">Select…</option><option>0-5 LPA</option><option>5-10 LPA</option><option>10+ LPA</option></select></div></li>
+    <li class="application-question custom-question"><div class="application-label"><div class="text">Why do you want to join us?</div></div>
+      <div class="application-field"><textarea name="cards[c1][field4]"></textarea></div></li>
+  </ul>
+  <input type="password" name="pw_honeypot">
+  <button type="submit" id="btn-submit">Submit application</button>
+</form></body></html>

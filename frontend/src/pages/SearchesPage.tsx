@@ -23,16 +23,18 @@ const SOURCES: { id: SearchSource; label: string; hint: string }[] = [
   { id: "greenhouse", label: "Greenhouse", hint: "Employer job boards" },
   { id: "lever", label: "Lever", hint: "Employer job boards" },
   { id: "ashby", label: "Ashby", hint: "Employer job boards" },
+  { id: "smartrecruiters", label: "SmartRecruiters", hint: "Employer job boards" },
+  { id: "recruitee", label: "Recruitee", hint: "Employer careers sites" },
   { id: "adzuna_api", label: "Adzuna", hint: "Needs the server's Adzuna API key" },
 ];
-const ATS_LABEL: Record<string, string> = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby" };
+const ATS_LABEL: Record<string, string> = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", smartrecruiters: "SmartRecruiters", recruitee: "Recruitee" };
 const WORK_MODES: WorkMode[] = ["Remote", "Hybrid", "On-site"];
 const EMPLOYMENT: EmploymentType[] = ["Full-time", "Part-time", "Contract", "Internship", "Temporary"];
 const INDUSTRIES = ["Fintech", "SaaS", "AI", "E-commerce", "Data & Analytics", "Cybersecurity", "Healthcare", "AdTech", "Media", "Travel"];
 
 const emptyCriteria: SearchCriteria = {
   keywords: [], exclude_keywords: [], locations: [], remote_ok: true, industries: [], experience_years: null, employment_types: [],
-  work_modes: [], company_ids: [], use_watchlist: true, include_suggested: true, related_titles: true, sources: ["greenhouse", "lever", "ashby"],
+  work_modes: [], company_ids: [], use_watchlist: true, include_suggested: true, related_titles: true, sources: ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"],
   max_age_days: null,
 };
 
@@ -299,12 +301,12 @@ function CompaniesTab() {
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
         <Card className="gap-3 p-4">
-          <h3 className="font-semibold">Add a company by its job-board link</h3>
+          <h3 className="font-semibold">Add a company by its careers page or job-board link</h3>
           <form onSubmit={addUrl} className="flex gap-2">
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://jobs.lever.co/company" aria-label="Job board URL" required />
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.company.com/careers or https://jobs.lever.co/company" aria-label="Careers page or job board URL" required />
             <Button type="submit" disabled={watch.isPending}>{watch.isPending ? <Loader2 className="animate-spin" /> : <Plus />} Add</Button>
           </form>
-          <p className="text-xs text-muted-foreground">Works with Greenhouse, Lever and Ashby careers pages (also a single job link from one). The board is checked once before it's added.</p>
+          <p className="text-xs text-muted-foreground">Paste the company's careers page and JobPilot finds the job board it uses, or paste a Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee link directly. The board is checked through the provider's official API before it's added. Careers sites on other systems (for example Workday) can't be searched automatically.</p>
         </Card>
         <Card className="gap-3 p-4">
           <h3 className="font-semibold">Your watchlist ({watchlist.data?.length ?? 0})</h3>
@@ -330,7 +332,7 @@ function CompaniesTab() {
           <h3 className="font-semibold">Search the company directory</h3>
           <div className="flex gap-2">
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Company name" aria-label="Search companies" />
-            <NativeSelect ariaLabel="Job board type" value={ats} onChange={setAts} options={[{ value: "", label: "All boards" }, { value: "greenhouse", label: "Greenhouse" }, { value: "lever", label: "Lever" }, { value: "ashby", label: "Ashby" }]} />
+            <NativeSelect ariaLabel="Job board type" value={ats} onChange={setAts} options={[{ value: "", label: "All boards" }, { value: "greenhouse", label: "Greenhouse" }, { value: "lever", label: "Lever" }, { value: "ashby", label: "Ashby" }, { value: "smartrecruiters", label: "SmartRecruiters" }, { value: "recruitee", label: "Recruitee" }]} />
           </div>
           {q.trim().length >= 2 && <div className="max-h-80 overflow-y-auto"><DirectoryList items={directory.data} empty="No matches. Try the company's careers-page link instead." /></div>}
           <p className="text-xs text-muted-foreground">Directory data includes board lists from JobSync (MIT licence). Some boards may have moved; JobPilot checks each one before adding it.</p>
@@ -368,7 +370,7 @@ export function SearchesPage() {
   return (
     <>
       <PageHeader title="Searches & companies"
-                  description="Saved searches scan employers' official job boards (Greenhouse, Lever, Ashby) and, optionally, Adzuna. Nothing is applied for you." />
+                  description="Saved searches scan employers' official job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee) and, optionally, Adzuna. Nothing is applied for you." />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList>
           <TabsTrigger value="searches"><Radar className="size-4" /> Saved searches</TabsTrigger>

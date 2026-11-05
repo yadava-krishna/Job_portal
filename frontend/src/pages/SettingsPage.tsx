@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field, NativeSelect, PageHeader } from "@/components/app/common";
 import { ConnectionSettingsDialog } from "@/components/app/ConnectionSettings";
+import { ExtensionSettings } from "@/components/app/ExtensionSettings";
+import { AnswerBank, NotificationSettings, ResumeVersions } from "@/components/app/ProfileExtras";
 import { ClipperCard, PlatformsForm, PreferencesForm, ProfileForm, ResumeUpload } from "@/components/app/forms";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConnection } from "@/contexts/ConnectionContext";
@@ -19,10 +22,14 @@ import type { VerifiedFacts } from "@/types/api";
 export function SettingsPage() {
   const profile = useProfile();
   const prefs = usePreferences();
+  // Deep links such as #/settings?tab=answers (used by the browser extension's "update your profile" links).
+  const [params] = useSearchParams();
+  const tabs = ["profile", "preferences", "platforms", "answers", "email", "notifications", "extension", "account"];
+  const initialTab = tabs.includes(params.get("tab") ?? "") ? params.get("tab")! : "profile";
   return (
     <>
       <PageHeader title="Profile & settings" description="Everything here is private to your account." />
-      <Tabs defaultValue="profile">
+      <Tabs defaultValue={initialTab}>
         <div className="overflow-x-auto pb-1">
           <TabsList>
             <TabsTrigger value="profile">Resume & profile</TabsTrigger>
@@ -30,6 +37,8 @@ export function SettingsPage() {
             <TabsTrigger value="platforms">Platforms</TabsTrigger>
             <TabsTrigger value="answers">Verified answers</TabsTrigger>
             <TabsTrigger value="email">Alert emails</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="extension">Browser extension</TabsTrigger>
             <TabsTrigger value="account">Account & connection</TabsTrigger>
           </TabsList>
         </div>
@@ -42,6 +51,7 @@ export function SettingsPage() {
             </CardHeader>
             <CardContent><ResumeUpload profile={profile.data} /></CardContent>
           </Card>
+          <ResumeVersions />
           <Card>
             <CardHeader><CardTitle>Candidate profile</CardTitle><CardDescription>Used for matching and for answering screening questions. Saving re-scores your open jobs.</CardDescription></CardHeader>
             <CardContent>{profile.data ? <ProfileForm profile={profile.data} /> : <Loader2 className="animate-spin" />}</CardContent>
@@ -59,6 +69,8 @@ export function SettingsPage() {
 
         <TabsContent value="answers" className="pt-4"><FactsForm facts={profile.data?.verified_facts} /></TabsContent>
         <TabsContent value="email" className="pt-4"><EmailForm /></TabsContent>
+        <TabsContent value="extension" className="pt-4"><ExtensionSettings /></TabsContent>
+        <TabsContent value="notifications" className="pt-4"><NotificationSettings /></TabsContent>
         <TabsContent value="account" className="pt-4"><AccountCard /></TabsContent>
       </Tabs>
     </>
@@ -80,18 +92,24 @@ function FactsForm({ facts }: { facts?: VerifiedFacts }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          {text("current_ctc", "Current CTC", "e.g. 6.5 LPA")}
+          {text("current_ctc", "Current CTC (optional, only if you want it shared)", "e.g. 6.5 LPA")}
           {text("expected_ctc", "Expected CTC", "e.g. 8-9 LPA")}
           {text("notice_period", "Notice period", "e.g. 30 days")}
           {text("earliest_start_date", "Earliest start date", "e.g. 1 Dec 2026")}
           {text("work_authorization", "Work authorization", "e.g. Indian citizen")}
           {text("shift_flexibility", "Shift flexibility", "e.g. Open to US shifts")}
+          {text("relevant_experience", "Relevant experience", "e.g. 4 years in accounts receivable")}
+          <Field label="Need visa sponsorship?">
+            <NativeSelect value={f.requires_sponsorship == null ? "" : f.requires_sponsorship ? "yes" : "no"} onChange={(v) => setF({ ...f, requires_sponsorship: v === "" ? null : v === "yes" })}
+                          options={[{ value: "", label: "Ask me each time" }, { value: "yes", label: "Yes" }, { value: "no", label: "No" }]} className="w-full" />
+          </Field>
           <Field label="Willing to relocate?">
             <NativeSelect value={f.willing_to_relocate == null ? "" : f.willing_to_relocate ? "yes" : "no"} onChange={(v) => setF({ ...f, willing_to_relocate: v === "" ? null : v === "yes" })}
                           options={[{ value: "", label: "Ask me each time" }, { value: "yes", label: "Yes" }, { value: "no", label: "No" }]} className="w-full" />
           </Field>
         </div>
-        <div className="flex justify-end"><Button onClick={() => save.mutate(f, { onSuccess: () => toast.success("Saved"), onError: (e) => toast.error(errorMessage(e)) })} disabled={save.isPending}>Save answers</Button></div>
+        <AnswerBank facts={f} onChange={setF} />
+        <div className="flex justify-end"><Button onClick={() => save.mutate({ ...f, custom_answers: (f.custom_answers ?? []).filter((a) => a.question.trim() && a.answer.trim()) }, { onSuccess: () => toast.success("Saved"), onError: (e) => toast.error(errorMessage(e)) })} disabled={save.isPending}>Save answers</Button></div>
       </CardContent>
     </Card>
   );

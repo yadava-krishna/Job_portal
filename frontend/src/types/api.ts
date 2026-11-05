@@ -57,6 +57,10 @@ export interface EditableProfile {
   projects: ProjectItem[];
   achievements: string[];
   languages: string[];
+  linkedin_url?: string | null;
+  github_url?: string | null;
+  portfolio_url?: string | null;
+  website_url?: string | null;
 }
 export interface ResumeInfo {
   id: number;
@@ -93,7 +97,21 @@ export interface VerifiedFacts {
   work_authorization?: string | null;
   earliest_start_date?: string | null;
   shift_flexibility?: string | null;
+  requires_sponsorship?: boolean | null;
+  relevant_experience?: string | null;
+  custom_answers?: { question: string; answer: string }[];
 }
+
+export interface ApplyOptions {
+  original_url: string | null;
+  original_supported: boolean;
+  platform: string | null;
+  hosted_form_url: string | null;
+  direct_apply: boolean;
+  message: string;
+}
+export interface PairingCode { code: string; expires_at: string; expires_in_seconds: number }
+export interface ExtensionDevice { id: number; name: string; scopes: string[]; created_at: string; last_used_at: string | null; expires_at: string | null }
 
 export type WorkMode = "Remote" | "Hybrid" | "On-site";
 export type EmploymentType = "Full-time" | "Contract" | "Part-time" | "Internship" | "Temporary";
@@ -321,7 +339,7 @@ export interface SearchLink {
 }
 
 export type ApplicationStatus = "PREPARED" | "OPENED" | "CONFIRMATION_PENDING" | "SUBMITTED" | "FAILED" | "WITHDRAWN";
-export type Stage = "applied" | "screening" | "interview" | "offer" | "rejected" | "withdrawn";
+export type Stage = "applied" | "screening" | "assessment" | "interview" | "offer" | "rejected" | "withdrawn" | "archived";
 export interface Application {
   id: number;
   status: ApplicationStatus;
@@ -336,6 +354,8 @@ export interface Application {
   created_at: string;
   opened_at: string | null;
   submitted_at: string | null;
+  submission_method?: string | null;
+  follow_up_at?: string | null;
   job: JobListing;
 }
 export interface ScreeningAnswer {
@@ -416,7 +436,7 @@ export interface Analytics {
   status_counts: Record<string, number>;
 }
 
-export type AtsName = "greenhouse" | "lever" | "ashby";
+export type AtsName = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "recruitee";
 export type SearchSource = AtsName | "adzuna_api";
 export interface DirectoryCompany {
   name: string;

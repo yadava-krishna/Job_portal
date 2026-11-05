@@ -34,7 +34,10 @@ ALLOWED: dict[str, set[str]] = {
     "WITHDRAWN": set(),
 }
 ACTIVE = ("PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED")
-STAGES = ("applied", "screening", "interview", "offer", "rejected", "withdrawn")
+STAGES = ("applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "archived")
+# How the user applied, from the confirmation source (shown in the tracker).
+SUBMISSION_METHODS = {"user_confirmed": "Employer website, confirmed in JobPilot",
+                      "extension_user_confirmed": "Employer website, confirmed in the extension"}
 
 
 def _event(db: Session, app: Application, user: User, event_type: str, frm: str | None, to: str | None, details: str | None = None) -> None:
@@ -147,6 +150,30 @@ def open_listing(db: Session, user: User, app: Application) -> str:
     return app.job.job_url
 
 
+def apply_options(db: Session, app: Application) -> dict:
+    from backend.models import JobSourceLink
+    from backend.services import extension_service
+
+    job = app.job
+    url = job.job_url
+    ref = extension_service.job_ref(url) if url else None
+    hosted = None
+    if ref is None and job.platform == "Greenhouse":
+        links = list(db.execute(select(JobSourceLink).where(JobSourceLink.job_id == job.id)).scalars())
+        hosted = extension_service.greenhouse_hosted_form(job, links)
+    if ref:
+        msg = f"Fill with JobPilot supports this {job.platform} application page."
+    elif hosted:
+        msg = ("This listing is on the employer's own careers site, which Fill with JobPilot cannot fill. "
+               "Greenhouse also hosts the application form for this job; you can apply there instead.")
+    elif job.platform in ("Greenhouse", "Lever", "Ashby"):
+        msg = "This listing is on the employer's own careers site, which Fill with JobPilot cannot fill. Apply there manually."
+    else:
+        msg = f"Apply on {job.platform or 'the original site'} yourself; JobPilot keeps track once you confirm."
+    return {"original_url": url, "original_supported": ref is not None, "platform": job.platform, "hosted_form_url": hosted,
+            "direct_apply": False, "message": msg}
+
+
 def mark_submitted(db: Session, user: User, app: Application, *, reference_id: str | None, confirmation_text: str | None,
                    source: str, notes: str | None = None) -> None:
     if app.status == "SUBMITTED":
@@ -167,18 +194,27 @@ def mark_submitted(db: Session, user: User, app: Application, *, reference_id: s
 
 
 def confirm(db: Session, user: User, app: Application, submitted: bool | None, reference_id: str | None,
-            confirmation_text: str | None, notes: str | None) -> Application:
+            confirmation_text: str | None, notes: str | None, *, source: str = "user_confirmed") -> Application:
     if submitted is None:
         if app.status != "CONFIRMATION_PENDING":
             _transition(db, user, app, "CONFIRMATION_PENDING", "RETURNED_UNDECIDED", "User returned without confirming yet.")
     elif submitted:
-        mark_submitted(db, user, app, reference_id=reference_id, confirmation_text=confirmation_text, source="user_confirmed", notes=notes)
+        mark_submitted(db, user, app, reference_id=reference_id, confirmation_text=confirmation_text, source=source, notes=notes)
     else:
         # Closed the page without applying: leave it where it was before opening.
         if app.status in ("OPENED", "CONFIRMATION_PENDING"):
             _transition(db, user, app, "PREPARED", "NOT_SUBMITTED", "User reported the application was not submitted.")
     db.commit()
     db.refresh(app)
+    return app
+
+
+def mark_in_progress(db: Session, user: User, app: Application, source: str) -> Application:
+    """The user is working on the employer's form (e.g. clicked Fill with JobPilot). Never a submission."""
+    if app.status in ("PREPARED", "FAILED", "CONFIRMATION_PENDING"):
+        _transition(db, user, app, "OPENED", "OPENED_EXTERNAL", f"Application form opened ({source}); this is not a submission.")
+        app.opened_at = app.opened_at or utcnow()
+        db.commit()
     return app
 
 
@@ -204,6 +240,27 @@ def set_stage(db: Session, user: User, app: Application, stage: str, note: str |
     _event(db, app, user, "STAGE_CHANGED", old, stage, note)
     db.commit()
     return app
+
+
+def update_tracking(db: Session, user: User, app: Application, fields: dict) -> Application:
+    """Notes and follow-up date: the user's own bookkeeping, at any status."""
+    if "notes" in fields:
+        app.notes = (fields["notes"] or "").strip() or None
+    if "follow_up_at" in fields:
+        app.follow_up_at = fields["follow_up_at"]
+        _event(db, app, user, "FOLLOW_UP_SET", None, None, fields["follow_up_at"].isoformat() if fields["follow_up_at"] else "cleared")
+    db.commit()
+    db.refresh(app)
+    return app
+
+
+def submission_method(app: Application) -> str | None:
+    src = app.confirmation_source
+    if not src:
+        return None
+    if src.startswith("email"):
+        return "Employer website, confirmed by the platform's e-mail"
+    return SUBMISSION_METHODS.get(src, src.replace("_", " "))
 
 
 def needs_input(app: Application) -> list[str]:

@@ -137,3 +137,13 @@ export async function downloadFile(path: string, fallbackName: string): Promise<
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+/** Open an authenticated PDF in a new tab (blob URL; the file is never publicly addressable). */
+export async function previewFile(path: string): Promise<void> {
+  const win = window.open("", "_blank");  // open synchronously so pop-up blockers allow it
+  const res = await api.get(path, { responseType: "blob", timeout: 120_000 });
+  const url = URL.createObjectURL(new Blob([res.data as Blob], { type: "application/pdf" }));
+  if (win) win.location.href = url;
+  else window.open(url, "_blank", "noopener");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

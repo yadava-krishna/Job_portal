@@ -76,6 +76,7 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
                   <p className="text-sm text-muted-foreground">Not scored yet. Confirm your profile in Settings first.</p>
                 ) : (
                   <div className="space-y-3">
+                    <p className="text-xs text-muted-foreground">A match score is a guide to which jobs to read first, not proof a job suits you. Check the description yourself.</p>
                     {a.components.map((c) => (
                       <div key={c.name}>
                         <div className="flex justify-between text-sm"><span className="font-medium">{componentNames[c.name] ?? c.name} <span className="text-muted-foreground">({c.weight.toFixed(0)}%)</span></span><span className="tabular-nums">{c.score.toFixed(0)}</span></div>

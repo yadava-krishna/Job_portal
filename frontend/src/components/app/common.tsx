@@ -41,6 +41,8 @@ const platformColors: Record<string, string> = {
   Greenhouse: "bg-lime-500/10 text-lime-800 dark:text-lime-300",
   Lever: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
   Ashby: "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
+  SmartRecruiters: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+  Recruitee: "bg-orange-500/10 text-orange-700 dark:text-orange-300",
 };
 
 export function PlatformBadge({ platform }: { platform: string }) {

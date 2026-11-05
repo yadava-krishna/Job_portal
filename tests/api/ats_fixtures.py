@@ -89,6 +89,33 @@ def ashby_board() -> dict:
     ]}
 
 
+def smartrecruiters_list() -> dict:
+    return {"offset": 0, "limit": 100, "totalFound": 2, "content": [
+        {"id": "744000000000001", "name": "Accounts Receivable Specialist", "releasedDate": iso(1, 0),
+         "location": {"city": "Bengaluru", "region": "KA", "country": "in", "remote": False, "hybrid": True, "fullLocation": "Bengaluru, KA, India"},
+         "typeOfEmployment": {"id": "permanent", "label": "Full-time"}, "company": {"identifier": "DeltaWorks", "name": "Delta Works"},
+         "department": {"label": "Finance"}},
+        {"id": "744000000000002", "name": "Mechanical Design Engineer", "releasedDate": iso(2, 0),
+         "location": {"city": "Pune", "country": "in", "remote": False, "fullLocation": "Pune, MH, India"},
+         "typeOfEmployment": {"label": "Full-time"}, "company": {"name": "Delta Works"}},
+    ]}
+
+
+def smartrecruiters_detail(pid: str) -> dict:
+    return {"id": pid, "postingUrl": f"https://jobs.smartrecruiters.com/DeltaWorks/{pid}-accounts-receivable-specialist",
+            "jobAd": {"sections": {"jobDescription": {"text": AR_HTML}, "qualifications": {"text": "<ul><li>3-6 years of experience in accounts receivable</li></ul>"}}}}
+
+
+def recruitee_offers() -> dict:
+    return {"offers": [
+        {"id": 901, "title": "Accounts Receivable Analyst", "status": "published", "location": "Hyderabad, Telangana, India", "remote": False,
+         "hybrid": False, "on_site": True, "employment_type_code": "fulltime_permanent", "description": AR_HTML, "requirements": "<p>Excel</p>",
+         "published_at": "2026-11-04 08:00:00 UTC".replace("2026-11-04", (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")),
+         "careers_url": "https://epsilonpay.recruitee.com/o/accounts-receivable-analyst", "department": "Finance", "company_name": "Epsilon Pay"},
+        {"id": 902, "title": "Draft role", "status": "draft"},
+    ]}
+
+
 class Boards:
     """A MockTransport standing in for the three official APIs. Mutate `.payloads` between runs to change a board."""
 
@@ -97,7 +124,10 @@ class Boards:
             ("greenhouse", "acmefintech"): greenhouse_board(),
             ("lever", "betapay"): lever_board(),
             ("ashby", "gammaco"): ashby_board(),
+            ("smartrecruiters", "DeltaWorks"): smartrecruiters_list(),
+            ("recruitee", "epsilonpay"): recruitee_offers(),
         }
+        self.pages: dict[str, str] = {}  # careers pages: url -> html
         self.calls: list[str] = []
         self.status: dict[tuple[str, str], int] = {}
 
@@ -110,6 +140,16 @@ class Boards:
             key = ("lever", parts[2])
         elif host == "api.ashbyhq.com":
             key = ("ashby", parts[2])
+        elif host == "api.smartrecruiters.com":
+            if len(parts) >= 5 and key_known(self, ("smartrecruiters", parts[2])):
+                return httpx.Response(200, json=smartrecruiters_detail(parts[4]))
+            key = ("smartrecruiters", parts[2])
+            if key not in self.payloads:  # SmartRecruiters answers 200 with nothing for unknown companies
+                return httpx.Response(200, json={"offset": 0, "limit": 100, "totalFound": 0, "content": []})
+        elif host.endswith(".recruitee.com"):
+            key = ("recruitee", host.split(".")[0])
+        elif str(request.url).split("?")[0] in self.pages:
+            return httpx.Response(200, text=self.pages[str(request.url).split("?")[0]], headers={"content-type": "text/html"})
         else:
             return httpx.Response(599)
         if key in self.status:
@@ -118,5 +158,9 @@ class Boards:
             return httpx.Response(404, text="Not Found")
         return httpx.Response(200, json=self.payloads[key])
 
-    def transport(self) -> httpx.MockTransport:
+    def transport(self) -> httpx.MockTransport:  # noqa: D102
         return httpx.MockTransport(self.handler)
+
+
+def key_known(boards: "Boards", key: tuple[str, str]) -> bool:
+    return key in boards.payloads

@@ -24,8 +24,9 @@ VERIFIED_DATE_SOURCES = ("platform_api", "platform_page", "user_provided")
 ESTIMATED_DATE_SOURCES = ("alert_email",)
 DATE_SOURCE_RANK = {"platform_api": 4, "platform_page": 3, "user_provided": 2, "alert_email": 1, None: 0}
 
-ATS_SOURCES = ("greenhouse", "lever", "ashby")
-SOURCE_PLATFORM = {"greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby", "adzuna_api": "Adzuna"}
+ATS_SOURCES = ("greenhouse", "lever", "ashby", "smartrecruiters", "recruitee")
+SOURCE_PLATFORM = {"greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby", "smartrecruiters": "SmartRecruiters",
+                   "recruitee": "Recruitee", "adzuna_api": "Adzuna"}
 
 
 @dataclass

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
@@ -50,7 +50,8 @@ def get_or_create_profile(db: Session, user: User) -> CandidateProfile:
     return prof
 
 
-async def store_upload(db: Session, settings: BackendSettings, user: User, upload: UploadFile) -> Resume:
+async def store_upload(db: Session, settings: BackendSettings, user: User, upload: UploadFile, *, make_default: bool = True,
+                       name: str | None = None) -> Resume:
     limit = settings.max_upload_mb * 1024 * 1024
     data = await upload.read(limit + 1)
     if len(data) > limit:
@@ -82,17 +83,69 @@ async def store_upload(db: Session, settings: BackendSettings, user: User, uploa
     tmp.write_bytes(data)
     os.replace(tmp, target)
 
-    db.execute(update(Resume).where(Resume.user_id == user.id).values(is_active=False))
-    resume = Resume(user_id=user.id, original_filename=safe_display_name(upload.filename), stored_path=str(target),
-                    sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data), page_count=pages, is_active=True)
+    if db.execute(select(func.count()).select_from(Resume).where(Resume.user_id == user.id)).scalar_one() >= MAX_RESUMES:
+        target.unlink(missing_ok=True)
+        raise HTTPException(409, f"You can keep up to {MAX_RESUMES} resumes. Delete one you no longer use first.")
+    make_default = make_default or active_resume(db, user) is None  # the first resume is always the default
+    if make_default:
+        db.execute(update(Resume).where(Resume.user_id == user.id).values(is_active=False))
+    resume = Resume(user_id=user.id, original_filename=safe_display_name(name or upload.filename), stored_path=str(target),
+                    sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data), page_count=pages, is_active=make_default)
     db.add(resume)
     db.flush()
-    prof = get_or_create_profile(db, user)
-    prof.active_resume_id = resume.id
-    prof.resume_path = str(target)
+    if make_default:
+        prof = get_or_create_profile(db, user)
+        prof.active_resume_id = resume.id
+        prof.resume_path = str(target)
     db.commit()
     db.refresh(resume)
     return resume
+
+
+MAX_RESUMES = 10
+
+
+def owned_resume(db: Session, user: User, resume_id: int) -> Resume:
+    r = db.execute(select(Resume).where(Resume.id == resume_id, Resume.user_id == user.id)).scalar_one_or_none()
+    if r is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume not found.")
+    return r
+
+
+def resume_file(settings: BackendSettings, user: User, r: Resume) -> Path:
+    path = Path(r.stored_path).resolve()
+    if settings.user_dir(user.id).resolve() not in path.parents or not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume file is missing.")
+    return path
+
+
+def set_default(db: Session, user: User, r: Resume) -> Resume:
+    """Use this resume for applications and the extension. The confirmed profile is not changed."""
+    db.execute(update(Resume).where(Resume.user_id == user.id).values(is_active=False))
+    r.is_active = True
+    prof = get_or_create_profile(db, user)
+    prof.active_resume_id = r.id
+    prof.resume_path = r.stored_path
+    db.commit()
+    db.refresh(r)
+    return r
+
+
+def rename(db: Session, r: Resume, name: str) -> Resume:
+    r.original_filename = safe_display_name(name if name.lower().endswith(".pdf") else f"{name}.pdf")
+    db.commit()
+    db.refresh(r)
+    return r
+
+
+def delete(db: Session, settings: BackendSettings, user: User, r: Resume) -> None:
+    if r.is_active:
+        raise HTTPException(409, "This is your default resume. Make another resume the default first.")
+    path = Path(r.stored_path).resolve()
+    db.delete(r)
+    db.commit()
+    if settings.user_dir(user.id).resolve() in path.parents:
+        path.unlink(missing_ok=True)
 
 
 def active_resume(db: Session, user: User) -> Resume | None:

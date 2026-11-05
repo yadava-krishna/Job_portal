@@ -104,7 +104,8 @@ def overview(db: Session, settings: BackendSettings, user: User) -> SourcesOverv
         return None
 
     out: list[SourceHealth] = []
-    for ats, label in (("greenhouse", "Greenhouse"), ("lever", "Lever"), ("ashby", "Ashby")):
+    for ats, label in (("greenhouse", "Greenhouse"), ("lever", "Lever"), ("ashby", "Ashby"), ("smartrecruiters", "SmartRecruiters"),
+                       ("recruitee", "Recruitee")):
         boards = _boards_for(db, user, enabled_searches, ats)
         counts = BoardCounts(total=len(boards), ok=sum(b.last_status in ("ok", "empty") for b in boards),
                              failing=sum(b.last_status in ("not_found", "error") for b in boards),

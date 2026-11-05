@@ -11,11 +11,13 @@ from backend.models import Application, UserJob
 from backend.schemas.applications import (
     ApplicationDetail,
     ApplicationOut,
+    ApplyOptions,
     ConfirmRequest,
     OpenResponse,
     PrepareRequest,
     StageRequest,
     StatusChangeRequest,
+    TrackingUpdate,
 )
 from backend.services import application_service as svc
 
@@ -35,6 +37,13 @@ def open_listing(application_id: int, user: CurrentUser, db: DbSession) -> OpenR
     app = svc.owned_application(db, user, application_id)
     url = svc.open_listing(db, user, app)
     return OpenResponse(application=serializers.application_detail(db, user, app), url=url)
+
+
+@router.get("/{application_id}/apply-options", response_model=ApplyOptions)
+def apply_options(application_id: int, user: CurrentUser, db: DbSession) -> ApplyOptions:
+    """Where this job can be applied to, and whether Fill with JobPilot supports that page."""
+    app = svc.owned_application(db, user, application_id)
+    return ApplyOptions(**svc.apply_options(db, app))
 
 
 @router.post("/{application_id}/confirm", response_model=ApplicationDetail)
@@ -70,6 +79,14 @@ def withdraw(application_id: int, body: StatusChangeRequest, user: CurrentUser, 
 def stage(application_id: int, body: StageRequest, user: CurrentUser, db: DbSession) -> ApplicationDetail:
     app = svc.owned_application(db, user, application_id)
     svc.set_stage(db, user, app, body.stage, body.note)
+    return serializers.application_detail(db, user, app)
+
+
+@router.put("/{application_id}/tracking", response_model=ApplicationDetail)
+def tracking(application_id: int, body: TrackingUpdate, user: CurrentUser, db: DbSession) -> ApplicationDetail:
+    """Your notes and follow-up date for this application."""
+    app = svc.owned_application(db, user, application_id)
+    svc.update_tracking(db, user, app, body.model_dump(exclude_unset=True))
     return serializers.application_detail(db, user, app)
 
 

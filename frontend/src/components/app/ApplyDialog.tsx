@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CircleHelp, Copy, ExternalLink, FileText, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleHelp, Copy, ExternalLink, FileText, Loader2, Puzzle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, StatusBadge } from "@/components/app/common";
 import { downloadFile, errorMessage } from "@/lib/api";
-import { useApplicationAction } from "@/services/queries";
+import { useApplicationAction, useApplyOptions } from "@/services/queries";
 import type { ApplicationDetail, UserJob } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,7 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
   const [reference, setReference] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const openedRef = useRef(false);
+  const options = useApplyOptions(app?.id);
 
   useEffect(() => {
     if (!item) return;
@@ -62,10 +63,11 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
   if (!item) return null;
   const busy = action.isPending;
 
-  const openListing = () => {
-    if (!app || !item.job.job_url) return;
+  const hostedUrl = options.data?.hosted_form_url ?? null;
+  const openListing = (url: string | null = item.job.job_url) => {
+    if (!app || !url) return;
     // Open synchronously in the click handler (pop-up blockers), then record the event.
-    window.open(item.job.job_url, "_blank", "noopener,noreferrer");
+    window.open(url, "_blank", "noopener,noreferrer");
     openedRef.current = true;
     action.mutate({ kind: "open", id: app.id }, {
       onSuccess: (a) => setApp(a),
@@ -138,6 +140,17 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
                 <div className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-sm">{app.cover_letter}</div>
               </section>
             )}
+            {options.data && (
+              <section className={cn("flex gap-2 rounded-lg border p-3 text-sm", options.data.original_supported || hostedUrl ? "border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100" : "")}>
+                <Puzzle className="mt-0.5 size-4 shrink-0" />
+                <div>
+                  <p>{options.data.message}</p>
+                  {(options.data.original_supported || hostedUrl) && (
+                    <p className="mt-1 text-xs opacity-80">With the Fill with JobPilot browser extension connected (Settings → Browser extension), open the form and click Fill. You review every field and submit yourself.</p>
+                  )}
+                </div>
+              </section>
+            )}
             <p className="rounded-lg bg-muted p-3 text-sm">
               Next: open the original listing, complete the application <strong>on {item.job.platform}</strong>, then come back here and confirm.
               Opening the listing does not mark it as applied.
@@ -167,12 +180,19 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
             <>
               <Button variant="outline" onClick={onClose}>Close</Button>
               <Button variant="outline" onClick={() => setStep("returned")}>I already applied</Button>
-              <Button onClick={openListing} disabled={busy || !item.job.job_url}><ExternalLink /> Open original listing</Button>
+              {hostedUrl ? (
+                <>
+                  <Button variant="outline" onClick={() => openListing()} disabled={busy || !item.job.job_url}><ExternalLink /> Employer's listing</Button>
+                  <Button onClick={() => openListing(hostedUrl)} disabled={busy}><ExternalLink /> Open Greenhouse application form</Button>
+                </>
+              ) : (
+                <Button onClick={() => openListing()} disabled={busy || !item.job.job_url}><ExternalLink /> Open original listing</Button>
+              )}
             </>
           )}
           {step === "returned" && (
             <>
-              <Button variant="outline" onClick={openListing} disabled={busy}><ExternalLink /> Reopen listing</Button>
+              <Button variant="outline" onClick={() => openListing(hostedUrl ?? item.job.job_url)} disabled={busy}><ExternalLink /> Reopen listing</Button>
               <Button variant="outline" onClick={later} disabled={busy}>Not sure yet</Button>
               <Button variant="outline" onClick={() => confirm(false)} disabled={busy}><XCircle /> I didn't apply</Button>
               <Button onClick={() => confirm(true)} disabled={busy}>{busy ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} Yes, I submitted it</Button>

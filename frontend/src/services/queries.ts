@@ -11,6 +11,9 @@ import type {
   SavedSearchInput,
   SourcesOverview,
   ApplicationDetail,
+  ApplyOptions,
+  ExtensionDevice,
+  PairingCode,
   DashboardSummary,
   DiscoveryRun,
   EditableProfile,
@@ -23,6 +26,7 @@ import type {
   PlatformInfo,
   Preferences,
   ProfileResponse,
+  ResumeInfo,
   Report,
   SearchLink,
   Stage,
@@ -82,6 +86,9 @@ export interface JobQuery {
   work_mode?: string[];
   experience?: number;
   min_score?: number;
+  skill?: string;
+  salary_min_lpa?: number;
+  application_status?: string[];
   sort?: "score" | "posted" | "discovered";
   page?: number;
   page_size?: number;
@@ -389,3 +396,69 @@ export function useMarkNotifications() {
 
 export const useSourceHealth = () =>
   useQuery({ queryKey: qk.sources, queryFn: async () => (await api.get<SourcesOverview>("/discovery/sources")).data });
+
+// ---- browser extension ---------------------------------------------------------------------
+
+export const useApplyOptions = (applicationId?: number | null) =>
+  useQuery({
+    queryKey: ["apply-options", applicationId ?? 0],
+    queryFn: async () => (await api.get<ApplyOptions>(`/applications/${applicationId}/apply-options`)).data,
+    enabled: applicationId != null,
+    staleTime: 5 * 60_000,
+  });
+
+export const useExtensionDevices = () =>
+  useQuery({ queryKey: ["extension-devices"], queryFn: async () => (await api.get<ExtensionDevice[]>("/extension/devices")).data });
+
+export function useCreatePairingCode() {
+  return useMutation({ mutationFn: async () => (await api.post<PairingCode>("/extension/pairing-codes")).data });
+}
+
+export function useDisconnectDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/extension/devices/${id}`); },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["extension-devices"] }),
+  });
+}
+
+export function useUpdateTracking() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, notes, follow_up_at }: { id: number; notes?: string | null; follow_up_at?: string | null }) =>
+      (await api.put<ApplicationDetail>(`/applications/${id}/tracking`, { notes, follow_up_at })).data,
+    onSuccess: (a) => { qc.setQueryData(qk.application(a.id), a); void qc.invalidateQueries({ queryKey: ["applications"] }); },
+  });
+}
+
+// ---- resume versions, notification preferences ----------------------------------------------
+
+export const useResumes = () => useQuery({ queryKey: ["resumes"], queryFn: async () => (await api.get<ResumeInfo[]>("/profile/resumes")).data });
+
+export function useResumeAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (a: { kind: "default"; id: number } | { kind: "delete"; id: number } | { kind: "rename"; id: number; name: string } | { kind: "upload"; file: File; makeDefault: boolean }) => {
+      if (a.kind !== "upload") {
+        if (a.kind === "rename") return (await api.put(`/profile/resumes/${a.id}`, { name: a.name })).data;
+        if (a.kind === "default") return (await api.post(`/profile/resumes/${a.id}/default`)).data;
+        return (await api.delete(`/profile/resumes/${a.id}`)).data;
+      }
+      const fd = new FormData();
+      fd.append("file", a.file);
+      return (await api.post<ProfileResponse>("/profile/resume", fd, { params: { make_default: a.makeDefault }, timeout: 120_000 })).data;
+    },
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["resumes"] }); void qc.invalidateQueries({ queryKey: qk.profile }); },
+  });
+}
+
+export interface NotificationPrefs { new_matches: boolean; delivery: "immediate" | "daily_digest"; min_score: number | null; sources: string[]; email: "off" }
+export const useNotificationPrefs = () =>
+  useQuery({ queryKey: ["notification-prefs"], queryFn: async () => (await api.get<NotificationPrefs>("/notifications/preferences")).data });
+export function useSaveNotificationPrefs() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: NotificationPrefs) => (await api.put<NotificationPrefs>("/notifications/preferences", p)).data,
+    onSuccess: (d) => qc.setQueryData(["notification-prefs"], d),
+  });
+}

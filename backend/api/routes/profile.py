@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 
@@ -19,6 +19,7 @@ from backend.schemas.profile import (
     PlatformsUpdate,
     ProfileOut,
     ResumeOut,
+    ResumeRename,
     VerifiedFacts,
 )
 from backend.services import matching_service, preference_service, resume_service
@@ -75,10 +76,45 @@ def put_facts(body: VerifiedFacts, user: CurrentUser, db: DbSession) -> ProfileO
 
 
 @router.post("/profile/resume", response_model=ProfileOut, status_code=status.HTTP_201_CREATED)
-async def upload_resume(user: CurrentUser, db: DbSession, settings: SettingsDep, file: UploadFile = File(...)) -> ProfileOut:
-    await resume_service.store_upload(db, settings, user, file)
-    resume_service.parse_active_resume(db, settings, user)
+async def upload_resume(user: CurrentUser, db: DbSession, settings: SettingsDep, file: UploadFile = File(...),
+                        make_default: bool = Query(True, description="Use it for applications (and re-read it into the profile for review)"),
+                        name: str | None = Query(None, max_length=120, description="Display name, e.g. 'Resume - FP&A roles'")) -> ProfileOut:
+    r = await resume_service.store_upload(db, settings, user, file, make_default=make_default, name=name)
+    if r.is_active:
+        resume_service.parse_active_resume(db, settings, user)
     return _profile_out(db, user)
+
+
+@router.get("/profile/resumes", response_model=list[ResumeOut])
+def list_resumes(user: CurrentUser, db: DbSession) -> list[ResumeOut]:
+    rows = db.execute(select(Resume).where(Resume.user_id == user.id).order_by(Resume.is_active.desc(), Resume.id.desc())).scalars()
+    return [ResumeOut.model_validate(r) for r in rows]
+
+
+@router.post("/profile/resumes/{resume_id}/default", response_model=list[ResumeOut])
+def make_default(resume_id: int, user: CurrentUser, db: DbSession) -> list[ResumeOut]:
+    """Use this resume for new applications and the extension. Your confirmed profile is not changed."""
+    resume_service.set_default(db, user, resume_service.owned_resume(db, user, resume_id))
+    return list_resumes(user, db)
+
+
+@router.put("/profile/resumes/{resume_id}", response_model=ResumeOut)
+def rename_resume(resume_id: int, body: ResumeRename, user: CurrentUser, db: DbSession) -> ResumeOut:
+    return ResumeOut.model_validate(resume_service.rename(db, resume_service.owned_resume(db, user, resume_id), body.name))
+
+
+@router.delete("/profile/resumes/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_resume(resume_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep) -> None:
+    resume_service.delete(db, settings, user, resume_service.owned_resume(db, user, resume_id))
+
+
+@router.get("/profile/resumes/{resume_id}/file")
+def resume_file(resume_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep,
+                inline: bool = Query(False, description="true to preview in the browser")) -> FileResponse:
+    r = resume_service.owned_resume(db, user, resume_id)
+    return FileResponse(resume_service.resume_file(settings, user, r), media_type="application/pdf", filename=r.original_filename,
+                        content_disposition_type="inline" if inline else "attachment",
+                        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/profile/resume")

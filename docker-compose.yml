@@ -5,12 +5,14 @@
 #   docker compose --profile tunnel up -d --build         start with the ngrok tunnel
 #   docker compose down        stop (data is kept). Never use `down -v`: it deletes the database volume.
 #
-# Restart policy is "on-failure": crashed containers restart, but nothing starts by itself at boot.
+# Restart policy is "unless-stopped": containers come back after a crash and after the host reboots (Docker starts at
+# boot), unless they were stopped on purpose with ./deploy/stop.sh. Postgres → backend → frontend/ngrok start in order,
+# each waiting for the previous one to be healthy. The tunnel address is republished by deploy/url_watch.sh (cron).
 
 name: jobpilot
 
 x-limits: &limits
-  restart: on-failure:5
+  restart: unless-stopped
   logging:
     driver: json-file
     options: { max-size: "10m", max-file: "3" }
@@ -86,6 +88,11 @@ services:
       backend: { condition: service_healthy }
     ports:
       - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits: { cpus: "0.5", memory: 128M }
@@ -106,6 +113,11 @@ services:
     command: ["exec ngrok --config=/var/lib/ngrok/ngrok.yml http http://backend:8000 --log stdout --log-format logfmt $${NGROK_DOMAIN:+--url=$${NGROK_DOMAIN}}"]
     ports:
       - "127.0.0.1:${NGROK_INSPECT_PORT:-4041}:4040"   # local inspector/API, used by deploy/start.sh
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:4040/api/tunnels | grep -q public_url || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits: { cpus: "0.25", memory: 128M }

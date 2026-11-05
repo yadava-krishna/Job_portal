@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Recorded copies of live employer application forms: used for local tests only, not redistributed.
+tests/fixtures/recorded/

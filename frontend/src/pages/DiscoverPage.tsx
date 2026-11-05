@@ -19,7 +19,7 @@ import { pollRun, useDiscover, useInvalidateWork, useJobAction, useJobs, useSave
 import { FeedEmptyState, RunSummary } from "@/components/app/discovery";
 import type { UserJob } from "@/types/api";
 
-const PLATFORMS = ["LinkedIn", "Indeed", "Naukri", "Greenhouse", "Lever", "Ashby", "Adzuna"];
+const PLATFORMS = ["LinkedIn", "Indeed", "Naukri", "Greenhouse", "Lever", "Ashby", "SmartRecruiters", "Recruitee", "Adzuna"];
 const POSTED: [NonNullable<JobQuery["posted"]>, string][] = [
   ["any", "Any date"], ["today", "Posted today"], ["24h", "24 hours"], ["3d", "3 days"], ["7d", "7 days"], ["30d", "30 days"], ["range", "Date range"],
 ];
@@ -233,6 +233,12 @@ export function DiscoverPage() {
             <NativeSelect ariaLabel="Work mode" value={draft.work_mode?.[0] ?? ""} onChange={(v) => set("work_mode", v ? [v] : [])}
                           options={[{ value: "", label: "Any work mode" }, { value: "Remote", label: "Remote" }, { value: "Hybrid", label: "Hybrid" }, { value: "On-site", label: "On-site" }]} />
             <Input value={draft.company ?? ""} onChange={(e) => set("company", e.target.value)} placeholder="Company" aria-label="Company" />
+            <Input value={draft.skill ?? ""} onChange={(e) => set("skill", e.target.value)} placeholder="Skill (e.g. Excel)" aria-label="Skill" />
+            <Input type="number" min={0} step={1} value={draft.salary_min_lpa ?? ""} onChange={(e) => set("salary_min_lpa", e.target.value === "" ? undefined : Number(e.target.value))}
+                   placeholder="Min salary (LPA, when listed)" aria-label="Minimum salary in lakhs per annum" />
+            <NativeSelect ariaLabel="Application status" value={draft.application_status?.[0] ?? ""} onChange={(v) => set("application_status", v ? [v] : [])}
+                          options={[{ value: "", label: "Any application status" }, { value: "none", label: "Not applied" }, { value: "PREPARED", label: "Prepared" },
+                                    { value: "OPENED", label: "Opened / in progress" }, { value: "SUBMITTED", label: "Applied" }]} />
             <Input value={draft.industry ?? ""} onChange={(e) => set("industry", e.target.value)} placeholder="Industry (e.g. Fintech)" aria-label="Industry" />
             <NativeSelect ariaLabel="Employment type" value={draft.employment_type?.[0] ?? ""} onChange={(v) => set("employment_type", v ? [v] : [])}
                           options={[{ value: "", label: "Any employment type" }, ...["Full-time", "Part-time", "Contract", "Internship", "Temporary"].map((t) => ({ value: t, label: t }))]} />

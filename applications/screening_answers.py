@@ -33,7 +33,9 @@ _SENSITIVE = [
     ("notice_period", r"notice\s+period|how\s+soon|serving\s+notice|last\s+working\s+day", "notice_period"),
     ("start_date", r"start\s+date|join(ing)?\s+date|when\s+can\s+you\s+(start|join)|availability\s+to\s+join|available\s+to\s+(start|join)", "earliest_start_date"),
     ("relocation", r"relocat", "willing_to_relocate"),
-    ("work_authorization", r"authori[sz]ed\s+to\s+work|work\s+(authori[sz]ation|permit)|visa|sponsorship|citizen", "work_authorization"),
+    ("sponsorship", r"sponsor", "requires_sponsorship"),
+    ("work_authorization", r"authori[sz]ed\s+to\s+work|work\s+(authori[sz]ation|permit)|visa|citizen", "work_authorization"),
+    ("relevant_experience", r"relevant\s+(work\s+)?experience", "relevant_experience"),
     ("shift", r"\bshift|night|rotational|us\s+hours|uk\s+hours", "shift_flexibility"),
 ]
 _PERSONAL_NEVER = r"\b(gender|age|date\s+of\s+birth|dob|marital|religion|caste|disabilit|pan\b|aadhaar|passport\s+number|bank)"
@@ -55,6 +57,10 @@ class ScreeningAnswerer:
 
         if re.search(_PERSONAL_NEVER, ql):
             return _needs(q, "personal/legal information is never answered automatically")
+
+        saved = self._saved_answer(q)
+        if saved is not None:
+            return saved
 
         for category, pattern, fact_key in _SENSITIVE:
             if re.search(pattern, ql):
@@ -94,6 +100,23 @@ class ScreeningAnswerer:
                 return {"question": q, "answer": f"Yes - resume: \"{evidence}\"", "source": "resume text", "status": "ANSWERED_FROM_RESUME"}
         return _needs(q, "cannot be answered from verified information")
 
+    def _saved_answer(self, q: str) -> dict[str, str] | None:
+        """The user's own approved answer to this (or an equivalently worded) question."""
+        mine = _words(q)
+        best, best_score = None, 0.0
+        for i, item in enumerate(self.facts.get("custom_answers") or []):
+            if not isinstance(item, dict) or not item.get("answer"):
+                continue
+            theirs = _words(item.get("question", ""))
+            if not mine or not theirs:
+                continue
+            score = 1.0 if mine == theirs else len(mine & theirs) / len(mine | theirs)
+            if score > best_score:
+                best, best_score = (i, item), score
+        if best is None or best_score < 0.75 or (best_score < 1.0 and min(len(mine), len(_words(best[1]["question"]))) < 3):
+            return None
+        return {"question": q, "answer": str(best[1]["answer"]), "source": f"answer_bank.{best[0]}", "status": "ANSWERED"}
+
     def _mentions_skill(self, q: str) -> str | None:
         hits = self.taxonomy.find(q)
         return hits[0].skill if hits else None
@@ -101,6 +124,13 @@ class ScreeningAnswerer:
     def _evidence(self, skill: str) -> str | None:
         hits = [h for h in self.taxonomy.find(self.profile.get("resume_text", "")) if h.skill == skill]
         return hits[0].snippet if hits else None
+
+
+_STOP = {"a", "an", "the", "is", "are", "you", "your", "do", "what", "please", "of", "in", "for", "to", "and", "or", "if", "any"}
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower()) if w not in _STOP}
 
 
 def _needs(q: str, reason: str) -> dict[str, str]:

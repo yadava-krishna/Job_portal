@@ -15,6 +15,8 @@ SOURCES = {
     "greenhouse": ("ats", "Greenhouse job boards (official API)"),
     "lever": ("ats", "Lever job boards (official API)"),
     "ashby": ("ats", "Ashby job boards (official API)"),
+    "smartrecruiters": ("ats", "SmartRecruiters job boards (official Posting API)"),
+    "recruitee": ("ats", "Recruitee careers sites (official Careers Site API)"),
     "adzuna_api": ("api", "Adzuna Jobs API"),
     "alert_email": ("email", "Job-alert emails (user mailbox)"),
     "browser_clipper": ("clip", "Browser clipper"),
