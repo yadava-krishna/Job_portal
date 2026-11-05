@@ -106,6 +106,18 @@ def _enrich_existing(job: Job, nj: NormalizedJob) -> None:
         job.posted_at_confidence = posted_confidence(nj.posted_at, nj.posted_at_source)
 
 
+def _fit_columns(obj) -> None:
+    """Trim text that is longer than its column (e.g. a salary field holding a whole pay table), instead of failing."""
+    from sqlalchemy import String, inspect as sa_inspect
+
+    for col in sa_inspect(type(obj)).columns:
+        length = getattr(col.type, "length", None)
+        if isinstance(col.type, String) and length:
+            value = getattr(obj, col.key, None)
+            if isinstance(value, str) and len(value) > length:
+                setattr(obj, col.key, value[: length - 1].rstrip() + "…")
+
+
 def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
     """Insert a public listing, or merge it into the job it duplicates. Returns (job, created)."""
     now = utcnow()
@@ -115,6 +127,7 @@ def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
         job = Job(job_key=nj.key, posted_at=nj.posted_at, posted_at_source=nj.posted_at_source if nj.posted_at else None,
                   posted_at_confidence=posted_confidence(nj.posted_at, nj.posted_at_source), discovered_at=now,
                   description_is_snippet=nj.description_is_snippet, **nj.job_columns())
+        _fit_columns(job)
         db.add(job)
         try:
             with db.begin_nested():
@@ -126,13 +139,16 @@ def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
                 raise
     if not created:
         _enrich_existing(job, nj)
+        _fit_columns(job)
     if nj.source in ATS_SOURCES:
         job.last_verified_at, job.closed_at = now, None  # listed on the employer's board right now
     link = db.execute(select(JobSourceLink).where(JobSourceLink.source_key == nj.source_key)).scalar_one_or_none()
     if link is None:
-        db.add(JobSourceLink(job_id=job.id, source=nj.source, platform=nj.platform, source_key=nj.source_key, url=nj.job_url,
+        link = JobSourceLink(job_id=job.id, source=nj.source, platform=nj.platform, source_key=nj.source_key, url=nj.job_url,
                              posted_at=nj.posted_at, posted_at_source=nj.posted_at_source if nj.posted_at else None,
-                             first_seen_at=now, last_seen_at=now))
+                             first_seen_at=now, last_seen_at=now)
+        _fit_columns(link)
+        db.add(link)
     else:
         link.last_seen_at, link.url = now, nj.job_url or link.url
     db.flush()
@@ -282,10 +298,18 @@ def ingest_normalized(db: Session, user: User, run: DiscoveryRun, items: Iterabl
         if not explicit_sources and platform not in enabled and nj.source not in USER_PROVIDED_SOURCES and nj.source not in ATS_SOURCES:
             _stat(run, platform, "skipped_platform_disabled")
             continue
-        job, job_created = upsert_normalized(db, nj)
+        try:  # one malformed listing must never fail the whole run
+            with db.begin_nested():
+                job, job_created = upsert_normalized(db, nj)
+                uj, created = add_to_feed(db, user, job, run, nj.source)
+        except Exception as exc:
+            run.jobs_found -= 1
+            _error(db, user, run, "LISTING_SKIPPED", f"{nj.company}: {nj.title[:80]}: {type(exc).__name__}", platform=platform, job_key=nj.key)
+            if nj.source in (run.source_results or {}):
+                source_result(run, nj.source, failed_requests=1)
+            continue
         if job_created:
             _stat(run, platform, "new_listings")
-        uj, created = add_to_feed(db, user, job, run, nj.source)
         tracked = nj.source in (run.source_results or {})
         if created:
             run.jobs_new += 1

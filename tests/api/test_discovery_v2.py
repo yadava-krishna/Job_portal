@@ -318,7 +318,8 @@ def test_add_company_by_url_validates_the_board(client, boards, resume_bytes):
 def test_directory_suggested_and_bulk_watch(client, boards, resume_bytes):
     h = onboard(client, "dir@example.com", resume_bytes)
     suggested = client.get(f"{API}/companies/suggested", headers=h).json()
-    assert len(suggested) >= 20 and all(s["curated"] and s["industry"] for s in suggested)
+    # Hand-curated employers carry an industry; employers added from the 2026-11-05 directory scan have none (unknown, not guessed).
+    assert len(suggested) >= 20 and all(s["curated"] for s in suggested) and sum(bool(s["industry"]) for s in suggested) >= 20
     found = client.get(f"{API}/companies/directory", headers=h, params={"q": "razorpay"}).json()
     assert found[0]["name"] == "Razorpay" and found[0]["curated"] and found[0]["ats"] == "greenhouse"
     jobsync = client.get(f"{API}/companies/directory", headers=h, params={"q": "1password", "ats": "ashby"}).json()

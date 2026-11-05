@@ -1,6 +1,6 @@
 {
  "verified_on": "2026-11-04",
- "note": "Each board answered the official API with listed jobs located in India (or remote) on verified_on.",
+ "note": "Each board answered the official API with listed jobs located in India (or remote) on verified_on. Extended 2026-11-05: boards from the JobSync directory (MIT, see NOTICE.md) whose official API listed a finance/accounting role in India or at least 10 India-located jobs, plus SmartRecruiters employers read with country=in (region). Re-verify periodically; boards that stop answering are reported per run and can be removed.",
  "companies": [
   {
    "name": "Razorpay",
@@ -211,6 +211,1595 @@
    "token": "headout",
    "industry": "Travel",
    "domain": "headout.com"
+  },
+  {
+   "name": "Amperos",
+   "ats": "ashby",
+   "token": "amperos",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "WPP",
+   "ats": "greenhouse",
+   "token": "wpp",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 85
+  },
+  {
+   "name": "Zeta Global",
+   "ats": "greenhouse",
+   "token": "zetaglobal",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 35
+  },
+  {
+   "name": "Bottomline",
+   "ats": "greenhouse",
+   "token": "bottomlinetechnologies",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "Zscaler",
+   "ats": "greenhouse",
+   "token": "zscaler",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 83
+  },
+  {
+   "name": "Instawork",
+   "ats": "greenhouse",
+   "token": "instawork",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 39
+  },
+  {
+   "name": "Fictiv",
+   "ats": "greenhouse",
+   "token": "fictiv",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 32
+  },
+  {
+   "name": "Riveron",
+   "ats": "ashby",
+   "token": "riveron",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 24
+  },
+  {
+   "name": "Fresh Prints",
+   "ats": "greenhouse",
+   "token": "freshprints",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 21
+  },
+  {
+   "name": "Toast",
+   "ats": "greenhouse",
+   "token": "toast",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 18
+  },
+  {
+   "name": "Galaxy",
+   "ats": "greenhouse",
+   "token": "galaxydigitalservices",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "Xometry",
+   "ats": "greenhouse",
+   "token": "xometry",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "Omnicom Media",
+   "ats": "greenhouse",
+   "token": "mediabrands",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "Aleph",
+   "ats": "lever",
+   "token": "aleph",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "StockX",
+   "ats": "greenhouse",
+   "token": "stockx",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "Nivoda",
+   "ats": "ashby",
+   "token": "nivoda",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "DigiCert",
+   "ats": "greenhouse",
+   "token": "digicert",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 8
+  },
+  {
+   "name": "Legion",
+   "ats": "greenhouse",
+   "token": "legion",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "Cogent Talent Solutions",
+   "ats": "lever",
+   "token": "cogentanalytics",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 5
+  },
+  {
+   "name": "LaunchDarkly",
+   "ats": "greenhouse",
+   "token": "launchdarkly",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 4
+  },
+  {
+   "name": "billups",
+   "ats": "ashby",
+   "token": "billups",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 3
+  },
+  {
+   "name": "Cohere Health",
+   "ats": "greenhouse",
+   "token": "coherehealth",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 37
+  },
+  {
+   "name": "Point72",
+   "ats": "greenhouse",
+   "token": "point72",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 37
+  },
+  {
+   "name": "Portage Point Partners",
+   "ats": "lever",
+   "token": "portagepointpartners",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 28
+  },
+  {
+   "name": "OLIVER - APAC",
+   "ats": "greenhouse",
+   "token": "oliverseapac",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 27
+  },
+  {
+   "name": "Mactores",
+   "ats": "lever",
+   "token": "mactores",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 26
+  },
+  {
+   "name": "Keyloop",
+   "ats": "lever",
+   "token": "keyloop",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 25
+  },
+  {
+   "name": "Mitsogo Inc",
+   "ats": "greenhouse",
+   "token": "mitsogoinc",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 24
+  },
+  {
+   "name": "Dun & Bradstreet",
+   "ats": "lever",
+   "token": "dnb",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 23
+  },
+  {
+   "name": "Wing Assistant",
+   "ats": "lever",
+   "token": "getwingapp",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 23
+  },
+  {
+   "name": "Glance",
+   "ats": "greenhouse",
+   "token": "glance",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 22
+  },
+  {
+   "name": "Quince",
+   "ats": "greenhouse",
+   "token": "quince",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 21
+  },
+  {
+   "name": "G2",
+   "ats": "ashby",
+   "token": "g2",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 21
+  },
+  {
+   "name": "Fivetran",
+   "ats": "greenhouse",
+   "token": "fivetran",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 19
+  },
+  {
+   "name": "Avathon",
+   "ats": "greenhouse",
+   "token": "avathon",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "Bureau",
+   "ats": "ashby",
+   "token": "bureau",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "Arcesium LLC",
+   "ats": "greenhouse",
+   "token": "arcesiumllc",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "Precision Medicine Group",
+   "ats": "greenhouse",
+   "token": "precisionmedicinegroup",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "Skild AI",
+   "ats": "greenhouse",
+   "token": "skildai-careers",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "VaynerMedia LLC",
+   "ats": "greenhouse",
+   "token": "vaynermedia",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Zinnia",
+   "ats": "greenhouse",
+   "token": "zinnia",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Nium",
+   "ats": "lever",
+   "token": "nium",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "CertifyOS",
+   "ats": "ashby",
+   "token": "certifyos",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Snowflake",
+   "ats": "ashby",
+   "token": "snowflake",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Precisely International Jobs",
+   "ats": "greenhouse",
+   "token": "preciselyinternationaljobs",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "Precision for Medicine",
+   "ats": "greenhouse",
+   "token": "pfm",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 9
+  },
+  {
+   "name": "Parallel Wireless",
+   "ats": "lever",
+   "token": "parallelwireless",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 9
+  },
+  {
+   "name": "G-P",
+   "ats": "greenhouse",
+   "token": "globalizationpartners",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 8
+  },
+  {
+   "name": "Inizio Ignite | Putnam",
+   "ats": "greenhouse",
+   "token": "putnamassociatesllc",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 8
+  },
+  {
+   "name": "AppZen, Inc.",
+   "ats": "lever",
+   "token": "appzen",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 8
+  },
+  {
+   "name": "Couchbase, Inc.",
+   "ats": "greenhouse",
+   "token": "couchbaseinc",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "Coursera",
+   "ats": "greenhouse",
+   "token": "coursera",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "iCapital",
+   "ats": "greenhouse",
+   "token": "icapitalnetwork",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "Modulr",
+   "ats": "greenhouse",
+   "token": "modulrfinance",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "Taboola",
+   "ats": "greenhouse",
+   "token": "taboola",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "Megaport",
+   "ats": "lever",
+   "token": "megaport",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 7
+  },
+  {
+   "name": "Blenheim Chalcot India",
+   "ats": "greenhouse",
+   "token": "blenheimchalcotindia",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 6
+  },
+  {
+   "name": "Firework",
+   "ats": "lever",
+   "token": "fireworkhq",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 6
+  },
+  {
+   "name": "Inizio",
+   "ats": "greenhouse",
+   "token": "inizio",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 5
+  },
+  {
+   "name": "Jensen Hughes",
+   "ats": "greenhouse",
+   "token": "jensenhughes",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 5
+  },
+  {
+   "name": "Cyara",
+   "ats": "lever",
+   "token": "cyara",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 4
+  },
+  {
+   "name": "e.l.f. Beauty",
+   "ats": "lever",
+   "token": "elfbeauty",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 4
+  },
+  {
+   "name": "Findem",
+   "ats": "lever",
+   "token": "findem",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 4
+  },
+  {
+   "name": "FloQast",
+   "ats": "lever",
+   "token": "floqast",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 4
+  },
+  {
+   "name": "Commure",
+   "ats": "ashby",
+   "token": "commure",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 4
+  },
+  {
+   "name": "ArmorCode Inc.",
+   "ats": "greenhouse",
+   "token": "armorcode",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 3
+  },
+  {
+   "name": "CrowdGen by Appen",
+   "ats": "lever",
+   "token": "appen",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 2
+  },
+  {
+   "name": "AJ Boggs/ProPower",
+   "ats": "greenhouse",
+   "token": "ajboggs",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 1
+  },
+  {
+   "name": "Labelbox",
+   "ats": "greenhouse",
+   "token": "labelbox",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 1
+  },
+  {
+   "name": "Vercel",
+   "ats": "greenhouse",
+   "token": "vercel",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 1
+  },
+  {
+   "name": "Cambium Networks",
+   "ats": "lever",
+   "token": "cambiumnetworks",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 1
+  },
+  {
+   "name": "Brillio",
+   "ats": "lever",
+   "token": "brillio-2",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 150
+  },
+  {
+   "name": "Capco",
+   "ats": "greenhouse",
+   "token": "capco",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 121
+  },
+  {
+   "name": "HighLevel",
+   "ats": "lever",
+   "token": "gohighlevel",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 81
+  },
+  {
+   "name": "Everpure",
+   "ats": "greenhouse",
+   "token": "purestorage",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 66
+  },
+  {
+   "name": "Anaplan",
+   "ats": "greenhouse",
+   "token": "anaplan",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 59
+  },
+  {
+   "name": "VML/WPP Enterprise Solutions",
+   "ats": "greenhouse",
+   "token": "vmlenterprisesolutions",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 53
+  },
+  {
+   "name": "Meridial",
+   "ats": "greenhouse",
+   "token": "agency",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 51
+  },
+  {
+   "name": "Bjak",
+   "ats": "ashby",
+   "token": "bjakcareer",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 50
+  },
+  {
+   "name": "Coupang",
+   "ats": "greenhouse",
+   "token": "coupang",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 42
+  },
+  {
+   "name": "Ethos Life",
+   "ats": "greenhouse",
+   "token": "ethoslife",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 40
+  },
+  {
+   "name": "Ensono",
+   "ats": "greenhouse",
+   "token": "ensono",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 38
+  },
+  {
+   "name": "Extreme Networks",
+   "ats": "lever",
+   "token": "extremenetworks",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 38
+  },
+  {
+   "name": "Zenoti",
+   "ats": "greenhouse",
+   "token": "zenoti",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 34
+  },
+  {
+   "name": "OpenGov",
+   "ats": "ashby",
+   "token": "opengov",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 34
+  },
+  {
+   "name": "Careers at Tide",
+   "ats": "greenhouse",
+   "token": "tide",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 33
+  },
+  {
+   "name": "AlphaSense",
+   "ats": "greenhouse",
+   "token": "alphasense",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 32
+  },
+  {
+   "name": "AlphaSense India",
+   "ats": "greenhouse",
+   "token": "alphasenseindia",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 30
+  },
+  {
+   "name": "VML",
+   "ats": "greenhouse",
+   "token": "wundermanthompson",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 30
+  },
+  {
+   "name": "Insomnia Cookies",
+   "ats": "lever",
+   "token": "insomniacookies",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 30
+  },
+  {
+   "name": "Celonis",
+   "ats": "greenhouse",
+   "token": "celonis",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 28
+  },
+  {
+   "name": "Payoneer",
+   "ats": "greenhouse",
+   "token": "payoneer",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 28
+  },
+  {
+   "name": "NETGEAR",
+   "ats": "ashby",
+   "token": "netgear",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 28
+  },
+  {
+   "name": "Graphcore",
+   "ats": "greenhouse",
+   "token": "graphcore",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 25
+  },
+  {
+   "name": "OneTrust",
+   "ats": "greenhouse",
+   "token": "onetrust",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 24
+  },
+  {
+   "name": "LifeStance Health",
+   "ats": "lever",
+   "token": "lifestance",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 24
+  },
+  {
+   "name": "Atlys",
+   "ats": "ashby",
+   "token": "atlys",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 24
+  },
+  {
+   "name": "Five9",
+   "ats": "greenhouse",
+   "token": "five9",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 23
+  },
+  {
+   "name": "cargo-partner",
+   "ats": "lever",
+   "token": "cargo-partner",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 23
+  },
+  {
+   "name": "Smartsheet",
+   "ats": "greenhouse",
+   "token": "smartsheet",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 22
+  },
+  {
+   "name": "Drivetrain",
+   "ats": "lever",
+   "token": "drivetrain",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 22
+  },
+  {
+   "name": "eClinical Solutions",
+   "ats": "greenhouse",
+   "token": "eclinicalsolutions",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 21
+  },
+  {
+   "name": "Kaseya Careers",
+   "ats": "greenhouse",
+   "token": "kaseya",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 21
+  },
+  {
+   "name": "Astera Labs",
+   "ats": "greenhouse",
+   "token": "asteralabs",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 20
+  },
+  {
+   "name": "Karya",
+   "ats": "greenhouse",
+   "token": "karya",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 20
+  },
+  {
+   "name": "Addepar",
+   "ats": "greenhouse",
+   "token": "addepar1",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 19
+  },
+  {
+   "name": "DigitalOcean",
+   "ats": "greenhouse",
+   "token": "digitalocean98",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 19
+  },
+  {
+   "name": "Netskope",
+   "ats": "greenhouse",
+   "token": "netskope",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 19
+  },
+  {
+   "name": "OpenFX",
+   "ats": "greenhouse",
+   "token": "openfx",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 19
+  },
+  {
+   "name": "JumpCloud",
+   "ats": "lever",
+   "token": "jumpcloud",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 19
+  },
+  {
+   "name": "Backbase",
+   "ats": "greenhouse",
+   "token": "workatbackbase",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 18
+  },
+  {
+   "name": "Crunchyroll, LLC",
+   "ats": "greenhouse",
+   "token": "crunchyroll",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 18
+  },
+  {
+   "name": "Konovo",
+   "ats": "greenhouse",
+   "token": "konovo",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 18
+  },
+  {
+   "name": "Pico",
+   "ats": "greenhouse",
+   "token": "picoquantitativetrading",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 18
+  },
+  {
+   "name": "SentinelOne",
+   "ats": "greenhouse",
+   "token": "sentinellabs",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 18
+  },
+  {
+   "name": "DevRev",
+   "ats": "greenhouse",
+   "token": "devrev",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "EnCharge AI",
+   "ats": "greenhouse",
+   "token": "enchargeai36",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "HackerRank Careers",
+   "ats": "greenhouse",
+   "token": "hackerrank",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "Syndigo",
+   "ats": "greenhouse",
+   "token": "syndigo",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "Truecaller",
+   "ats": "greenhouse",
+   "token": "truecaller",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "Dozee",
+   "ats": "lever",
+   "token": "dozee",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 17
+  },
+  {
+   "name": "NeuraFlash, Part of Accenture",
+   "ats": "greenhouse",
+   "token": "neuraflash",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 16
+  },
+  {
+   "name": "Level AI",
+   "ats": "lever",
+   "token": "levelai",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 16
+  },
+  {
+   "name": "Safe Security",
+   "ats": "lever",
+   "token": "safe",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 16
+  },
+  {
+   "name": "Handshake",
+   "ats": "ashby",
+   "token": "handshake",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 16
+  },
+  {
+   "name": "Nightfall AI",
+   "ats": "ashby",
+   "token": "nightfall-ai",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 16
+  },
+  {
+   "name": "Landor",
+   "ats": "greenhouse",
+   "token": "landor",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "New Era Technology",
+   "ats": "greenhouse",
+   "token": "neweratech",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "NICE",
+   "ats": "greenhouse",
+   "token": "nice",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "ION Group",
+   "ats": "lever",
+   "token": "ion",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "PingWind",
+   "ats": "lever",
+   "token": "pingwind",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "RWS TrainAI",
+   "ats": "lever",
+   "token": "rws",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "Ema",
+   "ats": "ashby",
+   "token": "ema",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 15
+  },
+  {
+   "name": "Appian Corporation",
+   "ats": "greenhouse",
+   "token": "appian",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "Cognite - AI for Industry",
+   "ats": "greenhouse",
+   "token": "cognite",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "JazzX AI",
+   "ats": "greenhouse",
+   "token": "jazzx-ai",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "Navan",
+   "ats": "greenhouse",
+   "token": "tripactions",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "Particle41",
+   "ats": "greenhouse",
+   "token": "particle41llc",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "Zocdoc",
+   "ats": "greenhouse",
+   "token": "zocdoc",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "Endpoint Clinical",
+   "ats": "lever",
+   "token": "endpointclinical",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 14
+  },
+  {
+   "name": "Axi",
+   "ats": "greenhouse",
+   "token": "axicorpfinancialservicesptyltd",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "Bitwarden",
+   "ats": "greenhouse",
+   "token": "bitwarden",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "CloudSEK",
+   "ats": "greenhouse",
+   "token": "cloudsek",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "Prodigal",
+   "ats": "greenhouse",
+   "token": "prodigal",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "Study.com C",
+   "ats": "greenhouse",
+   "token": "studycontractors",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "Coupa Software, Inc.",
+   "ats": "lever",
+   "token": "coupa",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 13
+  },
+  {
+   "name": "Headout",
+   "ats": "greenhouse",
+   "token": "headoutcareers",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Inizio Ignite",
+   "ats": "greenhouse",
+   "token": "ashfieldadvisory",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Litmos",
+   "ats": "greenhouse",
+   "token": "litmos",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Nebius",
+   "ats": "greenhouse",
+   "token": "nebius",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "NewRocket",
+   "ats": "greenhouse",
+   "token": "highmetric",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Lochmueller Group",
+   "ats": "lever",
+   "token": "lochgroup",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Kong",
+   "ats": "ashby",
+   "token": "kong",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Lyric",
+   "ats": "ashby",
+   "token": "lyric",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "SigNoz",
+   "ats": "ashby",
+   "token": "signoz",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 12
+  },
+  {
+   "name": "Abnormal",
+   "ats": "greenhouse",
+   "token": "abnormalsecurity",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Agoda",
+   "ats": "greenhouse",
+   "token": "agoda",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Amtech Software",
+   "ats": "greenhouse",
+   "token": "amtechsoftware",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Endor Labs",
+   "ats": "greenhouse",
+   "token": "endorlabs",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Scopely",
+   "ats": "greenhouse",
+   "token": "scopely",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "ZoomInfo Technologies LLC",
+   "ats": "greenhouse",
+   "token": "zoominfo",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "Cin7",
+   "ats": "lever",
+   "token": "cin7",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "GALE",
+   "ats": "lever",
+   "token": "galepartners",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "ClickHouse",
+   "ats": "ashby",
+   "token": "clickhouse",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 11
+  },
+  {
+   "name": "AiDASH, Inc.",
+   "ats": "greenhouse",
+   "token": "aidashinc",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "Balbix",
+   "ats": "lever",
+   "token": "balbix",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "BPM LLP",
+   "ats": "lever",
+   "token": "bpmcpa",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "Brevo",
+   "ats": "lever",
+   "token": "brevo",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "Cprime",
+   "ats": "lever",
+   "token": "cprime",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "Protolabs",
+   "ats": "lever",
+   "token": "protolabs",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "UiPath",
+   "ats": "ashby",
+   "token": "uipath",
+   "industry": null,
+   "origin": "directory_scan",
+   "verified_on": "2026-11-05",
+   "india_postings": 10
+  },
+  {
+   "name": "Bosch Group",
+   "ats": "smartrecruiters",
+   "token": "BoschGroup",
+   "region": "in",
+   "industry": null,
+   "origin": "verified_manually",
+   "verified_on": "2026-11-05",
+   "india_postings": 570
+  },
+  {
+   "name": "SGS",
+   "ats": "smartrecruiters",
+   "token": "SGS",
+   "region": "in",
+   "industry": null,
+   "origin": "verified_manually",
+   "verified_on": "2026-11-05",
+   "india_postings": 28
+  },
+  {
+   "name": "ServiceNow",
+   "ats": "smartrecruiters",
+   "token": "ServiceNow",
+   "region": "in",
+   "industry": null,
+   "origin": "verified_manually",
+   "verified_on": "2026-11-05",
+   "india_postings": 86
+  },
+  {
+   "name": "Freshworks",
+   "ats": "smartrecruiters",
+   "token": "Freshworks",
+   "region": "in",
+   "industry": null,
+   "origin": "verified_manually",
+   "verified_on": "2026-11-05",
+   "india_postings": 34
+  },
+  {
+   "name": "Experian",
+   "ats": "smartrecruiters",
+   "token": "Experian",
+   "region": "in",
+   "industry": null,
+   "origin": "verified_manually",
+   "verified_on": "2026-11-05",
+   "india_postings": 37
   }
  ]
 }

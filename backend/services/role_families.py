@@ -36,7 +36,8 @@ FAMILIES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
 
 # A related-title match is rejected when the job is clearly a different profession (e.g. "Staff Engineer, Billing").
 FOREIGN_ROLES = ("engineer", "engineering", "developer", "architect", "designer", "scientist", "creator", "recruiter", "marketing",
-                 "account executive", "sales", "solutions consultant", "product manager", "product analyst", "data scientist")
+                 "account executive", "sales", "solutions consultant", "product manager", "product analyst", "data scientist",
+                 "data collection", "data annotation", "annotator", "ai trainer", "voice recording", "transcription")
 
 
 def _has(text: str, phrase: str) -> bool:

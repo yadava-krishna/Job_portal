@@ -121,3 +121,47 @@ def test_feed_filters_by_skill_and_application_status(client, boards, resume_byt
     assert [i["user_job_id"] for i in prepared] == [first]
     none = client.get(f"{API}/jobs", headers=h, params={"application_status": "none", "view": "all", "page_size": 100}).json()["items"]
     assert first not in [i["user_job_id"] for i in none] and len(none) == len(items) - 1
+
+
+def test_smartrecruiters_country_region_is_sent_to_the_api(boards):
+    from backend.services.ats import fetch_board
+
+    fetch_board("smartrecruiters", "DeltaWorks", region="in")
+    fetch_board("smartrecruiters", "DeltaWorks")
+    lists = [c for c in boards.calls if "/postings?" in c]
+    assert "country=in" in lists[0] and "country" not in lists[1]
+
+
+def test_board_cache_is_bounded(boards, monkeypatch):
+    from backend.services.ats import cache
+
+    monkeypatch.setattr(cache, "MAX_BOARDS", 2)
+    c = cache.BoardCache()
+    for token in ("acmefintech", "betapay", "gammaco"):
+        c.get({"acmefintech": "greenhouse", "betapay": "lever", "gammaco": "ashby"}[token], token)
+    assert len(c._items) == 2 and ("greenhouse", "acmefintech", None) not in c._items
+
+
+def test_overlong_fields_are_trimmed_and_a_bad_listing_never_fails_the_run(client, boards, resume_bytes, monkeypatch):
+    from backend.services import discovery_service
+    from backend.services.role_families import related_title
+
+    assert related_title("Mobile Device Data Collection - Hindi (India)", ["receivables"]) is None
+    assert related_title("Collection Officer - Finance", ["receivables"]) == "receivables"
+    h = onboard(client, "long@example.com", resume_bytes)
+    board = boards.payloads[("lever", "betapay")]
+    board[0]["salaryDescriptionPlain"] = "Pay table: " + "* 4 sessions — $2.40\n" * 40  # far longer than the column
+    real = discovery_service.upsert_normalized
+
+    def flaky(db, nj):
+        if nj.title == "Accounts Receivable Executive":
+            raise ValueError("broken listing")
+        return real(db, nj)
+
+    monkeypatch.setattr(discovery_service, "upsert_normalized", flaky)
+    client.post(f"{API}/companies/watchlist", headers=h, json={"url": "https://jobs.lever.co/betapay"})
+    run = _run(client, h)
+    assert run["status"] in ("completed", "partial")
+    titles = {i["job"]["title"]: i["job"] for i in client.get(f"{API}/jobs", headers=h, params={"page_size": 100}).json()["items"]}
+    assert "Accounts Receivable Analyst" in titles and "Accounts Receivable Executive" not in titles
+    assert len(titles["Accounts Receivable Analyst"]["salary_range"] or "") <= 100

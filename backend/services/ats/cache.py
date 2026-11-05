@@ -9,6 +9,10 @@ from backend.services.ats.base import AtsError, BoardResult, fetch_board
 
 TTL_SECONDS = 30 * 60
 NOT_FOUND_TTL_SECONDS = 6 * 3600
+# Board results hold full job descriptions, so the cache is bounded: the least recently used boards are dropped
+# beyond this many. A run that checks hundreds of boards then keeps memory flat; a board fetched again later is
+# simply fetched again.
+MAX_BOARDS = 40
 
 
 class BoardCache:
@@ -26,6 +30,9 @@ class BoardCache:
             if now - hit[0] < ttl:
                 if isinstance(hit[1], AtsError):
                     raise hit[1]
+                with self._lock:  # mark as recently used
+                    self._items.pop(key, None)
+                    self._items[key] = hit
                 return hit[1]
         try:
             result = fetch_board(ats, token, company_name=company_name, region=region)
@@ -36,7 +43,13 @@ class BoardCache:
             raise
         with self._lock:
             self._items[key] = (now, result)
+            self._trim()
         return result
+
+    def _trim(self) -> None:
+        boards = [k for k, (_, v) in self._items.items() if not isinstance(v, AtsError)]
+        for k in boards[: max(0, len(boards) - MAX_BOARDS)]:  # dicts keep insertion order: oldest first
+            del self._items[k]
 
     def clear(self) -> None:
         with self._lock:

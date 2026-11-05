@@ -25,8 +25,11 @@ _lock = threading.Lock()
 def fetch(token: str, *, company_name: str | None = None, region: str | None = None) -> BoardResult:
     result = BoardResult("smartrecruiters", token, company_name)
     offset = 0
+    # region: an ISO country code ("in") for boards followed for one country. Large employers list thousands of
+    # postings worldwide; asking the API for that country's postings keeps them inside the 1,000-posting window.
+    country = {"country": region.lower()} if region and len(region) == 2 and region.isalpha() else {}
     while offset < MAX_POSTINGS:
-        data = get_json(API.format(token=token), {"limit": PAGE, "offset": offset})
+        data = get_json(API.format(token=token), {"limit": PAGE, "offset": offset, **country})
         if not isinstance(data, dict) or not isinstance(data.get("content"), list):
             raise AtsError("invalid", "Unexpected SmartRecruiters response.")
         for raw in data["content"]:

@@ -34,7 +34,7 @@ from intelligence.jd_analyzer import JDAnalyzer
 
 log = logging.getLogger(__name__)
 SEARCH_LIMIT = 20
-MAX_BOARDS_PER_RUN = 60
+MAX_BOARDS_PER_RUN = 250  # board results are not kept beyond the bounded cache (ats/cache.py)
 MAX_JOBS_PER_RUN = 300
 INTERVALS = {"daily": timedelta(days=1), "weekly": timedelta(days=7)}
 _STOPWORDS = {"and", "of", "the", "for", "in", "a", "an", "to", "with", "at", "or"}
@@ -187,7 +187,8 @@ def _companies(db: Session, user: User, c: SearchCriteria) -> list[Company]:
     if c.include_suggested:
         for entry in curated():  # verified when the list was built; rows are created on first use, no probe
             if entry["ats"] in c.sources:
-                ids.append(get_or_create(db, entry["ats"], entry["token"], name=entry["name"], industry=entry.get("industry"), probe=False).id)
+                ids.append(get_or_create(db, entry["ats"], entry["token"], name=entry["name"], industry=entry.get("industry"),
+                                         region=entry.get("region"), probe=False).id)
     ids = list(dict.fromkeys(ids))
     if not ids:
         return []
