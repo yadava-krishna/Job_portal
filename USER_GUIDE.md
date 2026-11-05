@@ -1,203 +1,200 @@
-# JobPilot: end-to-end guide
+# JobPilot: how to use it
 
-How to use JobPilot from sign-up to a tracked application, for the two kinds of people involved:
-
-- **Job seekers (users):** everything happens in the web app and, optionally, the browser extension.
-- **The portal owner (operator):** runs the server, adds users and keeps backups. JobPilot has **no admin login or
-  admin screen yet** (planned as Phase 5). Owner tasks are done on the server machine with the commands in
-  [Part B](#part-b-portal-owner-operator).
-
-> **Credentials are not in this file.** The repository is public. The real values (the web address, the registration
-> invite code, the owner's login e-mail) are kept on the server in `.deploy/CREDENTIALS.local.md`, which git ignores.
-> Passwords are never written anywhere: JobPilot stores only a one-way hash, and nobody can read a password back.
-
-| Credential | Who has it | Where it comes from |
-|---|---|---|
-| Web app address | everyone | `https://yadava-krishna.github.io/Job_portal/` |
-| Registration invite code | owner, given to each new user | server `.env` → `REGISTRATION_INVITE_CODE` (copy in `.deploy/CREDENTIALS.local.md`) |
-| User e-mail + password | each user | chosen by the user at registration (password: 10+ characters, upper- and lower-case letters and a number, not a common password) |
-| Extension connection code | each user | created in Settings → Browser extension; works once, for 5 minutes |
-| Server access (owner) | owner | the Ubuntu machine: `~/job_automation` (`.env` holds the database password, JWT secret and keys; never share or commit it) |
+JobPilot is your personal job-search assistant. It finds jobs that match you, helps you fill in application forms,
+and keeps track of every job you apply to. You stay in control: **JobPilot never applies for you.** You always read
+the form and press Submit yourself.
 
 ---
 
-## Part A: Job seeker
+## 1. Getting started
 
-### A1. Create your account and sign in
+### Create your account
+1. Open JobPilot: **https://yadava-krishna.github.io/Job_portal/**
+2. Click **Create account**.
+3. Enter your name, e-mail address and a password.
+   - Your password needs at least 10 characters, with capital letters, small letters and a number.
+4. Enter the **invite code** you were given. JobPilot is invite-only.
 
-1. Open the web app address and choose **Create account**.
-2. Enter your name, e-mail, a password, and the **invite code** the owner gave you.
-3. Next time, use **Sign in** with your e-mail and password. Sessions renew automatically. **Sign out** is in
-   Settings → Account & connection.
+### Sign in
+Click **Sign in** and enter your e-mail and password. You stay signed in on that browser until you sign out.
 
-If the page says **JOB PORTAL OFFLINE**, the owner's server is not running or its address is being updated. Try again
-in a few minutes.
-
-### A2. Onboarding (first sign-in, about 5 minutes)
-
-1. **Upload resume:** a PDF of up to 5 MB. It is stored privately for your account.
-2. **Review profile:** JobPilot reads your resume. Correct anything wrong: name, contact details, roles with their
-   dates (tick *current* for your present job), education and skills. Nothing is used until you confirm it.
-3. **Job preferences:** titles, locations, work modes, employment types, experience, salary and minimum match score.
-4. **Job portals:** choose which of LinkedIn, Indeed and Naukri you use (for clipping and alert e-mails).
-5. **Confirm.** JobPilot creates a starter saved search from your preferences and runs it.
-
-### A3. Complete your profile (Settings)
-
-| Tab | What to do | Why it matters |
-|---|---|---|
-| **Resume & profile** | Add **LinkedIn, GitHub, portfolio and website** links. Keep role-specific **resume versions** and choose the **default** (used by the extension and new applications). Preview, download, rename or delete old versions | Forms ask for links and a resume |
-| **Job preferences** | Titles, locations, work mode, salary, minimum score | Drives search and scoring |
-| **Verified answers** | Salary (current is optional), expected salary, notice period, start date, work authorisation, visa sponsorship, relocation, shifts, relevant experience. Add **your own saved answers** to questions you are asked often | JobPilot never guesses these. Empty means "needs your input" |
-| **Platforms** | Platform choices and the **Clip to JobPilot** bookmark | Saving jobs from LinkedIn, Indeed and Naukri |
-| **Alert emails** | Optional: read your own job-alert e-mails (IMAP, app password, stored encrypted) | Finds jobs from LinkedIn, Indeed and Naukri alerts |
-| **Notifications** | New-match alerts on or off, one alert per job or a daily summary, minimum score, sources | In-app bell (e-mail delivery is not available yet) |
-| **Browser extension** | Create a connection code; see and disconnect connected browsers | Fill with JobPilot |
-| **Account & connection** | Account details, sign out, backend status | |
-
-### A4. Find jobs
-
-- **Searches & sources:**
-  - **Saved searches:** create searches (keywords, locations, remote, experience, industries, sources). Use
-    **Run now**, or let them run daily or weekly. Each run shows which sources were checked and which failed.
-  - **Companies:** add employers by pasting their **careers page** (JobPilot finds the Greenhouse, Lever, Ashby,
-    SmartRecruiters or Recruitee board it uses and verifies it) or a board link. Workday and similar sites can't be
-    searched automatically.
-  - **Sources:** the health of every source, plus what is missing (for example Adzuna keys).
-- **Discover jobs:** your feed, filtered by title or keyword, skill, company, location, work mode, experience, salary
-  (when listed), employment type, posting date, source, match score and application status. Posting dates are
-  labelled *Verified*, *Estimated* or *Unknown*. Unknown dates never count as recent.
-- **Job details:** the full description, the score breakdown with reasons for and against (a score is a guide, not
-  proof), and every site the job was seen on.
-- **From LinkedIn, Indeed or Naukri:** open the job on that site in your own browser, click the **Clip to JobPilot**
-  bookmark, then review and save. Or use **Add a job** (paste a link, the text, or a CSV/JSON file). JobPilot never logs
-  into or scrapes these sites.
-- **Save** jobs to look at later. **Dismiss** the ones you don't want.
-
-### A5. Apply
-
-1. On a job, click **Apply**. JobPilot prepares a package: a checklist, screening answers (from verified information
-   only), the resume it will use and an optional cover letter.
-2. Click **Open original listing**. For a Greenhouse job listed on the employer's own site, JobPilot may also offer
-   **Open Greenhouse application form**, only when Greenhouse actually hosts the form for that job. Opening marks the
-   application *Opened*, which is **not** *Applied*.
-3. Fill the form on the employer's site, by hand or with the extension (A6). **You submit it yourself.**
-4. Come back and choose **Yes, I submitted it** (add the reference ID if shown), **Not sure yet** or **I didn't
-   apply**. Only *Yes* records it as applied, with the date and time.
-
-### A6. Fill with JobPilot (browser extension, optional)
-
-1. **Install:** see [extension/INSTALLATION.md](extension/INSTALLATION.md) (Chrome, Edge or Brave → Extensions →
-   Developer mode → Load unpacked).
-2. **Connect:** Settings → Browser extension → **Create connection code**. Type it into the extension within
-   5 minutes. You never type your password into the extension.
-3. On a **Greenhouse, Lever or Ashby** application form:
-   1. Click the extension icon.
-   2. **Attach my resume.** On Lever, do this first.
-   3. Click **Fill with JobPilot**.
-   4. Read the review panel on the page: *Filled*, *Please review*, *Needs your input*, *Kept your existing value*
-      and *Skipped*, each with its reason.
-   5. Complete the rest, solve any CAPTCHA, and **submit yourself**.
-4. In the extension, click **I submitted it** (or **I didn't submit**). This is the same record as the web app's
-   confirmation, and confirming twice changes nothing.
-5. Demographic, consent, password and code fields are never filled. Disconnect any time in Settings.
-
-### A7. Track applications
-
-- **Applications** has three tabs:
-  - **All applications:** with status filter.
-  - **Pipeline board:** Applied → Screening → Assessment → Interview → Offer → Rejected, and *Archived*.
-  - **Pending:** prepared or opened, not yet confirmed. **Continue** resumes the apply flow.
-- Open an application to see how you applied, the reference ID, the history of every change, and to edit **notes**
-  and a **follow-up date**. **Withdraw** or **Mark failed** when needed.
-- **Dashboard** gives the overview. **Reports** has Excel exports (daily and full history).
-
-### A8. Your data
-
-Everything is private to your account: other users can't see your profile, resumes, jobs or applications. Delete old
-resume versions in Settings. To close your account, ask the owner (B4). There is no self-service deletion yet.
+> If you see **"JOB PORTAL OFFLINE"**, JobPilot is temporarily unavailable. Please try again in a few minutes.
 
 ---
 
-## Part B: Portal owner (operator)
+## 2. Setting up your profile (about 5 minutes, first time only)
 
-All commands run on the server in `~/job_automation`. **Never** run `docker compose down -v` and never delete the
-`jobpilot_*` volumes.
+JobPilot walks you through five short steps:
 
-### B1. Run the portal
-
-| Task | Command |
-|---|---|
-| Start, or redeploy after code changes | `./deploy/start.sh` (prints the local UI, the public backend URL and the invite code) |
-| Publish a new web app build | `./deploy/deploy_frontend.sh` |
-| Stop (data kept) | `./deploy/stop.sh` |
-| Status | `docker ps --format '{{.Names}} {{.Status}}'` (four `jobpilot-*` containers, all healthy) |
-| Health | `curl -s "$(cat .deploy/last_published_url)/api/v1/health" -H 'ngrok-skip-browser-warning: 1'` |
-| Logs | `docker compose logs -f backend` |
-| Local UI / API docs (this machine only) | `http://localhost:3080`, `http://127.0.0.1:8000/api/v1/docs` |
-
-After a crash or reboot the containers come back by themselves. To keep the public address stable, set the free ngrok
-static domain or add the cron entry: see [DEPLOYMENT.md §3](DEPLOYMENT.md).
-
-### B2. Add users
-
-1. Give the person the web address and the invite code (`grep REGISTRATION_INVITE_CODE .env`).
-2. They register themselves (A1). You never set or see their password.
-3. **Change the invite code** (for example after onboarding a group): edit `REGISTRATION_INVITE_CODE` in `.env`, then
-   run `./deploy/start.sh`. Existing users are unaffected.
-
-### B3. Reset a user's password (no self-service reset yet)
-
-```bash
-docker compose exec backend python - <<'PY'
-import getpass
-from sqlalchemy import update
-from backend.config import get_settings
-from backend.db import init_engine, session_factory
-from backend.models import RefreshToken, User
-from backend.security import hash_password, password_problems
-init_engine(get_settings().database_url)
-email = input("User e-mail: ").strip().lower()
-pw = getpass.getpass("New password (not shown): ")
-assert not password_problems(pw, email), password_problems(pw, email)
-with session_factory()() as db:
-    u = db.query(User).filter(User.email == email).one()
-    u.password_hash = hash_password(pw)
-    db.execute(update(RefreshToken).where(RefreshToken.user_id == u.id).values(revoked_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc)))
-    db.commit()
-    print("Password changed; existing sessions signed out.")
-PY
-```
-Give the new password to the user through a private channel and ask them to change it. (Changing your own password
-in the app is not available yet; this command is the way for now.)
-
-### B4. Deactivate or remove a user
-
-- **Deactivate** (keeps their data; they can no longer sign in, and their extension stops working):
-  `docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "update users set is_active=false where email=lower('"'"'user@example.com'"'"')"'`
-- **Remove completely**, on the user's request: take a backup (B5) first. Then delete the user row (their profile,
-  jobs, applications and credentials go with it) and their folder `/data/users/<id>` in the backend container.
-
-### B5. Backups and restore
-
-Follow [DEPLOYMENT.md §1](DEPLOYMENT.md) before every deployment, and from time to time. Restore steps are in §5.
-Keep `backups/` and `.deploy/extension-key.pem` private: they contain personal data and the extension's signing key.
-
-### B6. Optional set-up that needs you
-
-| Item | Effect |
-|---|---|
-| ngrok static domain (free) in `.env` `NGROK_DOMAIN` | the public address never changes |
-| Adzuna `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | adds Adzuna's job search to discovery |
-| SMTP account | e-mail notifications (not built until then) |
-| Decisions in [SOURCE_CAPABILITY_MATRIX.md](SOURCE_CAPABILITY_MATRIX.md) | Workable, remote-job aggregators, Jooble, Careerjet |
-| Chrome Web Store developer account | publish the extension instead of the unpacked install |
+1. **Upload your resume.** Choose your resume as a PDF file.
+2. **Check your details.** JobPilot reads your resume and fills in your profile: name, contact details, work
+   history, education and skills. Correct anything that is wrong, and tick **current** next to your present job.
+3. **Choose what you are looking for.** Job titles, cities, remote or office work, type of job, experience and salary.
+4. **Choose the job sites you use.** For example LinkedIn, Indeed and Naukri.
+5. **Confirm.** JobPilot starts looking for jobs for you straight away.
 
 ---
 
-## What JobPilot does not do
+## 3. Make your profile complete
 
-It does not submit applications for you or click Submit. It does not bypass CAPTCHA or OTP. It does not log into,
-scrape or automate LinkedIn, Indeed or Naukri, and does not store your passwords for those sites. It does not mark
-anything as applied until you confirm. It does not discover every job on the internet: only the sources listed in
-[SOURCE_CAPABILITY_MATRIX.md](SOURCE_CAPABILITY_MATRIX.md).
+Go to **Settings**. The more you fill in, the more JobPilot can help.
+
+- **Resume & profile:**
+  - Add your **LinkedIn, GitHub, portfolio or personal website** links if you have them.
+  - Keep **different versions of your resume** (for example one for finance roles, one for operations roles) and
+    choose which one is your **default**. You can preview, download, rename or delete versions.
+- **Job preferences:** change the jobs, places and salary you are looking for at any time.
+- **Verified answers:** application forms often ask the same questions. Answer them once here: expected salary,
+  current salary (optional), notice period, when you can start, whether you can work in India or need a visa, and
+  whether you can relocate.
+  - You can also save **your own answers** to questions you are asked often, for example "Are you comfortable
+    working from the office five days a week?"
+  - JobPilot **never guesses** these answers. If you leave one empty, it will tell you that the question needs your
+    answer.
+- **Notifications:** choose whether to be told about new matching jobs, one alert per job or one summary a day, and
+  how good a match must be before you are told.
+- **Alert emails (optional):** connect the e-mail inbox where you receive job alerts from LinkedIn, Indeed or
+  Naukri, and JobPilot will collect those jobs for you.
+- **Browser extension:** connect the "Fill with JobPilot" helper (see section 7).
+
+---
+
+## 4. Finding jobs
+
+JobPilot looks for new jobs every day on the official job pages of many employers.
+
+### Discover jobs
+Your list of matching jobs, best matches first.
+- Use **Filters** to narrow the list by job title, skill, company, city, remote or office, experience, salary,
+  job type, how recently the job was posted, where it was found, match score, and whether you have already applied.
+- Each job shows when it was posted:
+  - **Verified:** the employer published that date.
+  - **Estimated:** from an alert e-mail.
+  - **Unknown:** no date was given.
+- Click a job to read the full description and to see **why it matches you**: what fits and what is missing.
+  The match score is a guide to help you decide what to read first. Always read the job yourself.
+- **Save** jobs you like for later, and **Dismiss** the ones you don't want to see again.
+
+### Searches & sources
+- **Saved searches:** describe the jobs you want, and JobPilot searches for them every day or every week. Click
+  **Run now** to search immediately. After each search it tells you where it looked and what it found.
+- **Companies:** follow employers you like. Paste the address of a company's careers page, and JobPilot will
+  include that company's jobs in your searches (this works for most companies that use common job-board systems).
+- **Sources:** shows which places JobPilot is searching and whether each one is working.
+
+### Jobs you find yourself (LinkedIn, Indeed, Naukri)
+JobPilot does not log in to these sites for you. When you see a job you like there:
+- click the **Clip to JobPilot** bookmark (find it in Settings → Platforms) while you are on the job page, or
+- click **Add a job** in JobPilot and paste the job link or description.
+
+The job is added to your list so you can track your application.
+
+---
+
+## 5. Applying for a job
+
+1. Open the job and click **Apply**.
+2. JobPilot prepares everything for you:
+   - a checklist,
+   - suggested answers to the employer's questions (only from information you have confirmed),
+   - the resume to use,
+   - a cover letter if the job asks for one.
+3. Click **Open original listing** to go to the employer's application page.
+   - For some jobs, JobPilot also offers **Open Greenhouse application form**. This is another official page where
+     the same job can be applied for, and it works with the JobPilot browser helper.
+4. Fill in the employer's form, yourself or with the browser helper (section 7). **You press Submit yourself.**
+5. Come back to JobPilot and say what happened:
+   - **Yes, I submitted it.** Add the reference number if the employer gave you one.
+   - **Not sure yet:** the application is kept as pending.
+   - **I didn't apply.**
+
+Opening a job page never counts as applying. A job is only marked **Applied** when you say so.
+
+---
+
+## 6. Keeping track of your applications
+
+Open **Applications**:
+- **All applications:** every job you have prepared or applied to, with its status.
+- **Pipeline board:** move each application along as you hear back:
+  Applied → Screening → Assessment → Interview → Offer → Rejected, or Archived.
+- **Pending:** applications you started but haven't confirmed yet. Click **Continue** to finish.
+
+Click any application to see when you applied, how you applied, its reference number and its full history. You can
+also add **notes** and a **follow-up date** to remind yourself when to chase it up.
+
+**Dashboard** gives you a quick overview, and **Reports** lets you download a spreadsheet of your applications.
+
+---
+
+## 7. The "Fill with JobPilot" browser helper (optional)
+
+This free helper for Chrome or Edge fills in application forms for you on three common job-application systems:
+**Greenhouse, Lever and Ashby**. Many employers use them. It saves you typing the same details again and again.
+
+### Set it up once
+1. Install it. Ask the person who invited you for the installation steps, or follow the "Installing Fill with
+   JobPilot" guide.
+2. In JobPilot, go to **Settings → Browser extension** and click **Create connection code**.
+3. Click the JobPilot icon in your browser's toolbar and type in the code (it looks like `AB12-CD34`). The code works
+   once and only for 5 minutes. **You never type your JobPilot password into the helper.**
+
+### Use it on an application form
+1. Open the employer's application form (from JobPilot's **Apply** button).
+2. Click the JobPilot icon. It tells you whether this job is in your JobPilot list.
+3. Click **Attach my resume** to add your default resume to the form. On Lever forms, do this first.
+4. Click **Fill with JobPilot**. Your details and saved answers are filled in.
+5. A small panel on the page shows:
+   - what was **filled**,
+   - what you should **check** (for example years of experience calculated from your dates),
+   - what **needs your answer**,
+   - what was **kept** because you had already typed something,
+   - what was **skipped**, and why.
+6. Check everything, answer the remaining questions, complete any "I'm not a robot" check, and **press Submit
+   yourself**.
+7. In the helper, click **I submitted it** (or **I didn't submit**). JobPilot updates your application list.
+
+### Good to know
+- The helper never presses Submit and never applies for you.
+- It never answers personal questions such as gender, ethnicity, disability or veteran status, and never ticks
+  "I agree" boxes. Those are always yours to answer.
+- It never changes something you have typed yourself, unless you ask it to.
+- It only works on Greenhouse, Lever and Ashby forms. On other sites (for example LinkedIn, Naukri, or a company's
+  own website) it shows "Not an application page", and you fill the form yourself.
+- To stop using it on a computer, click **Disconnect** in Settings → Browser extension.
+
+---
+
+## 8. Your privacy
+
+- Your profile, resumes, jobs and applications are private to you. Other JobPilot users cannot see them.
+- JobPilot only shares your details with an employer's form when **you** click Fill, on that employer's page.
+- JobPilot never asks for your LinkedIn, Indeed or Naukri password and never logs in to those sites.
+- You can delete old resume versions at any time. To close your account, contact the person who invited you.
+
+---
+
+## 9. Frequently asked questions
+
+**Why didn't I get new jobs today?**
+JobPilot only shows jobs that match your job titles and cities. On some days the employers it watches post nothing
+new in your field. To see more jobs:
+- add more job titles in Settings → Job preferences,
+- add more cities, or allow remote work,
+- follow more companies in Searches & sources → Companies.
+
+**Can JobPilot apply for me automatically?**
+No. You always review and submit applications yourself. This keeps your applications accurate and in your control.
+
+**Does JobPilot find every job on the internet?**
+No. It searches the official job pages of the employers it knows about, plus the jobs you add yourself and your
+job-alert e-mails. Check the **Sources** tab to see exactly where it looks.
+
+**I marked a job as applied by mistake.**
+Open it in **Applications** and use **Withdraw**, or move it to **Archived**.
+
+**The helper says "This browser was disconnected".**
+Create a new connection code in Settings → Browser extension and connect again.
+
+**I forgot my password.**
+Ask the person who invited you to reset it. Self-service password reset is coming later.
