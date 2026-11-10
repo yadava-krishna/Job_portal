@@ -78,3 +78,24 @@ def test_mentor_role_can_be_assigned_by_admin(client):
     uid = next(u["id"] for u in users if u["email"] == "future-mentor@example.com")
     assert client.put(f"{API}/admin/users/{uid}/role", headers=a, json={"role": "mentor"}).status_code == 200
     assert client.put(f"{API}/admin/users/{uid}/role", headers=a, json={"role": "superuser"}).status_code == 422
+
+
+def test_admin_invites_work_at_registration_and_are_consumed(client, monkeypatch):
+    from backend.config import get_settings
+
+    a = _admin(client, "inv-admin@example.com")
+    monkeypatch.setattr(get_settings(), "registration_invite_code", "owner-code-for-tests-only")
+    inv = client.post(f"{API}/admin/invites", headers=a, json={"role": "mentor", "max_uses": 1, "expires_days": 7}).json()
+    code = inv.get("code") or inv.get("invite_code") or inv.get("raw_code")
+    assert code, inv
+    body = {"email": "invited@example.com", "password": "Str0ngPassw0rd", "full_name": "Invited", "invite_code": code}
+    r = client.post(f"{API}/auth/register", json=body)
+    assert r.status_code == 201, r.text
+    assert client.get(f"{API}/auth/me", headers=auth(r.json())).json()["role"] == "mentor"
+    again = client.post(f"{API}/auth/register", json={**body, "email": "second@example.com"})
+    assert again.status_code == 403  # single-use invite already consumed
+    assert client.post(f"{API}/auth/register", json={**body, "email": "x@example.com", "invite_code": "JP-WRONG"}).status_code == 403
+    admin_inv = client.post(f"{API}/admin/invites", headers=a, json={"role": "admin", "max_uses": 1, "expires_days": 7}).json()
+    code2 = admin_inv.get("code") or admin_inv.get("invite_code") or admin_inv.get("raw_code")
+    r2 = client.post(f"{API}/auth/register", json={**body, "email": "noadmin@example.com", "invite_code": code2})
+    assert r2.status_code == 201 and client.get(f"{API}/auth/me", headers=auth(r2.json())).json()["role"] == "user"

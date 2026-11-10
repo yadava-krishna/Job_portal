@@ -19,7 +19,7 @@ def _match(score: float = 80) -> MatchResult:
 
 
 def _job(**kw):
-    base = dict(industry=None, salary_min_lpa=None, salary_max_lpa=None, country=None, sponsorship_signal="unknown",
+    base = dict(industry=None, salary_min_lpa=None, salary_max_lpa=None, country=None, location=None, sponsorship_signal="unknown",
                 sponsorship_evidence=None)
     return SimpleNamespace(**{**base, **kw})
 
@@ -111,3 +111,12 @@ def test_new_master_profile_contains_no_invented_facts(client):
         p = ProfileMasterService.get_or_create_profile(db, uid)
         assert p.headline is None and p.summary is None and p.years_experience == 0
         assert p.skills == [] and p.experiences == [] and p.preferred_locations == []
+
+
+def test_country_is_inferred_only_from_unambiguous_locations():
+    assert scoring_v2.infer_country("Bengaluru, Karnataka") == "IN"
+    assert scoring_v2.infer_country("Remote") is None
+    assert scoring_v2.infer_country("London or Bengaluru") is None  # two countries: don't guess
+    out = scoring_v2.score(_match(), EligibilityStatus.ELIGIBLE, [], _job(location="Pune, India"), _prefs())
+    auth = next(c for c in out["components"] if c["name"] == "work_authorization")
+    assert auth["status"] == "known" and "inferred" in auth["evidence"] and out["eligibility"] == "pass"

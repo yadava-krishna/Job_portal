@@ -330,7 +330,8 @@ def profile_completeness(db: Session, user: User) -> dict[str, Any]:
 def snapshot(db: Session, settings: BackendSettings, user: User) -> dict[str, Any]:
     comp = profile_completeness(db, user)
     top = db.execute(select(UserJob).where(UserJob.user_id == user.id, UserJob.status.in_(("new", "shortlisted")),
-                                           UserJob.match_score.is_not(None)).order_by(UserJob.match_score.desc()).limit(3)).scalars().all()
+                                           UserJob.match_score.is_not(None)).order_by(UserJob.match_score.desc()).limit(30)).scalars().all()
+    top = sorted(top, key=lambda u: (u.eligibility == "fail", -(u.match_score or 0)))[:3]  # eligible jobs first
     gap, alternatives = best_gap(db, user)
     if gap is None:
         try:

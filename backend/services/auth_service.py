@@ -34,15 +34,20 @@ def _aware(dt: datetime) -> datetime:
 
 
 def register(db: Session, settings: BackendSettings, req: RegisterRequest) -> User:
-    if settings.registration_invite_code:
-        if not req.invite_code or not hmac.compare_digest(req.invite_code.strip(), settings.registration_invite_code):
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "A valid invite code is required to register.")
     email = req.email.lower().strip()
+    code = (req.invite_code or "").strip()
+    invite = _usable_invite(db, code, email) if code else None
+    owner_code = bool(settings.registration_invite_code and code and hmac.compare_digest(code, settings.registration_invite_code))
+    if settings.registration_invite_code and not (owner_code or invite):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "A valid invite code is required to register.")
     problems = password_problems(req.password, email)
     if problems:
         raise HTTPException(422, {"message": "Password does not meet the policy.", "requirements": problems})
-    user = User(email=email, password_hash=hash_password(req.password), full_name=(req.full_name or "").strip() or None)
+    user = User(email=email, password_hash=hash_password(req.password), full_name=(req.full_name or "").strip() or None,
+                role=invite.role if invite and invite.role in ("user", "mentor") else "user")  # invites never grant admin
     db.add(user)
+    if invite is not None:
+        invite.used_count += 1
     try:
         db.commit()
     except IntegrityError:
@@ -50,6 +55,21 @@ def register(db: Session, settings: BackendSettings, req: RegisterRequest) -> Us
         raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists.") from None
     db.refresh(user)
     return user
+
+
+def _usable_invite(db: Session, code: str, email: str):
+    """An admin-created invite (stored hashed) that is unrevoked, unexpired, has uses left and, if it names an
+    e-mail address, matches it."""
+    from backend.models import Invite
+
+    inv = db.execute(select(Invite).where(Invite.token_hash == hashlib.sha256(code.encode()).hexdigest())).scalar_one_or_none()
+    if inv is None or inv.revoked_at is not None or inv.used_count >= inv.max_uses:
+        return None
+    if inv.expires_at is not None and _aware(inv.expires_at) < utcnow():
+        return None
+    if inv.email and inv.email != email:
+        return None
+    return inv
 
 
 def authenticate(db: Session, req: LoginRequest) -> User:

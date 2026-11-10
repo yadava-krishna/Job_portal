@@ -59,9 +59,33 @@ def _salary(job: Job, prefs: JobPreference | None) -> tuple[float | None, str]:
     return max(0.0, round(100 * top / want - 30, 1)), f"up to {top:g} LPA is below your minimum of {want:g} LPA"
 
 
+_COUNTRY_WORDS = {
+    "IN": ("india", "bengaluru", "bangalore", "mumbai", "pune", "hyderabad", "chennai", "gurugram", "gurgaon", "noida",
+           "new delhi", "delhi", "kolkata", "ahmedabad", "kochi", "coimbatore", "jaipur", "chandigarh", "thiruvananthapuram"),
+    "GB": ("united kingdom", "london", "manchester", "edinburgh", "england", "scotland"),
+    "US": ("united states", "usa", "new york", "san francisco", "seattle", "austin", "boston", "chicago"),
+    "CA": ("canada", "toronto", "vancouver", "montreal"), "DE": ("germany", "berlin", "munich", "hamburg"),
+    "NL": ("netherlands", "amsterdam", "rotterdam"), "IE": ("ireland", "dublin"), "AU": ("australia", "sydney", "melbourne"),
+    "SG": ("singapore",), "AE": ("united arab emirates", "dubai", "abu dhabi"),
+}
+
+
+def infer_country(location: str | None) -> str | None:
+    """Country from an unambiguous location string; None for remote/unknown/multi-country locations."""
+    text = (location or "").lower()
+    if not text or "remote" in text and not any(w in text for ws in _COUNTRY_WORDS.values() for w in ws):
+        return None
+    hits = {c for c, words in _COUNTRY_WORDS.items() if any(w in text for w in words)}
+    return hits.pop() if len(hits) == 1 else None
+
+
 def _authorization(job: Job, prefs: JobPreference | None) -> tuple[float | None, str, str]:
     """(score, evidence, eligibility) where eligibility is pass | fail | unknown for this dimension alone."""
     country = (job.country or "").upper() or None
+    inferred = ""
+    if not country:
+        country = infer_country(job.location)
+        inferred = " (country inferred from the job location)" if country else ""
     auth = [c.upper() for c in ((prefs.work_authorization if prefs else None) or [])]
     if not auth and prefs is not None and getattr(prefs, "search_mode", "india") == "india":
         auth = ["IN"]  # India-only search: the candidate has said they are looking where they can work
@@ -70,7 +94,7 @@ def _authorization(job: Job, prefs: JobPreference | None) -> tuple[float | None,
     if not auth:
         return None, "you have not told us where you are authorised to work", "unknown"
     if country in auth:
-        return 100.0, f"you are authorised to work in {country}", "pass"
+        return 100.0, f"you are authorised to work in {country}{inferred}", "pass"
     signal = job.sponsorship_signal or "unknown"
     needs = prefs.needs_sponsorship if prefs else None
     if signal == "none":
