@@ -43,6 +43,9 @@ BATCHES: dict[str, list[tuple]] = {
         ("MAT-08", D, "best_gap + alternatives", "tests/api/test_career_platform.py", ""),
         ("MAT-09", D, "six states with evidence ceilings", "tests/api/test_career_platform.py::test_skills_evidence_states_gaps_and_learning", ""),
         ("MAT-10", D, "skill_evidence CRUD + UI", "tests/api/test_career_platform.py; career.test.tsx", ""),
+        ("PRF-02", P, "verified flags on profile skills (default unverified) and provenance on v2 extras", "test_compliance_and_scoring.py", "not every confirmed-profile field carries its own source/verified flag"),
+        ("TST-01", D, "unit tests for weights, states, transitions, permissions, dedupe, seniority inference", "full suite 348 passed, 3 skipped (10 Nov)", ""),
+        ("TST-03", P, "API e2e two users + mentor + admin; smoke 27/27 local and via public tunnel (10 Nov)", "tests/api/test_career_platform.py; smoke", "no automated browser e2e of the pages"),
         ("MAT-11", D, "POST /matches/recompute; job_matching job", "tests/api/test_jobs_and_ops.py", ""),
         ("MAT-13", P, "gap closes on evidence; match_history table", "tests/api/test_career_platform.py", "before/after score diff not yet shown"),
         ("MAT-13", D, "project/work evidence counts in scoring; jobs asking for the skill re-scored; MatchHistory before/after + reason; Skills tab card + toast", "tests/api/test_career_platform.py::test_closing_a_gap_rescores_with_before_after_reasoning", ""),
@@ -116,12 +119,12 @@ BATCHES: dict[str, list[tuple]] = {
     ],
     "3 local completion (filters, manual profile, export, FTS)": [
         ("PRF-04", D, "resume_service.confirm_profile manual path; Onboarding 'Create my profile without a resume'", "tests/api/test_career_platform.py::test_student_can_onboard_without_a_resume", ""),
-        ("PRF-08", D, "manual profile marked profile_source=manual; never shown as parsed", "tests/api/test_career_platform.py", ""),
+        ("PRF-08", D, "short resumable onboarding (resume or manual profile -> review -> goals -> preferences) ending in the career snapshot: completeness, top 3 eligible matches, top gap, one next step", "test_onboarding_status; tests/api/test_career_platform.py; smoke 27/27", "not yet timed with a real first-time user"),
         ("GATE-08", D, "student/no-resume onboarding path", "tests/api/test_career_platform.py", ""),
         ("ID-05", D, "tracker_service.export incl. career-graph tables, no secrets", "test_export_contains_your_data_and_no_secrets", ""),
         ("DSC-10", D, "/jobs filters country, seniority, sponsorship, eligibility + Postgres FTS (0008 ix_jobs_fulltext); Discover filter panel", "tests/api/test_career_platform.py::test_job_filters_for_country_sponsorship_and_eligibility; local smoke 27/27", ""),
         ("DSC-09", D, "closed postings hidden by default; expiry in cleanup_and_retention", "test_jobs_and_ops.py", ""),
-        ("SEC-06", D, "reset token bound to password hash, single use, revokes sessions, rate limited", "test_achievements.py::test_password_reset_flow", ""),
+        ("SEC-06", D, "log redaction; refresh/invite tokens stored only as hashes; reset links no longer kept in memory; reset token single use and bound to the password", "tests/test_workflow.py; test_achievements.py::test_password_reset_flow", ""),
         ("INTL-05", D, "sponsorship signal on every job (+backfill job), Discover filter, card badges, country-fit guidance", "tests/api/test_career_platform.py::test_normalisation_job_backfills_signals; local smoke", ""),
         ("DSC-15", D, "infer_seniority (title or stated experience, never guessed) + JobRequirement rows", "tests/api/test_career_platform.py::test_infer_seniority_never_guesses", ""),
     ],
@@ -132,3 +135,5 @@ if __name__ == "__main__":
     for name, updates in BATCHES.items():
         set_status(updates)
     sync()
+    import make_status_report
+    make_status_report.write()

@@ -69,11 +69,15 @@ def load_reqs() -> dict[str, dict]:
     return merged
 
 
+# Checkbox for readers: done and tested / not done yet / no work needed (context text only).
+DONE_MARK = {"DONE_VERIFIED": "☑", "INFORMATIONAL_ONLY": "N/A", "NOT_APPLICABLE_JUSTIFIED": "N/A"}
+
+
 def save_reqs(reqs: dict[str, dict]) -> None:
     with REQS.open("w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=REQ_FIELDS)
+        w = csv.DictWriter(f, fieldnames=["done", *REQ_FIELDS])
         w.writeheader()
-        w.writerows(reqs.values())
+        w.writerows({"done": DONE_MARK.get(r["status"], "☐"), **r} for r in reqs.values())
 
 
 def load_mapping() -> dict[str, tuple[list[str], str]]:
@@ -110,6 +114,7 @@ def sync(summary_only: bool = False) -> None:
         row["code_evidence"] = " | ".join(f"{i}: {reqs[i]['code_evidence']}" for i in real if reqs[i]["code_evidence"])[:900]
         states = ", ".join(f"{i}={reqs[i]['status']}" for i in real)
         row["notes"] = "; ".join(p for p in (note, states) if p)[:600]
+        row["done"] = DONE_MARK.get(row["audit_status"], "☐")
         for i in ids:
             covered[i].append(row["source_item_id"])
     unknown_ids = sorted({i for ids, _ in mapping.values() for i in ids if i not in reqs})
@@ -128,6 +133,7 @@ def sync(summary_only: bool = False) -> None:
     if summary_only:
         return
 
+    fields = ["done", *[x for x in fields if x != "done"]]
     with INVENTORY.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
