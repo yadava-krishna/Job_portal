@@ -1,0 +1,1769 @@
+{
+ "_note": "Curated learning resources. link_check: ok = HTTP 200 from an automated check on checked_on; blocked_by_site = the site refuses automated checks (page not verified automatically). Refreshed by the resource_refresh job.",
+ "resources": {
+  "Microsoft Excel": [
+   {
+    "title": "Excel video training",
+    "url": "https://support.microsoft.com/en-us/office/excel-video-training-9bc05390-e94c-46af-a5b3-d7c22f6990bb",
+    "provider": "Microsoft Support",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Excel tutorial",
+    "url": "https://edu.gcfglobal.org/en/excel/",
+    "provider": "GCFGlobal",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 240,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Excel functions (by category)",
+    "url": "https://support.microsoft.com/en-us/office/excel-functions-by-category-5f91f4e9-7b42-46d2-9bd1-63f26a86c0eb",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Exceljet formulas and functions",
+    "url": "https://exceljet.net/formulas",
+    "provider": "Exceljet",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 90,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Advanced Microsoft Excel": [
+   {
+    "title": "Excel functions (by category)",
+    "url": "https://support.microsoft.com/en-us/office/excel-functions-by-category-5f91f4e9-7b42-46d2-9bd1-63f26a86c0eb",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Exceljet formulas and functions",
+    "url": "https://exceljet.net/formulas",
+    "provider": "Exceljet",
+    "resource_type": "tutorial",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Excel tutorial (advanced topics)",
+    "url": "https://edu.gcfglobal.org/en/excel/",
+    "provider": "GCFGlobal",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 240,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "PivotTables": [
+   {
+    "title": "Create a PivotTable to analyze worksheet data",
+    "url": "https://support.microsoft.com/en-us/office/create-a-pivottable-to-analyze-worksheet-data-a9a84538-bfe9-40a9-a8e9-f99134456576",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Exceljet pivot tables",
+    "url": "https://exceljet.net/pivot-tables",
+    "provider": "Exceljet",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "VLOOKUP": [
+   {
+    "title": "VLOOKUP function",
+    "url": "https://support.microsoft.com/en-us/office/vlookup-function-0bbc8083-26fe-4963-8ab8-93a18ad188a1",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "XLOOKUP function",
+    "url": "https://support.microsoft.com/en-us/office/xlookup-function-b7fd680e-6d10-43e6-84f9-88eae8bf5929",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Exceljet VLOOKUP function",
+    "url": "https://exceljet.net/functions/vlookup-function",
+    "provider": "Exceljet",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Power Query": [
+   {
+    "title": "What is Power Query?",
+    "url": "https://learn.microsoft.com/en-us/power-query/power-query-what-is-power-query",
+    "provider": "Microsoft Learn",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Power Query M formula language",
+    "url": "https://learn.microsoft.com/en-us/powerquery-m/",
+    "provider": "Microsoft Learn",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 90,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "VBA / Macros": [
+   {
+    "title": "Getting started with VBA in Office",
+    "url": "https://learn.microsoft.com/en-us/office/vba/library-reference/concepts/getting-started-with-vba-in-office",
+    "provider": "Microsoft Learn",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Excel VBA reference",
+    "url": "https://learn.microsoft.com/en-us/office/vba/api/overview/excel",
+    "provider": "Microsoft Learn",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Quick start: create a macro",
+    "url": "https://support.microsoft.com/en-us/office/quick-start-create-a-macro-741130ca-080d-49f5-9471-1e5fb3d581a8",
+    "provider": "Microsoft Support",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Power BI": [
+   {
+    "title": "Power BI training",
+    "url": "https://learn.microsoft.com/en-us/training/powerplatform/power-bi",
+    "provider": "Microsoft Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Power BI documentation",
+    "url": "https://learn.microsoft.com/en-us/power-bi/",
+    "provider": "Microsoft Learn",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Get started creating in the Power BI service",
+    "url": "https://learn.microsoft.com/en-us/power-bi/fundamentals/service-get-started",
+    "provider": "Microsoft Learn",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Tableau": [
+   {
+    "title": "Tableau free training videos",
+    "url": "https://www.tableau.com/learn/training",
+    "provider": "Tableau",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 240,
+    "credibility": 1.0,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Get started with Tableau Desktop",
+    "url": "https://help.tableau.com/current/guides/get-started-tutorial/en-us/get-started-tutorial-home.htm",
+    "provider": "Tableau Help",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 90,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Kaggle: Data Visualization",
+    "url": "https://www.kaggle.com/learn/data-visualization",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 240,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "SQL": [
+   {
+    "title": "PostgreSQL tutorial",
+    "url": "https://www.postgresql.org/docs/current/tutorial.html",
+    "provider": "PostgreSQL",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 180,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "SQLBolt interactive lessons",
+    "url": "https://sqlbolt.com/",
+    "provider": "SQLBolt",
+    "resource_type": "exercise",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Kaggle: Intro to SQL",
+    "url": "https://www.kaggle.com/learn/intro-to-sql",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 180,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Mode SQL tutorial",
+    "url": "https://mode.com/sql-tutorial",
+    "provider": "Mode",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 240,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Python": [
+   {
+    "title": "The Python Tutorial",
+    "url": "https://docs.python.org/3/tutorial/",
+    "provider": "Python.org",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Kaggle: Python",
+    "url": "https://www.kaggle.com/learn/python",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Exercism Python track",
+    "url": "https://exercism.org/tracks/python",
+    "provider": "Exercism",
+    "resource_type": "exercise",
+    "level": "beginner",
+    "duration_minutes": 600,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Data Analysis": [
+   {
+    "title": "Kaggle: Pandas",
+    "url": "https://www.kaggle.com/learn/pandas",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 240,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "pandas getting started",
+    "url": "https://pandas.pydata.org/docs/getting_started/index.html",
+    "provider": "pandas",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Analyze data in Excel",
+    "url": "https://support.microsoft.com/en-us/office/analyze-data-in-excel-3223aab8-f543-4fda-85ed-76bb0295ffc4",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "SAP": [
+   {
+    "title": "SAP Learning",
+    "url": "https://learning.sap.com/",
+    "provider": "SAP",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "SAP Help Portal",
+    "url": "https://help.sap.com/",
+    "provider": "SAP",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "SAP Community",
+    "url": "https://community.sap.com/",
+    "provider": "SAP",
+    "resource_type": "other",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Oracle Financials": [
+   {
+    "title": "Oracle Fusion Cloud Financials documentation",
+    "url": "https://docs.oracle.com/en/cloud/saas/financials/",
+    "provider": "Oracle",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Oracle University",
+    "url": "https://education.oracle.com/",
+    "provider": "Oracle",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 0.95,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Oracle Cloud Customer Connect",
+    "url": "https://community.oracle.com/customerconnect/",
+    "provider": "Oracle",
+    "resource_type": "other",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Tally": [
+   {
+    "title": "TallyPrime help",
+    "url": "https://help.tallysolutions.com/",
+    "provider": "Tally Solutions",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Tally Learning Hub",
+    "url": "https://tallysolutions.com/learning-hub/",
+    "provider": "Tally Solutions",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Tally Education",
+    "url": "https://www.tallyeducation.com/",
+    "provider": "Tally Education",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 600,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Accounts Receivable": [
+   {
+    "title": "Accounts receivable explained",
+    "url": "https://www.accountingcoach.com/accounts-receivable-and-bad-debts-expense/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Accounts receivable (definition and examples)",
+    "url": "https://www.investopedia.com/terms/a/accountsreceivable.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Accounts receivable",
+    "url": "https://corporatefinanceinstitute.com/resources/accounting/accounts-receivable/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Accounts Payable": [
+   {
+    "title": "Accounts payable explained",
+    "url": "https://www.accountingcoach.com/accounts-payable/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Accounts payable (definition)",
+    "url": "https://www.investopedia.com/terms/a/accountspayable.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Accounts payable",
+    "url": "https://corporatefinanceinstitute.com/resources/accounting/accounts-payable/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Reconciliation": [
+   {
+    "title": "Bank reconciliation explained",
+    "url": "https://www.accountingcoach.com/bank-reconciliation/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 40,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Reconciliation (definition)",
+    "url": "https://www.investopedia.com/terms/r/reconciliation.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Account reconciliation",
+    "url": "https://corporatefinanceinstitute.com/resources/accounting/reconciliation/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "General Ledger": [
+   {
+    "title": "General ledger (definition)",
+    "url": "https://www.investopedia.com/terms/g/generalledger.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Debits and credits explained",
+    "url": "https://www.accountingcoach.com/debits-and-credits/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "General ledger",
+    "url": "https://corporatefinanceinstitute.com/resources/accounting/general-ledger/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Financial Reporting": [
+   {
+    "title": "Financial statements explained",
+    "url": "https://www.accountingcoach.com/financial-statements/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "IFRS Accounting Standards navigator",
+    "url": "https://www.ifrs.org/issued-standards/list-of-standards/",
+    "provider": "IFRS Foundation",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Financial statements (definition)",
+    "url": "https://www.investopedia.com/terms/f/financial-statements.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Financial Statement Analysis": [
+   {
+    "title": "Financial ratios explained",
+    "url": "https://www.accountingcoach.com/financial-ratios/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Financial statement analysis",
+    "url": "https://www.investopedia.com/terms/f/financial-statement-analysis.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 20,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Khan Academy: Finance and capital markets",
+    "url": "https://www.khanacademy.org/economics-finance-domain/core-finance",
+    "provider": "Khan Academy",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Ratio Analysis": [
+   {
+    "title": "Financial ratios explained",
+    "url": "https://www.accountingcoach.com/financial-ratios/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Ratio analysis (definition)",
+    "url": "https://www.investopedia.com/terms/r/ratioanalysis.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Financial ratios",
+    "url": "https://corporatefinanceinstitute.com/resources/accounting/financial-ratios/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Financial Modeling": [
+   {
+    "title": "Financial modeling (definition)",
+    "url": "https://www.investopedia.com/terms/f/financialmodeling.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "What is financial modeling",
+    "url": "https://corporatefinanceinstitute.com/resources/financial-modeling/what-is-financial-modeling/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Khan Academy: Finance and capital markets",
+    "url": "https://www.khanacademy.org/economics-finance-domain/core-finance",
+    "provider": "Khan Academy",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Valuation": [
+   {
+    "title": "Valuation (definition)",
+    "url": "https://www.investopedia.com/terms/v/valuation.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Valuation methods",
+    "url": "https://corporatefinanceinstitute.com/resources/valuation/valuation-methods/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Budgeting": [
+   {
+    "title": "Budget (definition)",
+    "url": "https://www.investopedia.com/terms/b/budget.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Variance Analysis": [
+   {
+    "title": "Variance analysis",
+    "url": "https://corporatefinanceinstitute.com/resources/accounting/variance-analysis/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 20,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Standard costing and variances explained",
+    "url": "https://www.accountingcoach.com/standard-costing/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Forecasting": [
+   {
+    "title": "Forecasting (definition)",
+    "url": "https://www.investopedia.com/terms/f/forecasting.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Create a forecast in Excel",
+    "url": "https://support.microsoft.com/en-us/office/create-a-forecast-in-excel-for-windows-22c500da-6da7-45e5-bfdc-60a7062329fd",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Forecasting: Principles and Practice",
+    "url": "https://otexts.com/fpp3/",
+    "provider": "OTexts (Hyndman & Athanasopoulos)",
+    "resource_type": "course",
+    "level": "advanced",
+    "duration_minutes": 900,
+    "credibility": 0.95,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "FP&A": [
+   {
+    "title": "Financial planning (definition)",
+    "url": "https://www.investopedia.com/terms/f/financial_plan.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Forecasting: Principles and Practice",
+    "url": "https://otexts.com/fpp3/",
+    "provider": "OTexts (Hyndman & Athanasopoulos)",
+    "resource_type": "course",
+    "level": "advanced",
+    "duration_minutes": 900,
+    "credibility": 0.95,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "GST": [
+   {
+    "title": "GST tutorials (official)",
+    "url": "https://tutorial.gst.gov.in/",
+    "provider": "GSTN (Government of India)",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "GST portal",
+    "url": "https://www.gst.gov.in/",
+    "provider": "GSTN (Government of India)",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "CBIC GST",
+    "url": "https://cbic-gst.gov.in/",
+    "provider": "CBIC (Government of India)",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "TDS": [
+   {
+    "title": "Income Tax Department: TDS",
+    "url": "https://incometaxindia.gov.in/Pages/tds.aspx",
+    "provider": "Income Tax Department (India)",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "TRACES (TDS reconciliation)",
+    "url": "https://www.tdscpc.gov.in/",
+    "provider": "Income Tax Department (India)",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Income tax e-filing portal help",
+    "url": "https://www.incometax.gov.in/iec/foportal/help",
+    "provider": "Income Tax Department (India)",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "IFRS": [
+   {
+    "title": "IFRS Accounting Standards list",
+    "url": "https://www.ifrs.org/issued-standards/list-of-standards/",
+    "provider": "IFRS Foundation",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "IFRS (definition)",
+    "url": "https://www.investopedia.com/terms/i/ifrs.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "US GAAP": [
+   {
+    "title": "FASB Accounting Standards Codification",
+    "url": "https://asc.fasb.org/",
+    "provider": "FASB",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "GAAP (definition)",
+    "url": "https://www.investopedia.com/terms/g/gaap.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Financial statements explained",
+    "url": "https://www.accountingcoach.com/financial-statements/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Ind AS": [
+   {
+    "title": "Ind AS (Ministry of Corporate Affairs)",
+    "url": "https://www.mca.gov.in/content/mca/global/en/acts-rules/ebooks/accounting-standards.html",
+    "provider": "Ministry of Corporate Affairs (India)",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "ICAI Accounting Standards Board",
+    "url": "https://www.icai.org/category/accounting-standards-board",
+    "provider": "ICAI",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "IFRS Accounting Standards list",
+    "url": "https://www.ifrs.org/issued-standards/list-of-standards/",
+    "provider": "IFRS Foundation",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Month-End Close": [
+   {
+    "title": "Adjusting entries explained",
+    "url": "https://www.accountingcoach.com/adjusting-entries/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Order to Cash": [
+   {
+    "title": "Accounts receivable explained",
+    "url": "https://www.accountingcoach.com/accounts-receivable-and-bad-debts-expense/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "SAP Learning (order to cash)",
+    "url": "https://learning.sap.com/",
+    "provider": "SAP",
+    "resource_type": "course",
+    "level": "intermediate",
+    "duration_minutes": 300,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Procure to Pay": [
+   {
+    "title": "Accounts payable explained",
+    "url": "https://www.accountingcoach.com/accounts-payable/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "SAP Learning (procurement)",
+    "url": "https://learning.sap.com/",
+    "provider": "SAP",
+    "resource_type": "course",
+    "level": "intermediate",
+    "duration_minutes": 300,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Collections": [
+   {
+    "title": "Collections and bad debts explained",
+    "url": "https://www.accountingcoach.com/accounts-receivable-and-bad-debts-expense/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Days sales outstanding (DSO)",
+    "url": "https://www.investopedia.com/terms/d/dso.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Accounts receivable turnover ratio",
+    "url": "https://www.investopedia.com/terms/r/receivableturnoverratio.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Cash Application": [
+   {
+    "title": "Cash application process",
+    "url": "https://www.investopedia.com/terms/c/cash-application.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.75,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Accounts receivable explained",
+    "url": "https://www.accountingcoach.com/accounts-receivable-and-bad-debts-expense/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Bank reconciliation explained",
+    "url": "https://www.accountingcoach.com/bank-reconciliation/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 40,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Payment Posting": [
+   {
+    "title": "Accounts receivable explained",
+    "url": "https://www.accountingcoach.com/accounts-receivable-and-bad-debts-expense/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "CMS: Medicare remittance advice",
+    "url": "https://www.cms.gov/medicare/billing/electronicbillingeditrans/remittance",
+    "provider": "CMS (US)",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Bank reconciliation explained",
+    "url": "https://www.accountingcoach.com/bank-reconciliation/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 40,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Medical Billing": [
+   {
+    "title": "Medical billing (definition)",
+    "url": "https://www.investopedia.com/terms/m/medical-billing.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.75,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Revenue Cycle Management": [
+   {
+    "title": "HFMA resources",
+    "url": "https://www.hfma.org/",
+    "provider": "HFMA",
+    "resource_type": "other",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Denial Management": [
+   {
+    "title": "CMS: Medicare claims processing manual",
+    "url": "https://www.cms.gov/regulations-and-guidance/guidance/manuals/internet-only-manuals-ioms-items/cms018912",
+    "provider": "CMS (US)",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "CMS: Medicare appeals",
+    "url": "https://www.cms.gov/medicare/appeals-grievances/fee-for-service",
+    "provider": "CMS (US)",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Claims Follow-up": [
+   {
+    "title": "CMS: Medicare claims processing manual",
+    "url": "https://www.cms.gov/regulations-and-guidance/guidance/manuals/internet-only-manuals-ioms-items/cms018912",
+    "provider": "CMS (US)",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Dashboards": [
+   {
+    "title": "Power BI dashboards",
+    "url": "https://learn.microsoft.com/en-us/power-bi/create-reports/service-dashboards",
+    "provider": "Microsoft Learn",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Tableau free training videos",
+    "url": "https://www.tableau.com/learn/training",
+    "provider": "Tableau",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 240,
+    "credibility": 1.0,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Kaggle: Data Visualization",
+    "url": "https://www.kaggle.com/learn/data-visualization",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 240,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "KPI Reporting": [
+   {
+    "title": "Key performance indicators (KPIs)",
+    "url": "https://www.investopedia.com/terms/k/kpi.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Power BI KPI visuals",
+    "url": "https://learn.microsoft.com/en-us/power-bi/visuals/power-bi-visualization-kpi",
+    "provider": "Microsoft Learn",
+    "resource_type": "documentation",
+    "level": "intermediate",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Power BI training",
+    "url": "https://learn.microsoft.com/en-us/training/powerplatform/power-bi",
+    "provider": "Microsoft Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "MIS Reporting": [
+   {
+    "title": "Power BI training",
+    "url": "https://learn.microsoft.com/en-us/training/powerplatform/power-bi",
+    "provider": "Microsoft Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Create a PivotTable to analyze worksheet data",
+    "url": "https://support.microsoft.com/en-us/office/create-a-pivottable-to-analyze-worksheet-data-a9a84538-bfe9-40a9-a8e9-f99134456576",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Management information system (definition)",
+    "url": "https://www.investopedia.com/terms/m/management-information-system.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Excel Reporting": [
+   {
+    "title": "Create a PivotTable to analyze worksheet data",
+    "url": "https://support.microsoft.com/en-us/office/create-a-pivottable-to-analyze-worksheet-data-a9a84538-bfe9-40a9-a8e9-f99134456576",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Excel video training",
+    "url": "https://support.microsoft.com/en-us/office/excel-video-training-9bc05390-e94c-46af-a5b3-d7c22f6990bb",
+    "provider": "Microsoft Support",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Exceljet pivot tables",
+    "url": "https://exceljet.net/pivot-tables",
+    "provider": "Exceljet",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Data Validation": [
+   {
+    "title": "Apply data validation to cells",
+    "url": "https://support.microsoft.com/en-us/office/apply-data-validation-to-cells-29fecbcc-d1b9-42c1-9d76-eff3ce5f7249",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Exceljet data validation",
+    "url": "https://exceljet.net/articles/excel-data-validation-guide",
+    "provider": "Exceljet",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Kaggle: Data Cleaning",
+    "url": "https://www.kaggle.com/learn/data-cleaning",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "intermediate",
+    "duration_minutes": 240,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Process Improvement": [
+   {
+    "title": "Lean (ASQ)",
+    "url": "https://asq.org/quality-resources/lean",
+    "provider": "ASQ",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.9,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Six Sigma (ASQ)",
+    "url": "https://asq.org/quality-resources/six-sigma",
+    "provider": "ASQ",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.9,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Root cause analysis (ASQ)",
+    "url": "https://asq.org/quality-resources/root-cause-analysis",
+    "provider": "ASQ",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.9,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Audit Support": [
+   {
+    "title": "ICAI Auditing and Assurance Standards Board",
+    "url": "https://www.icai.org/category/auditing-assurance-standards-board",
+    "provider": "ICAI",
+    "resource_type": "documentation",
+    "level": "advanced",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Audit (definition)",
+    "url": "https://www.investopedia.com/terms/a/audit.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Treasury": [
+   {
+    "title": "Treasury management",
+    "url": "https://corporatefinanceinstitute.com/resources/accounting/treasury-management/",
+    "provider": "Corporate Finance Institute",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 20,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Cash flow statement explained",
+    "url": "https://www.accountingcoach.com/cash-flow-statement/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 45,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Working capital (definition)",
+    "url": "https://www.investopedia.com/terms/w/workingcapital.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Working Capital Analysis": [
+   {
+    "title": "Working capital (definition)",
+    "url": "https://www.investopedia.com/terms/w/workingcapital.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Working capital explained",
+    "url": "https://www.accountingcoach.com/working-capital/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Cash conversion cycle",
+    "url": "https://www.investopedia.com/terms/c/cashconversioncycle.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Cost Analysis": [
+   {
+    "title": "Cost accounting (definition)",
+    "url": "https://www.investopedia.com/terms/c/costaccounting.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Break-even analysis explained",
+    "url": "https://www.accountingcoach.com/break-even-point/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Revenue Analysis": [
+   {
+    "title": "Revenue (definition)",
+    "url": "https://www.investopedia.com/terms/r/revenue.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Analyze data in Excel",
+    "url": "https://support.microsoft.com/en-us/office/analyze-data-in-excel-3223aab8-f543-4fda-85ed-76bb0295ffc4",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Kaggle: Pandas",
+    "url": "https://www.kaggle.com/learn/pandas",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 240,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Financial Analysis": [
+   {
+    "title": "Financial ratios explained",
+    "url": "https://www.accountingcoach.com/financial-ratios/explanation",
+    "provider": "AccountingCoach",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 60,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Financial analysis (definition)",
+    "url": "https://www.investopedia.com/terms/f/financial-analysis.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.8,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Khan Academy: Finance and capital markets",
+    "url": "https://www.khanacademy.org/economics-finance-domain/core-finance",
+    "provider": "Khan Academy",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 300,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "MS Office": [
+   {
+    "title": "Excel video training",
+    "url": "https://support.microsoft.com/en-us/office/excel-video-training-9bc05390-e94c-46af-a5b3-d7c22f6990bb",
+    "provider": "Microsoft Support",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 120,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Word for Windows training",
+    "url": "https://support.microsoft.com/en-us/office/word-for-windows-training-7bcd85e6-2c3d-4c3c-a2a5-5ed8847eae73",
+    "provider": "Microsoft Support",
+    "resource_type": "video",
+    "level": "beginner",
+    "duration_minutes": 60,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Financial Data Review": [
+   {
+    "title": "Data validation in Excel",
+    "url": "https://support.microsoft.com/en-us/office/apply-data-validation-to-cells-29fecbcc-d1b9-42c1-9d76-eff3ce5f7249",
+    "provider": "Microsoft Support",
+    "resource_type": "documentation",
+    "level": "beginner",
+    "duration_minutes": 20,
+    "credibility": 1.0,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Kaggle: Data Cleaning",
+    "url": "https://www.kaggle.com/learn/data-cleaning",
+    "provider": "Kaggle Learn",
+    "resource_type": "course",
+    "level": "intermediate",
+    "duration_minutes": 240,
+    "credibility": 0.9,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   }
+  ],
+  "Stakeholder Coordination": [
+   {
+    "title": "Stakeholder analysis (PMI)",
+    "url": "https://www.pmi.org/learning/library/stakeholder-analysis-pivotal-practice-projects-8905",
+    "provider": "PMI",
+    "resource_type": "tutorial",
+    "level": "intermediate",
+    "duration_minutes": 30,
+    "credibility": 0.85,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Google Project Management (Coursera)",
+    "url": "https://www.coursera.org/professional-certificates/google-project-management",
+    "provider": "Coursera / Google",
+    "resource_type": "course",
+    "level": "beginner",
+    "duration_minutes": 3000,
+    "credibility": 0.85,
+    "link_check": "ok",
+    "checked_on": "2026-11-10"
+   },
+   {
+    "title": "Stakeholder (definition)",
+    "url": "https://www.investopedia.com/terms/s/stakeholder.asp",
+    "provider": "Investopedia",
+    "resource_type": "tutorial",
+    "level": "beginner",
+    "duration_minutes": 15,
+    "credibility": 0.75,
+    "link_check": "blocked_by_site",
+    "checked_on": "2026-11-10"
+   }
+  ]
+ }
+}

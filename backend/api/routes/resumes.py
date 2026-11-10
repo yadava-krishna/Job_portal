@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy import select
 

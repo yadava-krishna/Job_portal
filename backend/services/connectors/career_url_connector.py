@@ -25,7 +25,6 @@ from backend.services.connectors.base_connector import BaseConnector
 from backend.services.connectors.html_connector import HtmlConnector
 from backend.services.connectors.jsonld_connector import extract_jsonld_from_html
 from backend.services.connectors.rss_connector import parse_feed_xml
-from backend.services.connectors.sitemap_connector import parse_sitemap_urls
 from backend.services.normalization import NormalizedJob
 from backend.services.scrapling_client import ScraplingClient, client as default_client
 from backend.services.source_policies import AccessMethod, SourceCategory

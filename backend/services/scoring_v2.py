@@ -73,6 +73,10 @@ def _authorization(job: Job, prefs: JobPreference | None) -> tuple[float | None,
         return 100.0, f"you are authorised to work in {country}", "pass"
     signal = job.sponsorship_signal or "unknown"
     needs = prefs.needs_sponsorship if prefs else None
+    if signal == "none":
+        if needs is True:
+            return 0.0, f"needs authorisation for {country}; the posting says it does not sponsor ({job.sponsorship_evidence or ''})", "fail"
+        return 30.0, f"job is in {country} and the posting says it does not sponsor visas", "unknown"
     if signal == "verified":
         return 80.0, f"needs authorisation for {country}; the posting says sponsorship is offered", "pass"
     if signal == "inferred":
@@ -106,7 +110,7 @@ def score(match: MatchResult, elig_status: EligibilityStatus, elig_reasons: list
                            "weighted": 0.0 if sc is None else round(sc * eff / 100, 2), "evidence": evidence, "method": method})
     total = round(sum(c["weighted"] for c in components), 1)
 
-    if elig_status == EligibilityStatus.INELIGIBLE:
+    if elig_status == EligibilityStatus.INELIGIBLE or auth_elig == "fail":
         eligibility = "fail"
     elif elig_status == EligibilityStatus.ELIGIBLE and auth_elig == "pass":
         eligibility = "pass"

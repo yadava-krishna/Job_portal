@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from backend.models import Application, Job, TailoredResume, User
+from backend.models import Application, Job, User
 from backend.services.profile_master_service import ProfileMasterService
 
 

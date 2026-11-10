@@ -13,7 +13,7 @@ from backend.db import session_factory
 from backend.models import Application, DiscoveryRun, Job, JobSourceLink, User, UserJob, utcnow
 from backend.schemas.jobs import DiscoverRequest, DiscoveryRunOut, ImportJobRequest, ImportResult, JobAnalysis, JobDetail, JobList, SearchLinkOut
 from backend.schemas.profile import JobMatchIntelligenceOut
-from backend.services import discovery_service, resume_service
+from backend.services import platform_service, discovery_service, resume_service
 from backend.services.matching_service import UserMatcher, compute_career_intelligence
 from core import timeutil
 from core.models import MatchResult
@@ -288,6 +288,7 @@ def save(user_job_id: int, user: CurrentUser, db: DbSession, settings: SettingsD
     uj.is_saved, uj.saved_at = True, uj.saved_at or utcnow()
     if uj.status == "dismissed":
         uj.status, uj.dismissed_at = "new", None
+    platform_service.track(db, user.id, "job_saved", user_job_id=uj.id, score=uj.match_score)
     db.commit()
     return serializers.job_detail(db, uj, JDAnalyzer(resume_service.taxonomy(settings)))
 
@@ -306,6 +307,7 @@ def dismiss(user_job_id: int, user: CurrentUser, db: DbSession, settings: Settin
     if uj.status == "applied":
         raise HTTPException(status.HTTP_409_CONFLICT, "Applied jobs cannot be dismissed.")
     uj.status, uj.dismissed_at = "dismissed", utcnow()
+    platform_service.track(db, user.id, "job_dismissed", user_job_id=uj.id, score=uj.match_score)
     db.commit()
     return serializers.job_detail(db, uj, JDAnalyzer(resume_service.taxonomy(settings)))
 

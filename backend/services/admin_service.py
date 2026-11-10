@@ -66,7 +66,7 @@ def set_user_active(db: Session, user_id: int, is_active: bool, actor: User, ip:
 
 
 def set_user_role(db: Session, user_id: int, role: str, actor: User, ip: str | None) -> User:
-    """Change a user's role (user | admin)."""
+    """Change a user's role (user = candidate | mentor | admin)."""
     if user_id == actor.id and role != "admin":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Admins cannot demote their own account.")
     u = db.get(User, user_id)

@@ -24,7 +24,7 @@ import socket
 import time
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urljoin, urlparse, urlsplit
+from urllib.parse import urlparse, urlsplit
 import urllib.robotparser
 
 import httpx

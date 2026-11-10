@@ -12,7 +12,6 @@ from typing import Any
 from backend.services.connectors.base_connector import BaseConnector
 from backend.services.normalization import (
     NormalizedJob,
-    canonical_url,
     html_to_text,
     local_date,
 )

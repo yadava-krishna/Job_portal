@@ -33,6 +33,11 @@ PLATFORM_SOURCES = ["browser_clipper", "user_job_url", "file_import", "alert_ema
 ADZUNA = "Adzuna"
 
 
+def _aware(dt):
+    from datetime import timezone
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def get_preferences(db: Session, user: User) -> JobPreference | None:
     return db.execute(select(JobPreference).where(JobPreference.user_id == user.id)).scalar_one_or_none()
 
@@ -146,7 +151,11 @@ def onboarding_status(db: Session, user: User) -> OnboardingStatus:
     platforms = bool(enabled_platform_names(db, user))
     done = resume and confirmed and prefs and platforms
     if done and user.onboarding_completed_at is None:
+        from backend.services import platform_service
+
         user.onboarding_completed_at = utcnow()
+        platform_service.track_once(db, user.id, "onboarding_completed",
+                                    minutes=round((utcnow() - _aware(user.created_at)).total_seconds() / 60, 1))
         db.commit()
     if done and user.starter_search_created_at is None:
         from backend.config import get_settings

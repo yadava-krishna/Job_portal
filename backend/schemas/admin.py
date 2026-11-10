@@ -28,12 +28,12 @@ class UserStatusUpdate(BaseModel):
 
 
 class UserRoleUpdate(BaseModel):
-    role: Literal["user", "admin"]
+    role: Literal["user", "mentor", "admin"]
 
 
 class InviteCreate(BaseModel):
     email: str | None = Field(default=None, max_length=320)
-    role: Literal["user", "admin"] = "user"
+    role: Literal["user", "mentor", "admin"] = "user"
     max_uses: int = Field(default=1, ge=1, le=100)
     expires_days: int = Field(default=7, ge=1, le=90)
 

@@ -226,9 +226,12 @@ def heartbeat(db: Session, user: User, visible: bool, active: bool) -> None:
 
 
 def record_view(db: Session, user: User, job_id: int) -> None:
+    from backend.services import platform_service
+
     v = db.execute(select(JobView).where(JobView.user_id == user.id, JobView.job_id == job_id)).scalar_one_or_none()
     if v is None:
         db.add(JobView(user_id=user.id, job_id=job_id))
+        platform_service.track(db, user.id, "job_viewed", job_id=job_id)
     else:
         v.view_count += 1
         v.last_viewed_at = utcnow()

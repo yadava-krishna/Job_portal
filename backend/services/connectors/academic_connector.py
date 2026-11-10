@@ -16,7 +16,6 @@ from backend.services.normalization import (
     NormalizedJob,
     canonical_url,
     local_date,
-    work_mode as normalize_work_mode,
 )
 from backend.services.scrapling_client import ScraplingClient, client as default_client
 from backend.services.source_policies import AccessMethod, SourceCategory

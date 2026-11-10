@@ -149,3 +149,86 @@ def get_admin_sources(admin: CurrentAdmin) -> list[SourceConnectorOut]:
             )
         )
     return out
+
+
+# ---------------- operations: background jobs, product analytics, backups, disk ----------------
+
+@router.get("/jobs")
+def admin_jobs(admin: CurrentAdmin, db: DbSession) -> list[dict[str, Any]]:
+    """Every named background job with its schedule, last status and last error."""
+    from backend.services import jobs_registry
+
+    return jobs_registry.overview(db)
+
+
+@router.post("/jobs/{name}/run")
+def admin_run_job(name: str, admin: CurrentAdmin, db: DbSession, settings: SettingsDep, request: Request) -> dict[str, Any]:
+    """Controlled replay: run one job now (guarded against concurrent runs) and return the recorded result."""
+    from fastapi import HTTPException
+
+    from backend.services import jobs_registry
+
+    if name not in jobs_registry.REGISTRY:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown job")
+    admin_service.record_audit(db, admin.id, "JOB_REPLAYED", "job", name, client_ip(request, settings), {})
+    db.commit()
+    row = jobs_registry.run(name, settings, trigger="replay")
+    return {"id": row.id, "name": row.name, "status": row.status, "attempts": row.attempts, "details": row.details, "error": row.error}
+
+
+@router.get("/product-metrics")
+def admin_product_metrics(admin: CurrentAdmin, db: DbSession, days: int = Query(30, ge=1, le=365)) -> dict[str, Any]:
+    """The 16 PRD events and north-star metrics, aggregated (no individual candidate data)."""
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from backend.models import AICall, AnalyticsEvent, Application, Gap, Interview, Reflection, User, utcnow
+    from backend.services import platform_service
+
+    since = utcnow() - timedelta(days=days)
+    apps = db.execute(select(Application).where(Application.status == "SUBMITTED", Application.submitted_at >= since)).unique().scalars().all()
+    with_iv = sum(1 for a in apps if a.stage in ("interview", "offer") or db.execute(select(Interview.id).where(Interview.application_id == a.id)).first())
+    offers = sum(1 for a in apps if a.stage == "offer")
+    weekly = db.execute(select(func.count(func.distinct(AnalyticsEvent.user_id))).where(AnalyticsEvent.created_at >= utcnow() - timedelta(days=7))).scalar() or 0
+    candidates = db.execute(select(func.count()).select_from(User).where(User.role == "user", User.is_active.is_(True))).scalar() or 0
+    onboarded = db.execute(select(func.count()).select_from(User).where(User.onboarding_completed_at.is_not(None))).scalar() or 0
+    reused = sum(1 for a in apps if a.resume_version_id)
+    closed = db.execute(select(func.count()).select_from(Gap).where(Gap.status == "closed")).scalar() or 0
+    gaps = db.execute(select(func.count()).select_from(Gap)).scalar() or 0
+    refl = db.execute(select(func.count()).select_from(Reflection).where(Reflection.created_at >= since)).scalar() or 0
+    ai = db.execute(select(AICall.purpose, func.count(), func.coalesce(func.sum(AICall.cost_usd), 0)).where(AICall.created_at >= since)
+                    .group_by(AICall.purpose)).all()
+    pct = lambda a, b: round(100 * a / b, 1) if b else None  # noqa: E731
+    return {
+        "days": days, "events": platform_service.event_counts(db, days),
+        "north_star": {"applications_submitted": len(apps), "application_to_interview_pct": pct(with_iv, len(apps)),
+                       "interview_to_offer_pct": pct(offers, with_iv), "offers": offers, "gap_closure_pct": pct(closed, gaps),
+                       "resume_reuse_pct": pct(reused, len(apps)), "weekly_active_candidates": weekly,
+                       "reflections_completed": refl, "onboarding_activation_pct": pct(onboarded, candidates)},
+        "ai_costs": [{"purpose": p, "calls": n, "cost_usd": float(c)} for p, n, c in ai],
+        "feedback": platform_service.feedback_summary(db),
+        "note": "Raw application count is not a success measure on its own; look at conversions and outcomes.",
+    }
+
+
+@router.get("/system")
+def admin_system(admin: CurrentAdmin, settings: SettingsDep) -> dict[str, Any]:
+    """Disk usage (warnings at 70/80/90%) and the last backup's status, as written by the backup service."""
+    import json
+    import shutil
+    from pathlib import Path
+
+    root = settings.storage_dir if settings.storage_dir.exists() else Path("/")
+    u = shutil.disk_usage(root)
+    used = round(100 * u.used / u.total, 1)
+    level = "critical" if used >= 90 else "high" if used >= 80 else "warning" if used >= 70 else "ok"
+    backup = None
+    p = Path("/backups/last_backup.json")
+    if p.is_file():
+        try:
+            backup = json.loads(p.read_text())
+        except ValueError:
+            backup = {"status": "unreadable"}
+    return {"disk": {"used_percent": used, "free_gb": round(u.free / 1e9, 1), "level": level},
+            "backup": backup or {"status": "unknown", "note": "No backup status file. Start the backup service (docker compose up -d backup)."}}

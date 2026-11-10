@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
-from backend.models import CandidateProfile, Job, JobPreference, User, UserJob, utcnow
+from backend.models import CandidateProfile, Job, JobMatchReport, JobPreference, User, UserJob, utcnow
 from backend.services import resume_service, scoring_v2
 from core import timeutil
 from core.llm import LLMClient, build_llm

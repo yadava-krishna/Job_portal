@@ -13,7 +13,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.models import CandidateProfile, CandidateProfileV2, ProfileSkill, ProfileWorkExperience, User, utcnow
+from backend.models import CandidateProfile, CandidateProfileV2, ProfileSkill, ProfileWorkExperience, utcnow
 
 log = logging.getLogger(__name__)
 

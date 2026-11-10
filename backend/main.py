@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse
 
 from backend.api.deps import is_local_request
-from backend.api.routes import admin, applications, auth, discovery, extension, health, tracker, jobs, profile, reports, resumes
+from backend.api.routes import admin, applications, auth, discovery, extension, health, tracker, jobs, profile, reports, resumes, career, growth, studio
 from backend.config import VERSION, get_settings
 from backend.db import Base, get_engine, init_engine
 from backend.services.scheduler_service import get_scheduler
@@ -84,8 +84,13 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
 
     for r in (health.router, auth.router, profile.router, jobs.router, applications.router, reports.router,
               discovery.companies, discovery.searches, discovery.notifications, discovery.health, extension.router, tracker.router,
-              admin.router, resumes.router):
+              admin.router, resumes.router, career.router, studio.router, growth.router):
         app.include_router(r, prefix=API_PREFIX)
+
+    @app.get("/api/health", include_in_schema=False)
+    def health_alias(response: Response):
+        """Same as /api/v1/health, at the path the beta hosting plan's checks use."""
+        return health.health(settings, response)
 
     def docs_allowed(request: Request) -> bool:
         mode = settings.docs_mode

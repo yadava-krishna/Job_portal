@@ -9,7 +9,6 @@ import gzip
 import logging
 import re
 from typing import Any
-from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
 from backend.services.connectors.base_connector import BaseConnector

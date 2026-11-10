@@ -70,8 +70,15 @@ services:
       ADZUNA_COUNTRY: ${ADZUNA_COUNTRY:-in}
       SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
       SCHEDULER_RUN_TIME: ${SCHEDULER_RUN_TIME:-09:00}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-JobPilot <no-reply@jobpilot.local>}
     volumes:
       - storage:/data        # resumes, Excel reports, logs (per user under /data/users/<id>)
+      - ./backups:/backups:ro  # only to report the last backup's status on /api/health and the admin page
     ports:
       - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     deploy:
@@ -96,6 +103,52 @@ services:
     deploy:
       resources:
         limits: { cpus: "0.5", memory: 128M }
+    networks: [edge]
+
+  # Daily backups (database + uploads) inside the stack, so no host crontab is needed. See deploy/backup/backup.sh.
+  backup:
+    <<: *limits
+    build:
+      context: ./deploy/backup
+    image: jobpilot-backup:latest
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGHOST: postgres
+      PGUSER: jobpilot
+      PGDATABASE: jobpilot
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ_NAME:-Asia/Kolkata}
+      BACKUP_TIME: ${BACKUP_TIME:-02:30}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_OFFHOST: ${BACKUP_OFFHOST:-0}
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+    volumes:
+      - storage:/data:ro
+      - ./backups:/backups
+      - ${BACKUP_OFFHOST_DIR:-./backups/offhost}:/offhost
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+    networks: [internal]
+
+  # Free-beta public access (hosting plan §16): a Cloudflare Quick Tunnel to nginx only, so the browser uses the same
+  # address for the app and /api. Start with:  docker compose --profile quicktunnel up -d ; the URL is printed by
+  # deploy/tunnel_url.sh. Quick Tunnel URLs change on restart and have no uptime guarantee.
+  cloudflared:
+    <<: *limits
+    profiles: [quicktunnel]
+    image: cloudflare/cloudflared:latest
+    depends_on:
+      frontend: { condition: service_healthy }
+    command: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "--url", "http://frontend:80"]
+    ports:
+      - "127.0.0.1:${CLOUDFLARED_METRICS_PORT:-2001}:2000"
+    deploy:
+      resources:
+        limits: { cpus: "0.25", memory: 128M }
     networks: [edge]
 
   ngrok:

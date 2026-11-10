@@ -38,6 +38,11 @@ class PortalScheduler:
                                id="daily_discovery", max_instances=1, coalesce=True, misfire_grace_time=6 * 3600)
         self.scheduler.add_job(self.run_due_searches, IntervalTrigger(minutes=SEARCH_TICK_MINUTES, timezone=self.settings.timezone),
                                id="saved_searches", max_instances=1, coalesce=True)
+        from backend.services import jobs_registry
+
+        for name, cron in jobs_registry.SCHEDULES.items():  # the other named background jobs (spec 02 §19)
+            self.scheduler.add_job(jobs_registry.run, CronTrigger(timezone=self.settings.timezone, **cron), args=[name, self.settings],
+                                   id=f"job:{name}", max_instances=1, coalesce=True, misfire_grace_time=3600)
         self._close_interrupted_runs()
         self.scheduler.start()
         self._catch_up_missed_daily_run(hour, minute)

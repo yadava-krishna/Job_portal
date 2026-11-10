@@ -11,11 +11,10 @@ Identifies:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import Any
-from urllib.parse import urljoin, urlparse, urlsplit
+from urllib.parse import urljoin, urlparse
 
 from backend.services.scrapling_client import ScraplingError, SSRFBlockedError, get_scrapling_client
 

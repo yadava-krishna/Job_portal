@@ -16,7 +16,6 @@ from backend.services.connectors.base_connector import BaseConnector
 from backend.services.normalization import (
     NormalizedJob,
     canonical_url,
-    dedup_key,
     html_to_text,
     local_date,
     work_mode as normalize_work_mode,

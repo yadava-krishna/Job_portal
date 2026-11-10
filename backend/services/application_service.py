@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from applications.screening_answers import ScreeningAnswerer
 from backend.config import BackendSettings
 from backend.models import Application, ApplicationEvent, Job, User, UserJob, utcnow
-from backend.services import resume_service
+from backend.services import platform_service, resume_service
 from backend.services.matching_service import UserMatcher, job_to_posting
 from core import timeutil
 from core.models import NEEDS_CANDIDATE_INPUT, MatchResult
@@ -133,6 +133,8 @@ def prepare(db: Session, settings: BackendSettings, user: User, user_job_id: int
         return db.execute(select(Application).where(Application.user_id == user.id, Application.job_id == uj.job_id)).unique().scalar_one()
     _event(db, app, user, "PREPARED", None, "PREPARED",
            f"{len(screening)} screening answers; cover letter: {'yes' if cover_letter else 'no'}")
+    platform_service.track(db, user.id, "application_prepared", application_id=app.id,
+                           unknown_answers=sum(1 for a in screening if a.get("status") == NEEDS_CANDIDATE_INPUT))
     db.commit()
     db.refresh(app)
     return app
@@ -187,6 +189,9 @@ def mark_submitted(db: Session, user: User, app: Application, *, reference_id: s
     app.stage = "applied"
     if notes:
         app.notes = notes
+    lock_resume_version(db, user, app)
+    platform_service.track(db, user.id, "application_submitted", application_id=app.id, source=source,
+                           resume_version_id=app.resume_version_id)
     if app.user_job_id:
         uj = db.get(UserJob, app.user_job_id)
         if uj is not None and uj.user_id == user.id:
@@ -232,14 +237,59 @@ def withdraw(db: Session, user: User, app: Application, reason: str | None) -> A
     return app
 
 
+# Legal post-submission moves. Pipelines branch (e.g. straight to interview, or rejected at any point); terminal
+# states can only be archived, except a ghosted application that comes back to life.
+STAGE_MOVES: dict[str, set[str]] = {
+    "applied": {"screening", "assessment", "interview", "offer", "rejected", "withdrawn", "ghosted", "archived"},
+    "screening": {"assessment", "interview", "offer", "rejected", "withdrawn", "ghosted", "archived"},
+    "assessment": {"interview", "offer", "rejected", "withdrawn", "ghosted", "archived"},
+    "interview": {"interview", "assessment", "offer", "rejected", "withdrawn", "ghosted", "archived"},
+    "offer": {"rejected", "withdrawn", "archived"},
+    "ghosted": {"screening", "assessment", "interview", "offer", "rejected", "withdrawn", "archived"},
+    "rejected": {"archived"},
+    "withdrawn": {"archived"},
+    "archived": {"applied"},
+}
+
+
 def set_stage(db: Session, user: User, app: Application, stage: str, note: str | None) -> Application:
     if app.status != "SUBMITTED":
         raise HTTPException(status.HTTP_409_CONFLICT, "Pipeline stages apply only after the application is submitted.")
-    old = app.stage
+    old = app.stage or "applied"
+    if stage != old and stage not in STAGE_MOVES.get(old, set()):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"An application can't move from {old} to {stage}.")
     app.stage = stage
     _event(db, app, user, "STAGE_CHANGED", old, stage, note)
     db.commit()
     return app
+
+
+def attach_resume_version(db: Session, settings: BackendSettings, user: User, app: Application, version_id: int) -> Application:
+    """Use a Resume Studio version for this application: export (cached) and record the exact file checksum."""
+    from backend.services import studio_service
+
+    if app.status == "SUBMITTED":
+        raise HTTPException(status.HTTP_409_CONFLICT, "The resume of a submitted application can't be changed.")
+    version = studio_service.owned_version(db, user, version_id)
+    export = studio_service.export(db, settings, user, version, "pdf")
+    app.resume_version_id, app.resume_export_id, app.resume_checksum = version.id, export.id, export.file_sha256
+    app.resume_used = f"{version.name} (Resume Studio)"
+    _event(db, app, user, "RESUME_SELECTED", None, None, f"resume version {version.id}, file sha256 {export.file_sha256[:12]}")
+    platform_service.track(db, user.id, "resume_used_in_application", application_id=app.id, resume_version_id=version.id)
+    db.commit()
+    db.refresh(app)
+    return app
+
+
+def lock_resume_version(db: Session, user: User, app: Application) -> None:
+    """Submitted applications keep an immutable resume: the version is locked; later edits create a new version."""
+    if not app.resume_version_id:
+        return
+    from backend.models import ResumeVersion
+
+    v = db.get(ResumeVersion, app.resume_version_id)
+    if v is not None and v.user_id == user.id and v.status != "locked":
+        v.status, v.locked_at = "locked", utcnow()
 
 
 def update_tracking(db: Session, user: User, app: Application, fields: dict) -> Application:
