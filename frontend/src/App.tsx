@@ -22,6 +22,14 @@ const ReportsPage = lazy(() => import("@/pages/ReportsPage").then((m) => ({ defa
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const SearchesPage = lazy(() => import("@/pages/SearchesPage").then((m) => ({ default: m.SearchesPage })));
 const AdminPage = lazy(() => import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })));
+const StudioPage = lazy(() => import("@/pages/StudioPage").then((m) => ({ default: m.StudioPage })));
+const CareerPage = lazy(() => import("@/pages/CareerPage").then((m) => ({ default: m.CareerPage })));
+const InternationalPage = lazy(() => import("@/pages/InternationalPage").then((m) => ({ default: m.InternationalPage })));
+const InterviewPrepPage = lazy(() => import("@/pages/InterviewPrepPage").then((m) => ({ default: m.InterviewPrepPage })));
+const MentorPage = lazy(() => import("@/pages/MentorPage").then((m) => ({ default: m.MentorPage })));
+const MentorWorkspacePage = lazy(() => import("@/pages/MentorWorkspacePage").then((m) => ({ default: m.MentorWorkspacePage })));
+const ForgotPasswordPage = lazy(() => import("@/pages/AuthPages").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("@/pages/AuthPages").then((m) => ({ default: m.ResetPasswordPage })));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -102,7 +110,9 @@ export default function App() {
                   <Route element={<GuestOnly />}>
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
                   </Route>
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
                   <Route element={<RequireAuth />}>
                     <Route path="/onboarding" element={<OnboardingPage />} />
                     <Route element={<RequireOnboarded />}>
@@ -114,6 +124,13 @@ export default function App() {
                         <Route path="/applied" element={<AppliedPage />} />
                         <Route path="/reports" element={<ReportsPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/studio" element={<StudioPage />} />
+                        <Route path="/studio/:id" element={<StudioPage />} />
+                        <Route path="/career" element={<CareerPage />} />
+                        <Route path="/interview-prep" element={<InterviewPrepPage />} />
+                        <Route path="/mentor" element={<MentorPage />} />
+                        <Route path="/mentoring" element={<MentorWorkspacePage />} />
+                        <Route path="/international" element={<InternationalPage />} />
                         <Route element={<RequireAdmin />}>
                           <Route path="/admin" element={<AdminPage />} />
                         </Route>

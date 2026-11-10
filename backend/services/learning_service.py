@@ -105,10 +105,8 @@ def start(db: Session, user: User, resource_id: int | None, gap_id: int | None, 
     return s
 
 
-def heartbeat(db: Session, user: User, session_id: int, active: bool) -> LearningSession:
-    s = _owned_session(db, user, session_id)
-    if s.status != "active":
-        raise HTTPException(status.HTTP_409_CONFLICT, "This session is not running")
+def _account(s: LearningSession, active: bool) -> None:
+    """Add the time since the last heartbeat: active time is capped per beat; the rest is idle."""
     now = utcnow()
     last = s.last_heartbeat_at or s.started_at
     if last.tzinfo is None:
@@ -121,6 +119,18 @@ def heartbeat(db: Session, user: User, session_id: int, active: bool) -> Learnin
     else:
         s.idle_seconds += gap
     s.last_heartbeat_at = now
+
+
+def heartbeat(db: Session, user: User, session_id: int, active: bool) -> LearningSession:
+    s = _owned_session(db, user, session_id)
+    if s.status != "active":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This session is not running")
+    if not platform_service.has_consent(db, user.id, "learning_tracking"):  # consent withdrawn: stop measuring now
+        s.status = "paused"
+        db.commit()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, {"message": "Learning tracking is off, so this session was paused.",
+                                                        "consent": "learning_tracking", "text": platform_service.CONSENT_TEXT["learning_tracking"]})
+    _account(s, active)
     db.commit()
     return s
 
@@ -128,6 +138,8 @@ def heartbeat(db: Session, user: User, session_id: int, active: bool) -> Learnin
 def pause(db: Session, user: User, session_id: int) -> LearningSession:
     s = _owned_session(db, user, session_id)
     if s.status == "active":
+        if platform_service.has_consent(db, user.id, "learning_tracking"):
+            _account(s, True)
         s.status = "paused"
         db.commit()
     return s
@@ -147,6 +159,8 @@ def complete(db: Session, settings, user: User, session_id: int, notes: str | No
     s = _owned_session(db, user, session_id)
     if s.status == "completed":
         raise HTTPException(status.HTTP_409_CONFLICT, "Already completed")
+    if s.status == "active" and platform_service.has_consent(db, user.id, "learning_tracking"):
+        _account(s, True)
     s.status, s.ended_at = "completed", utcnow()
     s.notes = (notes or "").strip()[:5000] or None
     s.knowledge_check = {k: str(v)[:1000] for k, v in (knowledge_check or {}).items()}

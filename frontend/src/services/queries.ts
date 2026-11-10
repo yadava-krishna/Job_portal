@@ -132,7 +132,7 @@ export function useInvalidateWork() {
   const qc = useQueryClient();
   return () =>
     Promise.all(["jobs", "job", "analysis", "applications", "application", "summary", "activity", "analytics", "runs",
-      "discovery-sources", "saved-searches", "notifications", "watchlist"].map((k) =>
+      "discovery-sources", "saved-searches", "notifications", "watchlist", "funnel", "snapshot"].map((k) =>
       qc.invalidateQueries({ queryKey: [k] }),
     ));
 }

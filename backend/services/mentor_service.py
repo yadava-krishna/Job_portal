@@ -105,9 +105,11 @@ def diagnose(db: Session, user: User) -> list[dict[str, Any]]:
 def plan(db: Session, settings: BackendSettings, user: User) -> dict[str, Any]:
     """GET /mentor/plan: diagnoses + open actions. New rule actions are added once (deduplicated by rule)."""
     diags = diagnose(db, user)
-    open_rules = {a.rule for a in db.execute(select(MentorAction).where(MentorAction.user_id == user.id,
-                                                                        MentorAction.completed_at.is_(None),
-                                                                        MentorAction.dismissed_at.is_(None))).scalars()}
+    # Don't re-suggest an action that is open, or that the candidate finished or dismissed in the last 30 days.
+    recent = utcnow() - timedelta(days=30)
+    open_rules = {a.rule for a in db.execute(select(MentorAction).where(MentorAction.user_id == user.id, MentorAction.rule.is_not(None)))
+                  .scalars() if (a.completed_at is None and a.dismissed_at is None)
+                  or (a.completed_at and _aware(a.completed_at) >= recent) or (a.dismissed_at and _aware(a.dismissed_at) >= recent)}
     for d in diags:
         for i, (title, prio, days) in enumerate(d["actions"]):
             rule = f"{d['rule']}#{i}"

@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { ShieldAlert, CheckCircle2, XCircle, Plus, Copy, Trash2, RefreshCw } from "lucide-react";
+import { BackgroundJobsPanel, ProductMetricsPanel, SystemPanel } from "@/features/growth/AdminOps";
+
+type Tab = "metrics" | "users" | "invites" | "audit" | "jobs" | "product" | "system";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "metrics", label: "Metrics" }, { key: "users", label: "Users" }, { key: "invites", label: "Invites" }, { key: "audit", label: "Audit" },
+  { key: "jobs", label: "Background jobs" }, { key: "product", label: "Product metrics" }, { key: "system", label: "System" },
+];
+const ROLES = [
+  { value: "user", label: "Candidate" }, { value: "mentor", label: "Mentor" }, { value: "admin", label: "Admin" },
+];
 
 interface AdminUser {
   id: number;
@@ -46,7 +56,7 @@ interface AuditLog {
 }
 
 export function AdminPage() {
-  const [tab, setTab] = useState<"metrics" | "users" | "invites" | "audit">("metrics");
+  const [tab, setTab] = useState<Tab>("metrics");
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -55,7 +65,7 @@ export function AdminPage() {
 
   // Invite modal state
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"user" | "admin">("user");
+  const [inviteRole, setInviteRole] = useState<"user" | "mentor" | "admin">("user");
   const [createdInviteCode, setCreatedInviteCode] = useState<string | null>(null);
 
   const fetchMetrics = async () => {
@@ -100,8 +110,8 @@ export function AdminPage() {
     }
   };
 
-  const handleRoleChange = async (userId: number, currentRole: string) => {
-    const newRole = currentRole === "admin" ? "user" : "admin";
+  const handleRoleChange = async (userId: number, currentRole: string, newRole: string) => {
+    if (newRole === currentRole) return;
     if (!confirm(`Are you sure you want to change user role to ${newRole}?`)) return;
     try {
       await api.put(`/admin/users/${userId}/role`, { role: newRole });
@@ -144,20 +154,20 @@ export function AdminPage() {
             <ShieldAlert className="h-6 w-6 text-primary" /> Admin Operations Center
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            System metrics, user directory, registration invites, and security audit log.
+            System metrics, users, invites, audit log, background jobs, product metrics and server health.
           </p>
         </div>
 
-        <div className="flex rounded-lg border border-border bg-card p-1">
-          {(["metrics", "users", "invites", "audit"] as const).map((t) => (
+        <div className="flex flex-wrap rounded-lg border border-border bg-card p-1">
+          {TABS.map((t) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                tab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {t}
+              {t.label}
             </button>
           ))}
         </div>
@@ -234,7 +244,9 @@ export function AdminPage() {
                         className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${
                           u.role === "admin"
                             ? "bg-primary/20 text-primary"
-                            : "bg-muted text-muted-foreground"
+                            : u.role === "mentor"
+                              ? "bg-sky-500/15 text-sky-700 dark:text-sky-300"
+                              : "bg-muted text-muted-foreground"
                         }`}
                       >
                         {u.role}
@@ -263,12 +275,14 @@ export function AdminPage() {
                       >
                         {u.is_active ? "Deactivate" : "Activate"}
                       </button>
-                      <button
-                        onClick={() => handleRoleChange(u.id, u.role)}
-                        className="rounded px-2 py-1 border border-border text-[11px] hover:bg-muted font-medium"
+                      <select
+                        aria-label={`Role for ${u.email}`}
+                        value={u.role}
+                        onChange={(e) => handleRoleChange(u.id, u.role, e.target.value)}
+                        className="rounded px-2 py-1 border border-border bg-background text-[11px] font-medium"
                       >
-                        {u.role === "admin" ? "Demote" : "Make Admin"}
-                      </button>
+                        {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
                     </td>
                   </tr>
                 ))}
@@ -299,6 +313,7 @@ export function AdminPage() {
                 className="rounded-lg border border-input bg-background px-3 py-2 text-xs"
               >
                 <option value="user">Candidate Role (user)</option>
+                <option value="mentor">Mentor Role (mentor)</option>
                 <option value="admin">Administrator Role (admin)</option>
               </select>
               <button
@@ -404,6 +419,10 @@ export function AdminPage() {
           </div>
         </div>
       )}
+
+      {tab === "jobs" && <BackgroundJobsPanel />}
+      {tab === "product" && <ProductMetricsPanel />}
+      {tab === "system" && <SystemPanel />}
     </div>
   );
 }

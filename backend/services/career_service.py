@@ -367,10 +367,17 @@ def _gap_out(g: Gap) -> dict[str, Any]:
             "evidence_state": g.evidence_state, "status": g.status, "job_count": g.job_count, "rejection_count": g.rejection_count}
 
 
+MISSING_LABELS = {"name": "your name", "contact": "contact details", "headline": "a headline", "summary": "a summary",
+                  "skills": "at least five skills", "experience_or_projects": "work experience or projects",
+                  "education": "education", "target_roles": "target roles", "locations": "preferred locations",
+                  "search_mode": "where you want to work"}
+
+
 def _next_step(comp, top, gap, submitted, upcoming, has_resume, intl, watching) -> dict[str, str]:
     if comp["percent"] < 50:
+        missing = [MISSING_LABELS.get(k, k) for k in comp["missing"][:3]]
         return {"kind": "profile", "label": "Finish your profile", "link": "/settings?tab=profile",
-                "reason": "Matches and resumes are built from your profile; " + ", ".join(comp["missing"][:3]) + " missing."}
+                "reason": "Matches and resumes are built from your profile. Still to add: " + ", ".join(missing) + "."}
     if upcoming:
         return {"kind": "interview_prep", "label": "Prepare for your interview", "link": "/interview-prep",
                 "reason": f"You have {len(upcoming)} interview(s) in the next 14 days."}

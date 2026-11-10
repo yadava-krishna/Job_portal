@@ -515,14 +515,20 @@ export interface NotificationList {
 export interface Interview {
   id: number;
   application_id: number;
-  round: string;
+  /** Backend field names (InterviewOut). */
+  round_name?: string | null;
+  interviewers?: string | null;
+  location?: string | null;
+  mode?: "video" | "phone" | "onsite" | null;
+  /** Older client names, kept so existing code compiles; the API sends the names above. */
+  round?: string;
+  meeting_url?: string | null;
+  interviewer?: string | null;
   scheduled_at: string;
   duration_minutes: number;
-  meeting_url: string | null;
-  interviewer: string | null;
   notes: string | null;
   outcome: string;
-  created_at: string;
+  created_at?: string;
   company?: string;
   title?: string;
 }
@@ -534,8 +540,11 @@ export interface Offer {
   currency: string;
   bonus: number | null;
   equity: string | null;
-  signing_bonus: number | null;
-  deadline: string | null;
+  signing_bonus?: number | null;
+  /** Backend name (OfferOut); `deadline` is the older client name. */
+  decision_deadline?: string | null;
+  joining_date?: string | null;
+  deadline?: string | null;
   status: string;
   notes: string | null;
   created_at: string;

@@ -14,6 +14,7 @@ import { ExtensionSettings } from "@/components/app/ExtensionSettings";
 import { AnswerBank, NotificationSettings, ResumeVersions } from "@/components/app/ProfileExtras";
 import { ClipperCard, PlatformsForm, PreferencesForm, ProfileForm, ResumeUpload } from "@/components/app/forms";
 import { useAuth } from "@/contexts/AuthContext";
+import { CareerGoalsForm, PrivacyConsents } from "@/features/career/SettingsTabs";
 import { useConnection } from "@/contexts/ConnectionContext";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { formatDate, timeAgo } from "@/lib/format";
@@ -24,22 +25,26 @@ export function SettingsPage() {
   const profile = useProfile();
   const prefs = usePreferences();
   // Deep links such as #/settings?tab=answers (used by the browser extension's "update your profile" links).
-  const [params] = useSearchParams();
-  const tabs = ["profile", "preferences", "platforms", "answers", "email", "notifications", "extension", "account"];
-  const initialTab = tabs.includes(params.get("tab") ?? "") ? params.get("tab")! : "profile";
+  // The tab follows the URL, so in-app links like /settings?tab=account also switch tabs.
+  const [params, setParams] = useSearchParams();
+  const tabs = ["profile", "preferences", "career-goals", "platforms", "answers", "email", "notifications", "extension", "privacy", "account"];
+  const tab = tabs.includes(params.get("tab") ?? "") ? params.get("tab")! : "profile";
+  const setTab = (t: string) => setParams((p) => { const next = new URLSearchParams(p); next.set("tab", t); return next; }, { replace: true });
   return (
     <>
       <PageHeader title="Profile & settings" description="Everything here is private to your account." />
-      <Tabs defaultValue={initialTab}>
+      <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <div className="overflow-x-auto pb-1">
           <TabsList>
             <TabsTrigger value="profile">Resume & profile</TabsTrigger>
             <TabsTrigger value="preferences">Job preferences</TabsTrigger>
+            <TabsTrigger value="career-goals">Career goals</TabsTrigger>
             <TabsTrigger value="platforms">Platforms</TabsTrigger>
             <TabsTrigger value="answers">Verified answers</TabsTrigger>
             <TabsTrigger value="email">Alert emails</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="extension">Browser extension</TabsTrigger>
+            <TabsTrigger value="privacy">Privacy & consent</TabsTrigger>
             <TabsTrigger value="account">Account & connection</TabsTrigger>
           </TabsList>
         </div>
@@ -63,6 +68,8 @@ export function SettingsPage() {
           <Card><CardContent className="pt-6">{prefs.data ? <PreferencesForm initial={prefs.data.is_configured ? prefs.data : undefined} /> : <Loader2 className="animate-spin" />}</CardContent></Card>
         </TabsContent>
 
+        <TabsContent value="career-goals" className="pt-4"><CareerGoalsForm /></TabsContent>
+
         <TabsContent value="platforms" className="space-y-6 pt-4">
           <PlatformsForm />
           <ClipperCard />
@@ -72,6 +79,7 @@ export function SettingsPage() {
         <TabsContent value="email" className="pt-4"><EmailForm /></TabsContent>
         <TabsContent value="extension" className="pt-4"><ExtensionSettings /></TabsContent>
         <TabsContent value="notifications" className="pt-4"><NotificationSettings /></TabsContent>
+        <TabsContent value="privacy" className="pt-4"><PrivacyConsents /></TabsContent>
         <TabsContent value="account" className="pt-4"><AccountCard /></TabsContent>
       </Tabs>
     </>

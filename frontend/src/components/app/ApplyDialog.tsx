@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field, StatusBadge } from "@/components/app/common";
 import { downloadFile, errorMessage } from "@/lib/api";
 import { useApplicationAction, useApplyOptions } from "@/services/queries";
+import { ResumeVersionPicker } from "@/features/studio/ResumePicker";
+import type { AttachResult } from "@/features/studio/api";
 import type { ApplicationDetail, UserJob } from "@/types/api";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +34,7 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
   const [error, setError] = useState<string | null>(null);
   const [reference, setReference] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [studioResume, setStudioResume] = useState<AttachResult | null>(null);
   const openedRef = useRef(false);
   const options = useApplyOptions(app?.id);
 
@@ -42,6 +45,7 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
     setError(null);
     setReference("");
     setConfirmation("");
+    setStudioResume(null);
     openedRef.current = false;
     action.mutate({ kind: "prepare", userJobId: item.user_job_id }, {
       onSuccess: (a) => {
@@ -129,9 +133,19 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
               </div>
               {app.needs_candidate_input.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Answers marked "Needs your input" are never guessed. Add verified answers in Settings → Verified answers.</p>}
             </section>
-            <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-              <span className="flex items-center gap-2"><FileText className="size-4" /> Resume for this application: <span className="font-medium">{app.resume_used ?? "none uploaded"}</span></span>
-              {app.resume_used && <Button size="sm" variant="ghost" onClick={() => downloadFile("/profile/resume", app.resume_used ?? "resume.pdf")}>Download</Button>}
+            <section className="space-y-2 rounded-lg border p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex items-center gap-2"><FileText className="size-4" /> Resume for this application: <span className="font-medium">{app.resume_used ?? "none uploaded"}</span></span>
+                {app.resume_used && (
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    const path = studioResume?.resume_export_id ? `/studio/exports/${studioResume.resume_export_id}/download` : "/profile/resume";
+                    downloadFile(path, studioResume ? "resume.pdf" : app.resume_used ?? "resume.pdf").catch((e) => toast.error(errorMessage(e)));
+                  }}>Download</Button>
+                )}
+              </div>
+              <ResumeVersionPicker applicationId={app.id}
+                                   initialVersionId={(app as unknown as { resume_version_id?: number | null }).resume_version_id ?? null}
+                                   onAttached={(r) => { setStudioResume(r); setApp({ ...app, resume_used: r.resume_used ?? app.resume_used }); }} />
             </section>
             {app.cover_letter && (
               <section>

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,7 +55,7 @@ export function LoginPage() {
             {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
             <Field label="Email" htmlFor="email"><Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
             <Field label="Password" htmlFor="password"><Input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
-            <p className="text-xs text-muted-foreground">Forgot your password? Password reset by email is not available yet. Ask the portal owner to reset your account.</p>
+            <p className="text-right text-xs"><Link to="/forgot-password" className="text-muted-foreground underline hover:text-foreground">Forgot password?</Link></p>
           </CardContent>
           <CardFooter className="mt-4 flex flex-col gap-3">
             <Button type="submit" className="w-full" disabled={busy}>{busy && <Loader2 className="animate-spin" />} Sign in</Button>
@@ -129,6 +130,137 @@ export function RegisterPage() {
             <p className="text-sm text-muted-foreground">Already registered? <Link to="/login" className="font-medium text-foreground underline">Sign in</Link></p>
           </CardFooter>
         </form>
+      </Card>
+    </Shell>
+  );
+}
+
+export function ForgotPasswordPage() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.post<{ message: string }>("/auth/forgot-password", { email: email.trim() });
+      setSent(res.data.message || "If an account exists for that e-mail address, a reset link has been sent.");
+    } catch (err) {
+      // 503 means e-mail isn't set up on this server; the backend's text tells the person what to do instead.
+      setError(errorMessage(err, "Couldn't send the reset link"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell>
+      <Card>
+        <CardHeader><CardTitle>Reset your password</CardTitle><CardDescription>Enter the e-mail you signed up with and we'll send you a link to set a new password.</CardDescription></CardHeader>
+        {sent ? (
+          <CardContent className="space-y-3">
+            <p role="status" className="rounded-lg bg-muted p-3 text-sm">{sent}</p>
+            <p className="text-sm text-muted-foreground">The link works once and expires after an hour. Check your spam folder if you don't see it.</p>
+            <p className="text-sm"><Link to="/login" className="font-medium underline">Back to sign in</Link></p>
+          </CardContent>
+        ) : (
+          <form onSubmit={submit}>
+            <CardContent className="space-y-4">
+              {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+              <Field label="Email" htmlFor="femail"><Input id="femail" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+            </CardContent>
+            <CardFooter className="mt-4 flex flex-col gap-3">
+              <Button type="submit" className="w-full" disabled={busy || !email.includes("@")}>{busy && <Loader2 className="animate-spin" />} Send reset link</Button>
+              <p className="text-sm text-muted-foreground">Remembered it? <Link to="/login" className="font-medium text-foreground underline">Sign in</Link></p>
+            </CardFooter>
+          </form>
+        )}
+      </Card>
+    </Shell>
+  );
+}
+
+export function ResetPasswordPage() {
+  const [params] = useSearchParams();
+  const token = params.get("token") ?? "";
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [requirements, setRequirements] = useState<string[]>([]);
+  const [badLink, setBadLink] = useState(false);
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const resetRules = rules.slice(0, 3);
+  const passed = resetRules.map((r) => r.test(password, ""));
+  const valid = passed.every(Boolean) && password === confirm;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!valid) return;
+    setBusy(true);
+    setError(null);
+    setRequirements([]);
+    setBadLink(false);
+    try {
+      await api.post("/auth/reset-password", { token, new_password: password });
+      setDone(true);
+    } catch (err) {
+      const detail = axios.isAxiosError(err) ? (err.response?.data as { detail?: { message?: string; requirements?: string[] } } | undefined)?.detail : undefined;
+      if (axios.isAxiosError(err) && err.response?.status === 422 && detail && typeof detail === "object" && detail.requirements) {
+        setError(detail.message ?? "That password doesn't meet the rules.");
+        setRequirements(detail.requirements);
+      } else {
+        setError(errorMessage(err, "Couldn't reset your password"));
+        setBadLink(axios.isAxiosError(err) && err.response?.status === 400);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell>
+      <Card>
+        <CardHeader><CardTitle>Choose a new password</CardTitle><CardDescription>After this, sign in with your new password on every device.</CardDescription></CardHeader>
+        {!token ? (
+          <CardContent className="space-y-3 text-sm">
+            <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-destructive">This reset link is incomplete. Open the link from the e-mail again, or ask for a new one.</p>
+            <p><Link to="/forgot-password" className="font-medium underline">Get a new reset link</Link></p>
+          </CardContent>
+        ) : done ? (
+          <CardContent className="space-y-3 text-sm">
+            <p role="status" className="rounded-lg bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200">Your password has been changed.</p>
+            <Button className="w-full" render={<Link to="/login" />}>Sign in</Button>
+          </CardContent>
+        ) : (
+          <form onSubmit={submit}>
+            <CardContent className="space-y-4">
+              {error && (
+                <div role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                  {error}
+                  {requirements.length > 0 && <ul className="mt-1 list-disc pl-4">{requirements.map((r) => <li key={r}>{r}</li>)}</ul>}
+                  {badLink && <p className="mt-1"><Link to="/forgot-password" className="underline">Get a new reset link</Link></p>}
+                </div>
+              )}
+              <Field label="New password" htmlFor="npass"><Input id="npass" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+              <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
+                {resetRules.map((r, i) => (
+                  <li key={r.label} className={`flex items-center gap-1 ${passed[i] ? "text-emerald-600" : "text-muted-foreground"}`}>{passed[i] ? <Check className="size-3" /> : <X className="size-3" />}{r.label}</li>
+                ))}
+                <li className="flex items-center gap-1 text-muted-foreground">Not a common password</li>
+              </ul>
+              <Field label="Confirm new password" htmlFor="nconf" hint={confirm && confirm !== password ? "Passwords don't match" : undefined}>
+                <Input id="nconf" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              </Field>
+            </CardContent>
+            <CardFooter className="mt-4 flex flex-col gap-3">
+              <Button type="submit" className="w-full" disabled={busy || !valid}>{busy && <Loader2 className="animate-spin" />} Set new password</Button>
+            </CardFooter>
+          </form>
+        )}
       </Card>
     </Shell>
   );

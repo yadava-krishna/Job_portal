@@ -65,6 +65,12 @@ class ApplicationOut(BaseModel):
     application_route: str = "ROUTE_D_EXTERNAL_MANUAL"
     tailored_resume_id: int | None = None
     route_metadata: dict[str, Any] = Field(default_factory=dict)
+    resume_version_id: int | None = None
+    resume_export_id: int | None = None
+    resume_checksum: str | None = None
+    rejection_reason: str | None = None
+    rejection_detail: str | None = None
+    rejection_reason_known: bool | None = None
     job: JobListing
 
 

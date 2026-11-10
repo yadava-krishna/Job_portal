@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import logging
 from contextlib import asynccontextmanager
 
@@ -20,6 +22,7 @@ from core import timeutil
 from core.logging_setup import redact, setup_logging
 
 log = logging.getLogger("backend")
+access_log = logging.getLogger("jobpilot.access")
 API_PREFIX = "/api/v1"
 
 
@@ -61,9 +64,21 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         import uuid
-        req_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        import re as _re
+        from core.logging_setup import request_id_var
+
+        given = request.headers.get("X-Request-ID") or ""
+        req_id = given if _re.fullmatch(r"[A-Za-z0-9._-]{8,64}", given) else str(uuid.uuid4())  # never log arbitrary input
         request.state.request_id = req_id
-        response = await call_next(request)
+        token = request_id_var.set(req_id)
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        finally:
+            request_id_var.reset(token)
+        if request.url.path.startswith(API_PREFIX) and not request.url.path.endswith("/health"):
+            access_log.info("%s %s %s %.0fms", request.method, request.url.path, response.status_code,
+                            (time.perf_counter() - started) * 1000, extra={"request_id": req_id})
         response.headers["X-Request-ID"] = req_id
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")

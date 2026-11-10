@@ -90,6 +90,20 @@ class _LocalTimeFormatter(logging.Formatter):
         return datetime.fromtimestamp(record.created, timeutil.tz()).strftime("%Y-%m-%d %H:%M:%S%z")
 
 
+import contextvars
+
+# Set per HTTP request by the backend middleware; added to every log record made while handling that request.
+request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
+
+
+class RequestContextFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        rid = request_id_var.get()
+        if rid and not hasattr(record, "request_id"):
+            record.request_id = rid
+        return True
+
+
 class JSONFormatter(logging.Formatter):
     """Structured JSON formatter for production log aggregation."""
 
@@ -126,12 +140,14 @@ def setup_logging(logs_dir: Path, level: str = "INFO", console: bool = True) -> 
     file_handler = DailyFileHandler(logs_dir)
     file_handler.setFormatter(fmt)
     file_handler.addFilter(redactor)
+    file_handler.addFilter(RequestContextFilter())
     root.addHandler(file_handler)
 
     if console:
         stream = logging.StreamHandler(sys.stderr)
         stream.setFormatter(logging.Formatter("%(levelname)-7s %(message)s"))
         stream.addFilter(redactor)
+        stream.addFilter(RequestContextFilter())
         stream.addFilter(_ConsoleFilter())
         root.addHandler(stream)
 

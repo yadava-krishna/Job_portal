@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Calendar, ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
+import { Calendar, ExternalLink, Loader2, MessageSquareText, Plus, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,14 @@ import { api, downloadFile, errorMessage } from "@/lib/api";
 import { formatDate, stageLabels, statusLabels } from "@/lib/format";
 import { useApplication, useApplicationAction, useApplications, useUpdateTracking } from "@/services/queries";
 import type { Application, ApplicationContact, Interview, Offer, Stage, UserJob } from "@/types/api";
+import { FunnelPanel, InterviewFeedbackDialog, RejectionDialog, RejectionLabel } from "@/features/growth/applications";
+import { useReasonLabels } from "@/features/growth/queries";
+import type { RejectionResult } from "@/features/growth/types";
+
+// The backend's interview fields (round_name, interviewers, location) and rejection fields, which the shared types don't list yet.
+type InterviewRow = Interview & { round_name?: string | null; interviewers?: string | null; location?: string | null; interview_type?: string | null; feedback_at?: string | null };
+type WithRejection = { rejection_reason?: string | null; rejection_reason_known?: boolean | null };
+type RejectTarget = { id: number; title: string; company: string };
 
 const STAGES: Stage[] = ["applied", "screening", "assessment", "interview", "offer", "rejected"];
 const MOVE_TO: Stage[] = [...STAGES, "archived"];
@@ -31,6 +39,14 @@ export function AppliedPage() {
   const action = useApplicationAction();
   const [detailId, setDetailId] = useState<number | null>(null);
   const [resume, setResume] = useState<UserJob | null>(null);
+  const [rejecting, setRejecting] = useState<RejectTarget | null>(null);
+  const [rejections, setRejections] = useState<Record<number, RejectionResult>>({});
+  const reasonLabels = useReasonLabels();
+  const rejectionOf = (a: Application) => {
+    const r = rejections[a.id] ?? (a as Application & WithRejection);
+    return { reason: r.rejection_reason ?? null, known: r.rejection_reason_known ?? null };
+  };
+  const toTarget = (a: Application): RejectTarget => ({ id: a.id, title: a.job.title, company: a.job.company });
   const submitted = (all.data ?? []).filter((a) => a.status === "SUBMITTED");
   const pending = (all.data ?? []).filter((a) => ["PREPARED", "OPENED", "CONFIRMATION_PENDING"].includes(a.status));
 
@@ -53,6 +69,7 @@ export function AppliedPage() {
           </Button>
         }
       />
+      <div className="mb-6"><FunnelPanel /></div>
       <Tabs defaultValue="list">
         <TabsList>
           <TabsTrigger value="list">All applications</TabsTrigger>
@@ -81,12 +98,13 @@ export function AppliedPage() {
                       <td className="px-3 py-2"><PlatformBadge platform={a.job.platform} /></td>
                       <td className="px-3 py-2 whitespace-nowrap">{a.submitted_at ? formatDate(a.submitted_at) : <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-3 py-2"><StatusBadge status={a.status} /></td>
-                      <td className="px-3 py-2"><StageBadge stage={a.stage} /></td>
+                      <td className="px-3 py-2"><StageBadge stage={a.stage} />{rejectionOf(a).reason && <div className="mt-0.5"><RejectionLabel {...rejectionOf(a)} labels={reasonLabels} /></div>}</td>
                       <td className="px-3 py-2"><ScoreBadge score={a.match_score} /></td>
                       <td className="px-3 py-2 font-mono text-xs">{a.reference_id ?? "—"}</td>
                       <td className="px-3 py-2">
                         <div className="flex justify-end gap-1">
                           {a.status !== "SUBMITTED" && a.status !== "WITHDRAWN" && <Button size="xs" onClick={() => setResume(asUserJob(a))}>Continue</Button>}
+                          {a.status === "SUBMITTED" && !rejectionOf(a).reason && <Button size="xs" variant="outline" onClick={() => setRejecting(toTarget(a))}>Record rejection</Button>}
                           {a.job.job_url && <Button size="icon-xs" variant="ghost" aria-label="Open original listing" render={<a href={a.job.job_url} target="_blank" rel="noopener noreferrer" />}><ExternalLink /></Button>}
                         </div>
                       </td>
@@ -111,6 +129,7 @@ export function AppliedPage() {
                         <Card key={a.id} className="gap-2 p-3">
                           <button className="text-left text-sm font-medium hover:underline" onClick={() => setDetailId(a.id)}>{a.job.title}</button>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">{a.job.company} <PlatformBadge platform={a.job.platform} /></div>
+                          {rejectionOf(a).reason && <RejectionLabel {...rejectionOf(a)} labels={reasonLabels} />}
                           <NativeSelect ariaLabel="Move to stage" value={a.stage ?? "applied"} onChange={(v) => moveStage(a, v as Stage)} className="h-7 w-full text-xs"
                                         options={MOVE_TO.map((s) => ({ value: s, label: stageLabels[s] }))} />
                         </Card>
@@ -139,15 +158,20 @@ export function AppliedPage() {
           )}
         </TabsContent>
       </Tabs>
-      <ApplicationDetailDialog id={detailId} onClose={() => setDetailId(null)} />
+      <ApplicationDetailDialog id={detailId} onClose={() => setDetailId(null)} onReject={setRejecting}
+                               rejection={detailId != null ? rejections[detailId] : undefined} reasonLabels={reasonLabels} />
       <ApplyDialog item={resume} onClose={() => setResume(null)} />
+      <RejectionDialog app={rejecting} onClose={() => setRejecting(null)} onSaved={(r) => setRejections((m) => ({ ...m, [r.id]: r }))} />
     </>
   );
 }
 
-function ApplicationDetailDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+function ApplicationDetailDialog({ id, onClose, onReject, rejection, reasonLabels }: {
+  id: number | null; onClose: () => void; onReject: (t: RejectTarget) => void; rejection?: RejectionResult; reasonLabels: Record<string, string>;
+}) {
   const { data } = useApplication(id);
   const action = useApplicationAction();
+  const rej = rejection ?? (data as (typeof data & WithRejection) | undefined);
 
   return (
     <Dialog open={id != null} onOpenChange={(o) => !o && onClose()}>
@@ -174,6 +198,7 @@ function ApplicationDetailDialog({ id, onClose }: { id: number | null; onClose: 
                   <dt className="text-muted-foreground">Reference</dt><dd>{data.reference_id ?? "—"}</dd>
                   <dt className="text-muted-foreground">How you applied</dt><dd>{data.submission_method ?? "—"}</dd>
                   <dt className="text-muted-foreground">Resume used</dt><dd>{data.resume_used ?? "—"}</dd>
+                  {rej?.rejection_reason && <><dt className="text-muted-foreground">Rejection reason</dt><dd><RejectionLabel reason={rej.rejection_reason} known={rej.rejection_reason_known} labels={reasonLabels} /></dd></>}
                   {data.job.job_url && <><dt className="text-muted-foreground">Original listing</dt><dd><a className="underline" href={data.job.job_url} target="_blank" rel="noopener noreferrer">Open</a></dd></>}
                 </dl>
                 <TrackingForm id={data.id} notes={data.notes} followUp={data.follow_up_at ?? null} />
@@ -202,6 +227,9 @@ function ApplicationDetailDialog({ id, onClose }: { id: number | null; onClose: 
 
             {data.status !== "WITHDRAWN" && (
               <div className="mt-4 flex justify-end gap-2 border-t pt-3">
+                {data.status === "SUBMITTED" && !rej?.rejection_reason && (
+                  <Button variant="outline" size="sm" onClick={() => onReject({ id: data.id, title: data.job.title, company: data.job.company })}><XCircle /> Record rejection</Button>
+                )}
                 {data.status !== "SUBMITTED" && <Button variant="outline" size="sm" onClick={() => action.mutate({ kind: "fail", id: data.id, reason: "Marked failed by user" }, { onError: (e) => toast.error(errorMessage(e)) })}>Mark failed</Button>}
                 <Button variant="outline" size="sm" onClick={() => action.mutate({ kind: "withdraw", id: data.id }, { onSuccess: () => toast("Withdrawn"), onError: (e) => toast.error(errorMessage(e)) })}>Withdraw</Button>
               </div>
@@ -236,8 +264,9 @@ function TrackingForm({ id, notes, followUp }: { id: number; notes: string | nul
 }
 
 function InterviewsSection({ applicationId }: { applicationId: number }) {
-  const [items, setItems] = useState<Interview[]>([]);
+  const [items, setItems] = useState<InterviewRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [feedbackFor, setFeedbackFor] = useState<{ id: number; label: string } | null>(null);
   const [round, setRound] = useState("Screening");
   const [schedAt, setSchedAt] = useState("");
   const [duration, setDuration] = useState(45);
@@ -248,7 +277,7 @@ function InterviewsSection({ applicationId }: { applicationId: number }) {
 
   const load = () => {
     setLoading(true);
-    api.get<Interview[]>(`/interviews?application_id=${applicationId}`)
+    api.get<InterviewRow[]>(`/interviews?application_id=${applicationId}`)
       .then((res) => setItems(res.data))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -262,11 +291,11 @@ function InterviewsSection({ applicationId }: { applicationId: number }) {
     try {
       setSubmitting(true);
       await api.post(`/applications/${applicationId}/interviews`, {
-        round,
+        round_name: round,
         scheduled_at: new Date(schedAt).toISOString(),
         duration_minutes: duration,
-        meeting_url: meetingUrl || null,
-        interviewer: interviewer || null,
+        location: meetingUrl || null,
+        interviewers: interviewer || null,
         notes: notes || null,
       });
       toast.success("Interview scheduled");
@@ -297,21 +326,31 @@ function InterviewsSection({ applicationId }: { applicationId: number }) {
         <p className="text-xs text-muted-foreground">No interviews scheduled yet for this application.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((iv: Interview) => (
-            <div key={iv.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
-              <div>
-                <div className="font-medium text-foreground">{iv.round} ({iv.duration_minutes}m)</div>
-                <div className="text-xs text-muted-foreground">{formatDate(iv.scheduled_at, true)}</div>
-                {iv.interviewer && <div className="text-xs text-muted-foreground">With: {iv.interviewer}</div>}
-                {iv.meeting_url && (
-                  <a href={iv.meeting_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline block mt-0.5">
-                    Meeting link
-                  </a>
-                )}
+          {items.map((iv) => {
+            const name = iv.round_name ?? iv.round ?? "Interview";
+            const who = iv.interviewers ?? iv.interviewer;
+            const link = iv.meeting_url ?? (iv.location?.startsWith("http") ? iv.location : null);
+            return (
+              <div key={iv.id} className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+                <div>
+                  <div className="font-medium text-foreground">{name}{iv.duration_minutes ? ` (${iv.duration_minutes}m)` : ""}</div>
+                  <div className="text-xs text-muted-foreground">{formatDate(iv.scheduled_at, true)}{iv.outcome && iv.outcome !== "scheduled" ? ` · ${iv.outcome}` : ""}{iv.feedback_at ? " · feedback saved" : ""}</div>
+                  {who && <div className="text-xs text-muted-foreground">With: {who}</div>}
+                  {link ? (
+                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline block mt-0.5">
+                      Meeting link
+                    </a>
+                  ) : iv.location && <div className="text-xs text-muted-foreground">{iv.location}</div>}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button size="xs" variant="outline" onClick={() => setFeedbackFor({ id: iv.id, label: `${name}, ${formatDate(iv.scheduled_at)}` })}>
+                    <MessageSquareText /> How did it go?
+                  </Button>
+                  <Button size="icon-xs" variant="ghost" aria-label="Remove interview" onClick={() => handleDelete(iv.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
+                </div>
               </div>
-              <Button size="icon-xs" variant="ghost" onClick={() => handleDelete(iv.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -349,6 +388,7 @@ function InterviewsSection({ applicationId }: { applicationId: number }) {
           </Button>
         </div>
       </form>
+      <InterviewFeedbackDialog interview={feedbackFor} onClose={() => setFeedbackFor(null)} onSaved={load} />
     </div>
   );
 }
@@ -373,7 +413,8 @@ function OfferSection({ applicationId }: { applicationId: number }) {
           setBonus(found.bonus != null ? String(found.bonus) : "");
           setEquity(found.equity || "");
           setStatus(found.status || "received");
-          setDeadline(found.deadline ? found.deadline.slice(0, 10) : "");
+          const due = (found as Offer & { decision_deadline?: string | null }).decision_deadline ?? found.deadline;
+          setDeadline(due ? due.slice(0, 10) : "");
           setNotes(found.notes || "");
         }
       })
@@ -389,7 +430,7 @@ function OfferSection({ applicationId }: { applicationId: number }) {
         currency,
         bonus: bonus ? Number(bonus) : null,
         equity: equity || null,
-        deadline: deadline ? `${deadline}T18:00:00` : null,
+        decision_deadline: deadline || null,
         status,
         notes: notes || null,
       });

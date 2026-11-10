@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ExternalLink, Loader2, Send } from "lucide-react";
+import { Link } from "react-router-dom";
+import { ExternalLink, FileText, Loader2, MessagesSquare, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -11,6 +12,8 @@ import { useAddDescription, useAnalysis, useJob } from "@/services/queries";
 import { errorMessage } from "@/lib/api";
 import { formatDate, postedDisplay, scoreTone, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { EligibilityBox, ScoreDimensions } from "@/features/growth/ScoreDimensions";
+import type { AnalysisV2 } from "@/features/growth/types";
 
 const componentNames: Record<string, string> = {
   core_skills: "Skills",
@@ -30,7 +33,8 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
   const addDesc = useAddDescription();
   const [desc, setDesc] = useState("");
   const d = job.data;
-  const a = analysis.data;
+  const a = analysis.data as AnalysisV2 | undefined;
+  const dims = a?.dimensions ?? [];
 
   return (
     <Sheet open={userJobId != null} onOpenChange={onOpenChange}>
@@ -66,6 +70,8 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
                   </Button>
                 )}
                 <Button size="sm" onClick={() => onApply(d.user_job_id)} disabled={!d.job.job_url}><Send /> {d.application_id ? "Continue application" : "Apply"}</Button>
+                <Button size="sm" variant="outline" render={<Link to={`/interview-prep?job=${d.user_job_id}`} />}><MessagesSquare /> Prepare for interview</Button>
+                <Button size="sm" variant="outline" render={<Link to={`/studio?job=${d.user_job_id}`} />}><FileText /> Tailor a resume</Button>
               </div>
             </SheetHeader>
 
@@ -76,8 +82,9 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
                   <p className="text-sm text-muted-foreground">Not scored yet. Confirm your profile in Settings first.</p>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-xs text-muted-foreground">A match score is a guide to which jobs to read first, not proof a job suits you. Check the description yourself.</p>
-                    {a.components.map((c) => (
+                    <p className="text-xs text-muted-foreground">{a.disclaimer || "A match score is a guide to which jobs to read first, not proof a job suits you. Check the description yourself."}</p>
+                    {a.eligibility && <EligibilityBox eligibility={a.eligibility} reasons={a.eligibility_reasons} />}
+                    {dims.length > 0 ? <ScoreDimensions dimensions={dims} /> : a.components.map((c) => (
                       <div key={c.name}>
                         <div className="flex justify-between text-sm"><span className="font-medium">{componentNames[c.name] ?? c.name} <span className="text-muted-foreground">({c.weight.toFixed(0)}%)</span></span><span className="tabular-nums">{c.score.toFixed(0)}</span></div>
                         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", barTone[scoreTone(c.score)])} style={{ width: `${c.score}%` }} /></div>
@@ -95,13 +102,17 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
                         <div><h4 className="mb-1 text-sm font-medium">Missing skills</h4><SkillChips skills={[...a.missing_skills, ...a.missing_optional_skills.map((s) => `${s} (optional)`)]} tone="missing" max={30} /></div>
                       )}
                     </div>
-                    {a.eligibility_status && a.eligibility_status !== "ELIGIBLE" && (
+                    {!a.eligibility && a.eligibility_status && a.eligibility_status !== "ELIGIBLE" && (
                       <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                         <strong>Eligibility: {a.eligibility_status.replace("_", " ").toLowerCase()}</strong>
                         <ul className="mt-1 list-disc pl-4">{a.eligibility_reasons.map((r) => <li key={r}>{r}</li>)}</ul>
                       </div>
                     )}
+                    {(a.unknown_dimensions?.length ?? 0) > 0 && (
+                      <p className="text-xs text-muted-foreground">Not enough information for: {dims.filter((x) => a.unknown_dimensions!.includes(x.name)).map((x) => x.label).join(", ") || a.unknown_dimensions!.join(", ")}. These are left out, so they neither help nor hurt the score.</p>
+                    )}
                     <p className="text-xs text-muted-foreground">Scored by {a.scoring_method} · confidence {a.confidence}. {a.notes.join(" ")}</p>
+                    {a.score_version && <p className="text-[11px] text-muted-foreground/80">Score version {a.score_version}</p>}
                   </div>
                 )}
               </section>

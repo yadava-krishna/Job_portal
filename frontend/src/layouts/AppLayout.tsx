@@ -1,6 +1,6 @@
 import { Suspense, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BarChart3, Loader2, Bookmark, Briefcase, FileSpreadsheet, LayoutDashboard, LogOut, Menu, Radar, Search, Settings, Shield, X } from "lucide-react";
+import { BarChart3, Loader2, Bookmark, Briefcase, Compass, FileSpreadsheet, FileText, Globe, LayoutDashboard, LogOut, Menu, MessagesSquare, Radar, Search, Settings, Shield, Target, Users, X } from "lucide-react";
 import { NotificationBell } from "@/components/app/discovery";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,11 @@ const nav = [
   { to: "/searches", label: "Searches & sources", icon: Radar },
   { to: "/saved", label: "Saved", icon: Bookmark },
   { to: "/applied", label: "Applications", icon: Briefcase },
+  { to: "/studio", label: "Resume Studio", icon: FileText },
+  { to: "/career", label: "Gaps & learning", icon: Target },
+  { to: "/interview-prep", label: "Interview prep", icon: MessagesSquare },
+  { to: "/mentor", label: "Mentor & plan", icon: Compass },
+  { to: "/international", label: "International", icon: Globe },
   { to: "/reports", label: "Reports", icon: FileSpreadsheet },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
@@ -39,9 +44,11 @@ export function AppLayout() {
 
   useHeartbeat(true);
 
-  const navItems = user?.role === "admin"
-    ? [...nav, { to: "/admin", label: "Admin Console", icon: Shield }]
-    : nav;
+  const navItems = [
+    ...nav,
+    ...(user?.role === "mentor" ? [{ to: "/mentoring", label: "My mentees", icon: Users }] : []),
+    ...(user?.role === "admin" ? [{ to: "/admin", label: "Admin Console", icon: Shield }] : []),
+  ];
 
   const links = (
     <nav className="flex flex-col gap-1">

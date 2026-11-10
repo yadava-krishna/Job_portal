@@ -10,6 +10,8 @@ import { useConnection } from "@/contexts/ConnectionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDate, statusLabels, timeAgo } from "@/lib/format";
 import { useActivity, useAnalytics, useSummary } from "@/services/queries";
+import { useCareerSnapshot } from "@/features/career/hooks";
+import { CareerSnapshotCard, WhatHappensNext } from "@/features/career/SnapshotCard";
 
 export function StatCard({ label, value, icon: Icon, hint }: { label: string; value: React.ReactNode; icon: React.ElementType; hint?: string }) {
   return (
@@ -27,12 +29,40 @@ export function DashboardPage() {
   const summary = useSummary();
   const activity = useActivity();
   const analytics = useAnalytics(30);
+  const snapshot = useCareerSnapshot();
   const s = summary.data;
+  // Progressive disclosure: tracker sections only once there are applications. If the snapshot can't load,
+  // fall back to the full dashboard rather than hiding anything.
+  const showTracker = snapshot.isError || !!snapshot.data?.show.tracker;
+
+  const backendCard = (
+    <Card>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Server className="size-4" /> Backend status</CardTitle></CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        <Row label="Connection" value={<span className="flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" /> Online</span>} />
+        <Row label="Database" value={conn.health?.database.connected ? "Connected" : "Unavailable"} />
+        <Row label="Version" value={conn.health?.version ?? "—"} />
+        <Row label="Daily discovery" value={conn.health?.scheduler.running ? `Next ${formatDate(conn.health.scheduler.next_run, true)}` : "Not scheduled"} />
+        <Row label="Last check" value={conn.lastOnlineAt ? timeAgo(new Date(conn.lastOnlineAt).toISOString()) : "—"} />
+        {s?.last_discovery_run && <Row label="Last discovery" value={`${timeAgo(s.last_discovery_run.started_at)} · ${s.last_discovery_run.jobs_new} new`} />}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <>
       <PageHeader title={`Welcome${user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}`} description="Your job search at a glance."
                   actions={<Button render={<Link to="/discover" />}><Search /> Discover jobs</Button>} />
+      <div className="mb-6">
+        {snapshot.data ? <CareerSnapshotCard snapshot={snapshot.data} /> : snapshot.isLoading ? <Skeleton className="h-56" /> : null}
+      </div>
+      {snapshot.data && !showTracker && (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2"><WhatHappensNext /></div>
+          {backendCard}
+        </div>
+      )}
+      {showTracker && <>
       <div className="mb-6">
         <TodayView />
       </div>
@@ -68,17 +98,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Server className="size-4" /> Backend status</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <Row label="Connection" value={<span className="flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" /> Online</span>} />
-            <Row label="Database" value={conn.health?.database.connected ? "Connected" : "Unavailable"} />
-            <Row label="Version" value={conn.health?.version ?? "—"} />
-            <Row label="Daily discovery" value={conn.health?.scheduler.running ? `Next ${formatDate(conn.health.scheduler.next_run, true)}` : "Not scheduled"} />
-            <Row label="Last check" value={conn.lastOnlineAt ? timeAgo(new Date(conn.lastOnlineAt).toISOString()) : "—"} />
-            {s?.last_discovery_run && <Row label="Last discovery" value={`${timeAgo(s.last_discovery_run.started_at)} · ${s.last_discovery_run.jobs_new} new`} />}
-          </CardContent>
-        </Card>
+        {backendCard}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
@@ -131,6 +151,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      </>}
     </>
   );
 }

@@ -83,6 +83,8 @@ def application(app: Application, uj: UserJob | None = None) -> ApplicationOut:
         application_route=getattr(app, "application_route", "ROUTE_D_EXTERNAL_MANUAL") or "ROUTE_D_EXTERNAL_MANUAL",
         tailored_resume_id=getattr(app, "tailored_resume_id", None),
         route_metadata=getattr(app, "route_metadata", {}) or {},
+        resume_version_id=app.resume_version_id, resume_export_id=app.resume_export_id, resume_checksum=app.resume_checksum,
+        rejection_reason=app.rejection_reason, rejection_detail=app.rejection_detail, rejection_reason_known=app.rejection_reason_known,
     )
 
 

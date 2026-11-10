@@ -120,6 +120,7 @@ def country_fit(db: Session, user: User, country: str) -> dict[str, Any]:
     langs = [x.lower() for x in conf.get("languages") or []]
     prefs = db.execute(select(JobPreference).where(JobPreference.user_id == user.id)).scalar_one_or_none()
     authorised = c.code in [a.upper() for a in ((prefs.work_authorization if prefs else None) or [])]
+    watched = {w.route_id for w in db.execute(select(VisaWatch).where(VisaWatch.user_id == user.id)).scalars()}
     out_routes = []
     for r in db.execute(select(VisaRoute).where(VisaRoute.country_code == c.code)).scalars():
         strengths, gaps, unknown = [], [], []
@@ -146,7 +147,7 @@ def country_fit(db: Session, user: User, country: str) -> dict[str, Any]:
                 unknown.append("Needs a job offer from an eligible employer: filter jobs by sponsorship 'verified'.")
             elif rule.kind == "salary":
                 unknown.append("A salary threshold applies: compare your offer with the official page.")
-        out_routes.append({**route_out(r), "fit": {"strengths": strengths, "gaps": gaps, "unknown": unknown,
+        out_routes.append({**route_out(r, r.id in watched), "fit": {"strengths": strengths, "gaps": gaps, "unknown": unknown,
                                                    "summary": "Possible pathway" if not gaps else "Gaps to close first"}})
     return {"country": {"code": c.code, "name": c.name, "official_source_url": c.official_source_url},
             "already_authorised": authorised, "profile_used": {"years_experience": years, "education": edu, "languages": conf.get("languages") or []},
