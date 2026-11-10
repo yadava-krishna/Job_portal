@@ -165,16 +165,34 @@ class EvidenceIn(BaseModel):
 
 
 @router.post("/skills/{skill_id}/evidence", status_code=status.HTTP_201_CREATED)
-def add_evidence(skill_id: int, body: EvidenceIn, user: CurrentUser, db: DbSession) -> dict:
+def add_evidence(skill_id: int, body: EvidenceIn, user: CurrentUser, db: DbSession, settings: SettingsDep) -> dict:
     skill = cs.owned_skill(db, user, skill_id)
+    before = skill.state
     cs.add_evidence(db, user, skill, body.evidence_type, body.title, body.url, body.description, body.occurred_on)
     db.refresh(skill)
-    return _skill_out(skill)
+    changes = []
+    if skill.state != before:
+        changes = cs.rescore_after_evidence(db, settings, user, skill.canonical,
+                                            f"{skill.name}: {body.evidence_type} evidence moved it from {cs.STATE_LABELS[before]} to {cs.STATE_LABELS[skill.state]}")
+    return {**_skill_out(skill), "score_changes": changes}
 
 
 @router.delete("/evidence/{evidence_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_evidence(evidence_id: int, user: CurrentUser, db: DbSession) -> None:
+def delete_evidence(evidence_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep) -> None:
+    ev = db.execute(select(cs.SkillEvidence).where(cs.SkillEvidence.id == evidence_id, cs.SkillEvidence.user_id == user.id)).scalar_one_or_none()
+    skill, before = (ev.skill, ev.skill.state) if ev else (None, None)
     cs.delete_evidence(db, user, evidence_id)
+    if skill is not None:
+        db.refresh(skill)
+        if skill.state != before:
+            cs.rescore_after_evidence(db, settings, user, skill.canonical,
+                                      f"{skill.name}: evidence removed, now {cs.STATE_LABELS[skill.state]}")
+
+
+@router.get("/matches/history")
+def history(user: CurrentUser, db: DbSession) -> list[dict]:
+    """Before/after score changes caused by evidence the candidate added or removed."""
+    return cs.match_history(db, user)
 
 
 # ---------- gaps ----------
@@ -292,4 +310,4 @@ class CompleteIn(BaseModel):
 def session_complete(session_id: int, body: CompleteIn, user: CurrentUser, db: DbSession, settings: SettingsDep) -> dict:
     out = ls.complete(db, settings, user, session_id, body.notes, body.knowledge_check, body.helpful, body.evidence_url, body.evidence_title)
     return {"session": _session_out(out["session"]), "skill_state": out["skill_state"],
-            "skill_state_label": cs.STATE_LABELS[out["skill_state"]]}
+            "skill_state_label": cs.STATE_LABELS[out["skill_state"]], "score_changes": out["score_changes"]}

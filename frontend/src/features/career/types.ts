@@ -148,7 +148,21 @@ export interface SessionsResponse {
   stats: { days: number; sessions: number; completed: number; active_minutes: number; idle_minutes: number };
 }
 
+export interface ScoreChange {
+  user_job_id: number;
+  title: string;
+  company: string;
+  old_score: number | null;
+  new_score: number | null;
+}
+export interface MatchHistoryItem extends ScoreChange {
+  id: number;
+  reason: string;
+  score_version: string;
+  created_at: string;
+}
 export interface CompleteResult {
+  score_changes?: ScoreChange[];
   session: LearningSession;
   skill_state: SkillState;
   skill_state_label: string;

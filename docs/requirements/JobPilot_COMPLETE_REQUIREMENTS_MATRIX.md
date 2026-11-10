@@ -8,53 +8,52 @@ Statuses: `DONE_VERIFIED` = code + passing automated test; `PARTIAL`; `BROKEN`; 
 
 | Source | BROKEN | MISSING | UNAUDITED | PARTIAL | UNVERIFIABLE | BLOCKED_EXTERNAL | PLANNED_FUTURE | NOT_APPLICABLE_JUSTIFIED | DONE_VERIFIED | INFORMATIONAL_ONLY | NOT_AUDITED | Items | Done |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 01 Vision |  | 88 |  | 21 |  |  |  |  | 7 | 40 |  | 156 | 6% |
-| 02 Tech spec | 1 | 167 |  | 127 |  |  |  |  | 8 | 5 |  | 308 | 3% |
-| 03 AWS cost | 1 | 108 |  | 2 |  |  |  |  |  | 10 |  | 121 | 0% |
-| 04 PRD | 2 | 121 |  | 32 |  | 1 |  |  | 10 | 11 |  | 177 | 6% |
-| Edited spec (.pages) | 1 | 168 |  | 124 |  |  |  |  | 10 | 10 |  | 313 | 3% |
-| Beta hosting plan | 43 | 202 |  | 289 |  |  |  |  | 68 | 198 |  | 800 | 11% |
+| 01 Vision |  | 14 |  | 28 |  |  |  |  | 74 | 40 |  | 156 | 64% |
+| 02 Tech spec |  | 1 |  | 63 |  | 1 |  |  | 238 | 5 |  | 308 | 79% |
+| 03 AWS cost |  | 1 |  | 34 |  |  |  |  | 76 | 10 |  | 121 | 68% |
+| 04 PRD |  | 1 |  | 50 |  | 2 |  |  | 113 | 11 |  | 177 | 68% |
+| Edited spec (.pages) |  | 1 |  | 54 |  | 1 |  |  | 247 | 10 |  | 313 | 82% |
+| Beta hosting plan |  | 74 |  | 227 |  | 6 |  |  | 295 | 198 |  | 800 | 49% |
 
 ## Requirements by status
 
-- **BROKEN**: 3
-- **MISSING**: 86
-- **PARTIAL**: 86
-- **BLOCKED_EXTERNAL**: 1
+- **MISSING**: 5
+- **PARTIAL**: 32
+- **BLOCKED_EXTERNAL**: 3
 - **PLANNED_FUTURE**: 2
-- **DONE_VERIFIED**: 40
-- P0 not yet done: 107
-- P1 not yet done: 49
-- P2 not yet done: 14
-- P3 not yet done: 8
+- **DONE_VERIFIED**: 176
+- P0 not yet done: 26
+- P1 not yet done: 13
+- P2 not yet done: 0
+- P3 not yet done: 3
 
 ## Requirements
 
 | ID | Pri | Area | Requirement | Status | Evidence | Tests | Source items |
 |---|---|---|---|---|---|---|---|
 | ID-01 | P0 | Identity | Register, login, logout, refresh, session expiry | DONE_VERIFIED | auth_service.issue_tokens/rotate_refresh/logout; Argon2; hashed refresh tokens | test_register_login_me; test_refresh_rotation_and_reuse_detection; test_logout_revokes_refresh | JP01-0047, JP02-0038, JP02-0133, JP02-0138, JP02-0182, JP02-0233 +47 |
-| ID-02 | P0 | Identity | Roles candidate / mentor / admin with least privilege | PARTIAL | deps.require_admin; role user/admin | test_admin_rbac_and_endpoints | JP02-0063, JP02-0121, JP02-0123, JP02-0145, JP02-0274, JP04-0042 +7 |
+| ID-02 | P0 | Identity | Roles candidate / mentor / admin with least privilege | DONE_VERIFIED | roles user/mentor/admin; require_admin; mentor_service.require_mentor; invites can't grant admin | tests/api/test_jobs_and_ops.py::test_mentor_role_can_be_assigned_by_admin; tests/api/test_career_platform.py::test_ai_mentor_reflection_and_human_mentor_isolati | JP02-0063, JP02-0121, JP02-0123, JP02-0145, JP02-0274, JP04-0042 +7 |
 | ID-03 | P0 | Identity | Per-object ownership on every resource (BOLA/IDOR) | PARTIAL | reap-expired and connector test now CurrentAdmin; tailor/orchestrate check job is in user's feed | tests/api/test_compliance_and_scoring.py::test_global_maintenance_actions_are_admin_only; test_resume_studio.py | JP02-0122, JP02-0264, JP02-0265, JP02-0266, JP02-0267, JP02-0268 +34 |
-| ID-04 | P0 | Identity | Password reset / account access recovery | PARTIAL | auth.forgot_password honest 503 without SMTP; single-use token bound to password hash; sessions revoked; rate limited | test_achievements.py::test_password_reset_flow |  |
-| ID-05 | P0 | Privacy | Data export (self-service) | PARTIAL | tracker_service.export | test_export_contains_your_data_and_no_secrets | JP02-0271, JP05-0275 |
+| ID-04 | P0 | Identity | Password reset / account access recovery | DONE_VERIFIED | honest forgot/reset + ForgotPasswordPage/ResetPasswordPage | test_achievements.py::test_password_reset_flow; frontend growth.test.tsx |  |
+| ID-05 | P0 | Privacy | Data export (self-service) | DONE_VERIFIED | tracker_service.export incl. career-graph tables, no secrets | test_export_contains_your_data_and_no_secrets | JP02-0271, JP05-0275 |
 | ID-06 | P0 | Privacy | Account deletion with confirmation | DONE_VERIFIED | tracker_service.delete_account (password + DELETE, cascade, files, audit) | test_account_deletion_requires_password_and_removes_everything | JP02-0271, JP05-0275 |
-| ID-07 | P0 | Privacy | Explicit consent records (AI processing, mentor sharing, extension, learning tracking) | MISSING |  |  | JP02-0051, JP05-0054 |
-| ID-08 | P0 | Privacy | Retention rules and cleanup | MISSING |  |  | JP01-0124, JP01-0125, JP01-0145, JP02-0263, JP02-0271, JP03-0026 +5 |
-| ID-09 | P0 | Privacy | Audited cross-role access | MISSING |  |  | JP02-0051, JP02-0142, JP02-0270, JP05-0054, JP05-0146, JP05-0274 |
+| ID-07 | P0 | Privacy | Explicit consent records (AI processing, mentor sharing, extension, learning tracking) | DONE_VERIFIED | consents table; Settings > Privacy & consent; learning and mentor sharing enforce it | tests/api/test_career_platform.py::test_snapshot_goals_consent_and_next_step; career.test.tsx | JP02-0051, JP05-0054 |
+| ID-08 | P0 | Privacy | Retention rules and cleanup | DONE_VERIFIED | cleanup_and_retention job (RETENTION rules) | tests/api/test_jobs_and_ops.py::test_jobs_run_record_results_and_blocked_dependencies | JP01-0124, JP01-0125, JP01-0145, JP02-0263, JP02-0271, JP03-0026 +5 |
+| ID-09 | P0 | Privacy | Audited cross-role access | DONE_VERIFIED | MENTOR_VIEWED_CANDIDATE / access grant / revoke audit rows | tests/api/test_career_platform.py::test_ai_mentor_reflection_and_human_mentor_isolation | JP02-0051, JP02-0142, JP02-0270, JP05-0054, JP05-0146, JP05-0274 |
 | ID-10 | P0 | Identity | Brute-force / rate limiting on auth | DONE_VERIFIED | deps.auth_rate_limit, check_account_lock | test_auth_rate_limit; test_account_lock_across_rotating_real_addresses | JP06-0332, JP06-0333, JP06-0334, JP06-0335, JP06-0336, JP06-0337 +19 |
-| ID-11 | P1 | Identity | Invite-only beta registration | PARTIAL | admin_service invites; registration checks only env code | test_invite_code_required_when_configured | JP01-0123 |
+| ID-11 | P1 | Identity | Invite-only beta registration | DONE_VERIFIED | admin invites consumed at registration (role, expiry, uses) | tests/api/test_jobs_and_ops.py::test_admin_invites_work_at_registration_and_are_consumed | JP01-0123 |
 | PRF-01 | P0 | Profile | Canonical master candidate profile separate from resume | PARTIAL | CandidateProfileV2 + /profile/master | test_master_profile_and_matching_flow | JP01-0033, JP01-0037, JP02-0027, JP02-0088, JP02-0122, JP04-0023 +3 |
 | PRF-02 | P0 | Profile | Provenance + verification flag on every extracted fact | PARTIAL | ProfileSkill.is_verified now defaults False; v2 profile seeded only from confirmed facts | tests/api/test_compliance_and_scoring.py::test_new_master_profile_contains_no_invented_facts | JP02-0007, JP02-0010, JP02-0151, JP02-0191, JP04-0173, JP05-0155 +1 |
 | PRF-03 | P0 | Profile | Resume PDF upload with progress, parse status, error/retry | PARTIAL | resume_service upload checks; parse warnings | test_resume_upload_validation | JP01-0048, JP02-0053, JP02-0066, JP02-0117, JP04-0013, JP04-0040 +4 |
-| PRF-04 | P0 | Profile | Manual profile creation without a resume (students) | MISSING |  |  | JP01-0048 |
+| PRF-04 | P0 | Profile | Manual profile creation without a resume (students) | DONE_VERIFIED | resume_service.confirm_profile manual path; Onboarding 'Create my profile without a resume' | tests/api/test_career_platform.py::test_student_can_onboard_without_a_resume | JP01-0048 |
 | PRF-05 | P0 | Profile | Review/correct/confirm all critical extracted fields | PARTIAL | ProfileForm confirm step | test_profile_edit_and_experience | JP01-0049, JP02-0113, JP02-0195, JP02-0201, JP02-0202, JP04-0041 +11 |
-| PRF-06 | P0 | Profile | Career goals: titles, seniority, industry, locations, salary, work mode, relocation, notice period | PARTIAL | JobPreference titles/industries/locations/salary/work modes/notice | test_preferences_validation | JP01-0050, JP01-0052, JP02-0028, JP02-0123, JP02-0145, JP04-0023 +4 |
-| PRF-07 | P0 | Profile | Search mode India / International / Both + work authorization & sponsorship | MISSING |  |  | JP01-0051, JP01-0052, JP01-0068, JP01-0127, JP01-0147, JP02-0046 +19 |
-| PRF-08 | P0 | Onboarding | Under-10-minute first run flow | PARTIAL | OnboardingPage 5 steps, resumable | test_onboarding_status | JP01-0046, JP01-0054, JP04-0011, JP04-0012, JP04-0013, JP04-0037 +8 |
-| PRF-09 | P0 | Onboarding | Career snapshot: profile completeness, top match, top gap | MISSING |  |  | JP01-0053, JP02-0276, JP03-0021, JP04-0044, JP05-0280 |
-| PRF-10 | P0 | Onboarding | One clear next-step CTA (Apply/Build resume/Learn/Interview prep/Explore international) | MISSING |  |  | JP01-0056, JP04-0010, JP04-0045, JP04-0104 |
-| PRF-11 | P1 | UX | Progressive disclosure by activity stage | MISSING |  |  | JP01-0057, JP01-0059, JP01-0060 |
-| PRF-12 | P1 | Profile | Skills with proficiency, years and evidence links | PARTIAL | ProfileSkill proficiency/years |  |  |
+| PRF-06 | P0 | Profile | Career goals: titles, seniority, industry, locations, salary, work mode, relocation, notice period | DONE_VERIFIED | career goals API + Settings tab (seniority, relocation, sponsorship) | tests/api/test_career_platform.py::test_snapshot_goals_consent_and_next_step | JP01-0050, JP01-0052, JP02-0028, JP02-0123, JP02-0145, JP04-0023 +4 |
+| PRF-07 | P0 | Profile | Search mode India / International / Both + work authorization & sponsorship | DONE_VERIFIED | search_mode/work_authorization/needs_sponsorship drive scoring_v2 eligibility | tests/api/test_career_platform.py; test_compliance_and_scoring.py | JP01-0051, JP01-0052, JP01-0068, JP01-0127, JP01-0147, JP02-0046 +19 |
+| PRF-08 | P0 | Onboarding | Under-10-minute first run flow | DONE_VERIFIED | manual profile marked profile_source=manual; never shown as parsed | tests/api/test_career_platform.py | JP01-0046, JP01-0054, JP04-0011, JP04-0012, JP04-0013, JP04-0037 +8 |
+| PRF-09 | P0 | Onboarding | Career snapshot: profile completeness, top match, top gap | DONE_VERIFIED | GET /career/snapshot + dashboard card | tests/api/test_career_platform.py::test_snapshot_goals_consent_and_next_step; career.test.tsx; live smoke 24/24 (10 Nov) | JP01-0053, JP02-0276, JP03-0021, JP04-0044, JP05-0280 |
+| PRF-10 | P0 | Onboarding | One clear next-step CTA (Apply/Build resume/Learn/Interview prep/Explore international) | DONE_VERIFIED | career_service._next_step + dashboard CTA | tests/api/test_career_platform.py; career.test.tsx | JP01-0056, JP04-0010, JP04-0045, JP04-0104 |
+| PRF-11 | P1 | UX | Progressive disclosure by activity stage | DONE_VERIFIED | snapshot.show drives dashboard sections | career.test.tsx | JP01-0057, JP01-0059, JP01-0060 |
+| PRF-12 | P1 | Profile | Skills with proficiency, years and evidence links | DONE_VERIFIED | candidate_skills with proficiency/years + evidence | tests/api/test_career_platform.py::test_skills_evidence_states_gaps_and_learning |  |
 | DSC-01 | P0 | Discovery | JobSource registry with type, URL, compliance notes, status, health, last run, failure reason | PARTIAL | JobSource/SourceConnector + admin read-only list | test_admin_rbac_and_endpoints | JP01-0069, JP02-0032, JP02-0050, JP02-0127, JP02-0156, JP03-0093 +6 |
 | DSC-02 | P0 | Discovery | Scheduled daily discovery + manual Run now | DONE_VERIFIED | scheduler_service daily + run-now guard | test_scheduler_runs_only_due_enabled_searches; test_run_now_does_not_start_a_second_concurrent_run | JP03-0024, JP04-0051, JP06-0416, JP06-0422, JP06-0426 |
 | DSC-03 | P0 | Discovery | Run status, progress, errors, timestamps visible | DONE_VERIFIED | DiscoveryRun.source_results; UI polls run | test_run_records_per_source_outcomes_and_summary | JP02-0144, JP02-0203, JP05-0148, JP05-0207 |
@@ -63,191 +62,191 @@ Statuses: `DONE_VERIFIED` = code + passing automated test; `PARTIAL`; `BROKEN`; 
 | DSC-06 | P0 | Discovery | Normalization + canonical title/company/location | DONE_VERIFIED | normalization.py canonical_url/dedup_key | test_canonical_url; test_dedup_keys_fold_legal_suffixes_and_seniority | JP02-0034, JP02-0147, JP02-0251, JP05-0036, JP05-0151, JP05-0153 +1 |
 | DSC-07 | P0 | Discovery | Stable-hash dedupe (+ optional semantic) | DONE_VERIFIED | discovery_service.find_existing by dedup_key | test_repeat_runs_add_no_duplicate_jobs_or_notifications; test_clipped_linkedin_job_and_board_job_merge_into_one | JP02-0034, JP02-0128, JP02-0150, JP02-0252, JP04-0048, JP05-0036 +3 |
 | DSC-08 | P0 | Discovery | Provenance: source, raw reference, canonical URL, checked date | DONE_VERIFIED | JobSourceLink; JobDetailSheet sources | test_clipped_linkedin_job_and_board_job_merge_into_one | JP02-0007, JP02-0010, JP02-0147, JP02-0151, JP04-0173, JP05-0151 +1 |
-| DSC-09 | P0 | Discovery | Stale / closed posting handling | PARTIAL | company_service._close_missing; feed hides closed | test_jobs_removed_from_a_board_are_marked_closed |  |
-| DSC-10 | P0 | Discovery | Search/filter: title, company, location, work mode, seniority, salary, posted date, country | PARTIAL | jobs.list_jobs LIKE filters | test_job_filters | JP01-0014, JP02-0015, JP02-0018, JP02-0152, JP02-0293, JP03-0030 +16 |
+| DSC-09 | P0 | Discovery | Stale / closed posting handling | DONE_VERIFIED | closed postings hidden by default; expiry in cleanup_and_retention | test_jobs_and_ops.py |  |
+| DSC-10 | P0 | Discovery | Search/filter: title, company, location, work mode, seniority, salary, posted date, country | DONE_VERIFIED | /jobs filters country, seniority, sponsorship, eligibility + Postgres FTS (0008 ix_jobs_fulltext); Discover filter panel | tests/api/test_career_platform.py::test_job_filters_for_country_sponsorship_and_eligibility; local smoke 27/27 | JP01-0014, JP02-0015, JP02-0018, JP02-0152, JP02-0293, JP03-0030 +16 |
 | DSC-11 | P0 | Discovery | Persistent Save / Dismiss | DONE_VERIFIED | save/dismiss/restore | test_save_dismiss_restore | JP04-0046, JP04-0047, JP04-0048, JP04-0049, JP04-0050, JP04-0051 +6 |
 | DSC-12 | P0 | Discovery | Job details: original description, company, provenance, posted/checked date, apply link, source label | DONE_VERIFIED | JobDetailSheet | test_import_scores_and_dedups | JP04-0026, JP04-0046, JP04-0047, JP04-0048, JP04-0049, JP04-0050 +4 |
 | DSC-13 | P0 | Discovery | Compliance: robots/ToS respected, no login scraping, no anti-bot bypass, no fake results | DONE_VERIFIED | scrapling_client._honest_get: JobPilot UA, no impersonation/stealth, robots failure = disallow, per-hop SSRF | tests/api/test_compliance_and_scoring.py::test_fetcher_does_not_impersonate_a_browser; test_robots_failure_is_treated_as_disallowed | JP02-0180, JP03-0074, JP04-0160, JP05-0150, JP05-0184 |
 | DSC-14 | P0 | Discovery | Manual job import (URL/file) and assisted links for restricted boards | DONE_VERIFIED | jobs import/import-file/search-links | test_import_scores_and_dedups; test_search_links_cover_titles_and_locations |  |
-| DSC-15 | P1 | Discovery | Structured requirement extraction (JobRequirement: skill, importance, hard/soft, years) | PARTIAL | Job.required/preferred skills; JDAnalyzer | test_jd_analyzer_required_vs_preferred | JP02-0129, JP02-0148, JP05-0133, JP05-0152 |
-| MAT-01 | P0 | Matching | Separate suitability match from hard eligibility | PARTIAL | scoring_v2 eligibility pass/fail/unknown separate from total | tests/api/test_compliance_and_scoring.py::test_eligibility_is_separate_from_suitability | JP01-0015, JP01-0023, JP01-0024, JP01-0084, JP02-0035, JP02-0130 +40 |
+| DSC-15 | P1 | Discovery | Structured requirement extraction (JobRequirement: skill, importance, hard/soft, years) | DONE_VERIFIED | infer_seniority (title or stated experience, never guessed) + JobRequirement rows | tests/api/test_career_platform.py::test_infer_seniority_never_guesses | JP02-0129, JP02-0148, JP05-0133, JP05-0152 |
+| MAT-01 | P0 | Matching | Separate suitability match from hard eligibility | DONE_VERIFIED | eligibility pass/fail/unknown separate; UI shows both | test_compliance_and_scoring.py; growth.test.tsx | JP01-0015, JP01-0023, JP01-0024, JP01-0084, JP02-0035, JP02-0130 +40 |
 | MAT-02 | P0 | Matching | Eight weighted dimensions 30/20/15/10/10/5/5/5 summing to 100 | DONE_VERIFIED | backend/services/scoring_v2.py WEIGHTS 30/20/15/10/10/5/5/5 (assert sum 100) | tests/api/test_compliance_and_scoring.py::test_weights_sum_to_100_and_are_versioned | JP02-0157, JP02-0158, JP02-0159, JP02-0160, JP02-0161, JP02-0162 +16 |
 | MAT-03 | P0 | Matching | score_version + component breakdown stored per match | DONE_VERIFIED | matching_service.apply stores user_jobs.score_version/match_components; GET /jobs/{id}/analysis dimensions | tests/api/test_compliance_and_scoring.py; test_portal_workflow.py::test_import_scores_and_dedups | JP02-0130, JP02-0167, JP04-0052, JP05-0134, JP05-0171 |
 | MAT-04 | P0 | Matching | Unknown salary/authorization stays unknown | DONE_VERIFIED | scoring_v2: unknown dimensions excluded + re-normalised; eligibility unknown | tests/api/test_compliance_and_scoring.py::test_unknown_salary_and_authorisation_stay_unknown | JP01-0070, JP04-0082 |
-| MAT-05 | P0 | Matching | Explainable breakdown with source facts in UI | PARTIAL | /jobs/{id}/analysis v1 components | test_rule_based_scoring_is_explained | JP01-0015, JP01-0054, JP01-0111, JP02-0112, JP02-0175, JP04-0112 +2 |
+| MAT-05 | P0 | Matching | Explainable breakdown with source facts in UI | DONE_VERIFIED | JobDetailSheet 8 dimensions with unknowns, eligibility, disclaimer | growth.test.tsx; live smoke 24/24 (10 Nov) | JP01-0015, JP01-0054, JP01-0111, JP02-0112, JP02-0175, JP04-0112 +2 |
 | MAT-06 | P0 | Matching | Skill normalization and aliases | DONE_VERIFIED | core/skills.py taxonomy aliases | test_jd_analyzer_required_vs_preferred | JP02-0124, JP05-0128 |
-| MAT-07 | P0 | Gaps | Specific gaps with severity, explanation, job/goal link, next action | PARTIAL | skill_gap_service on demand | test_skill_gap_analysis_exact_and_transferable | JP01-0015, JP01-0016, JP01-0025, JP01-0062, JP01-0071, JP01-0084 +61 |
-| MAT-08 | P0 | Gaps | Single best next gap plus alternatives | MISSING |  |  | JP01-0055 |
-| MAT-09 | P0 | Evidence | Six-state skill progression Aware→Learning→Practising→Project Evidence→Professional Experience→Interview Ready | MISSING |  |  | JP02-0168, JP02-0169, JP02-0170, JP02-0171, JP02-0172, JP02-0173 +14 |
-| MAT-10 | P0 | Evidence | SkillEvidence with type, link, verification, timestamps, provenance | MISSING |  |  | JP01-0016, JP01-0025, JP01-0062, JP01-0122, JP01-0127, JP01-0142 +51 |
-| MAT-11 | P1 | Matching | Recompute matches on profile/goal change | PARTIAL | profile change triggers rescore_user |  | JP02-0240, JP05-0244 |
+| MAT-07 | P0 | Gaps | Specific gaps with severity, explanation, job/goal link, next action | DONE_VERIFIED | Gap rows; GET /gaps, /jobs/{id}/gaps; Career page | tests/api/test_career_platform.py::test_skills_evidence_states_gaps_and_learning | JP01-0015, JP01-0016, JP01-0025, JP01-0062, JP01-0071, JP01-0084 +61 |
+| MAT-08 | P0 | Gaps | Single best next gap plus alternatives | DONE_VERIFIED | best_gap + alternatives | tests/api/test_career_platform.py | JP01-0055 |
+| MAT-09 | P0 | Evidence | Six-state skill progression Aware→Learning→Practising→Project Evidence→Professional Experience→Interview Ready | DONE_VERIFIED | six states with evidence ceilings | tests/api/test_career_platform.py::test_skills_evidence_states_gaps_and_learning | JP02-0168, JP02-0169, JP02-0170, JP02-0171, JP02-0172, JP02-0173 +14 |
+| MAT-10 | P0 | Evidence | SkillEvidence with type, link, verification, timestamps, provenance | DONE_VERIFIED | skill_evidence CRUD + UI | tests/api/test_career_platform.py; career.test.tsx | JP01-0016, JP01-0025, JP01-0062, JP01-0122, JP01-0127, JP01-0142 +51 |
+| MAT-11 | P1 | Matching | Recompute matches on profile/goal change | DONE_VERIFIED | POST /matches/recompute + automatic rescore on evidence change | tests/api/test_career_platform.py | JP02-0240, JP05-0244 |
 | MAT-12 | P1 | Matching | Calibration from measured outcomes (no predictive claims) | MISSING |  |  | JP01-0029, JP01-0148, JP04-0163 |
-| MAT-13 | P1 | Gaps | Closing a gap updates match explanation with before/after reasoning | MISSING |  |  |  |
-| RES-01 | P0 | Resume | Structured browser editor backed by master profile | MISSING |  |  | JP01-0017, JP01-0026, JP01-0032, JP01-0033, JP01-0036, JP02-0052 +88 |
-| RES-02 | P0 | Resume | Reorder / hide sections | MISSING |  |  | JP01-0036, JP02-0075, JP02-0076, JP02-0081, JP02-0090, JP02-0288 +5 |
-| RES-03 | P0 | Resume | Autosave with pending/saved/error feedback | MISSING |  |  | JP04-0058, JP04-0068, JP04-0069, JP04-0070, JP04-0071, JP04-0072 +5 |
-| RES-04 | P0 | Resume | Live preview: side-by-side desktop, tabs on mobile, page-break visualisation | MISSING |  |  | JP01-0033, JP01-0041, JP02-0064, JP02-0086, JP02-0087, JP02-0088 +33 |
-| RES-05 | P0 | Resume | Five-plus templates: ATS Simple, Modern Professional, Technical, Finance, Graduate, International | MISSING | pdf_generator single layout |  | JP01-0033, JP01-0035, JP02-0021, JP02-0030, JP02-0057, JP02-0069 +46 |
-| RES-06 | P0 | Resume | Typography size, spacing density, columns, section visibility with layout constraints | MISSING |  |  | JP02-0069, JP02-0070, JP02-0071, JP02-0072, JP02-0073, JP02-0074 +11 |
-| RES-07 | P0 | Resume | ATS-safe mode: one column, standard headings, no info in images, density/overflow warnings | PARTIAL | ats_diagnostic_service | test_resume_studio_api_flow | JP01-0033, JP01-0040, JP01-0114, JP02-0062, JP02-0071, JP02-0099 +28 |
-| RES-08 | P0 | Resume | Named versions, job-specific copy with target job, version history and restore | PARTIAL | uploaded resume versions; TailoredResume | test_resume_versions_default_rename_preview_delete | JP01-0017, JP01-0027, JP01-0033, JP01-0037, JP01-0038, JP01-0043 +65 |
-| RES-09 | P0 | Resume | Submitted versions immutable; edits create new version | MISSING |  |  | JP02-0295, JP05-0299 |
-| RES-10 | P0 | Resume | PDF export with selectable text via secure download | PARTIAL | reportlab export | test_pdf_generator_output | JP01-0027, JP01-0033, JP01-0042, JP02-0020, JP02-0065, JP02-0097 +36 |
-| RES-11 | P0 | Resume | Export cache per content checksum (no regenerate per download) | MISSING |  |  | JP02-0084, JP02-0098, JP03-0011, JP03-0012, JP03-0013, JP03-0014 +28 |
-| RES-12 | P1 | Resume | DOCX export with truthful fallback | PARTIAL | docx_generator | test_docx_generator_output | JP01-0042, JP02-0021, JP02-0065, JP02-0097, JP02-0108, JP03-0015 +6 |
-| RES-13 | P0 | Resume | Suggest-only AI rewriting grounded in verified evidence; accept/reject each bullet | MISSING |  |  | JP01-0039, JP01-0045, JP01-0085, JP01-0144, JP02-0043, JP02-0060 +41 |
-| RES-14 | P0 | Resume | Warnings: unsupported claims, repeated keywords, weak bullets, length, parsing risk | PARTIAL | ats diagnostic findings | test_resume_studio_api_flow | JP01-0045, JP01-0098, JP02-0110, JP02-0111, JP02-0112, JP02-0113 +15 |
-| RES-15 | P0 | Resume | Never fabricate metrics/skills/titles/credentials | PARTIAL | resume_tailor_service summary from own facts only; audit checks bullets/skills are the candidate's | tests/api/test_compliance_and_scoring.py::test_new_master_profile_contains_no_invented_facts; test_resume_studio.py | JP01-0045, JP01-0098, JP02-0296, JP04-0153, JP05-0300 |
-| RES-16 | P0 | Resume | Data model ResumeTemplate/Version/Section/Block/Bullet/Export/Feedback | MISSING |  |  | JP02-0077, JP02-0078, JP02-0079, JP02-0080, JP02-0081, JP02-0082 +14 |
-| RES-17 | P0 | Resume | Resume-to-job feedback without altering document | PARTIAL | ats-compatibility endpoint | test_resume_studio_api_flow | JP01-0085, JP02-0110, JP02-0111, JP02-0112, JP02-0113, JP02-0114 +16 |
-| RES-18 | P0 | Resume | Warnings before destructive changes | PARTIAL |  |  |  |
-| RES-19 | P1 | Resume | Visual regression / preview-PDF consistency across templates | MISSING |  |  |  |
+| MAT-13 | P1 | Gaps | Closing a gap updates match explanation with before/after reasoning | DONE_VERIFIED | project/work evidence counts in scoring; jobs asking for the skill re-scored; MatchHistory before/after + reason; Skills tab card + toast | tests/api/test_career_platform.py::test_closing_a_gap_rescores_with_before_after_reasoning |  |
+| RES-01 | P0 | Resume | Structured browser editor backed by master profile | DONE_VERIFIED | Resume Studio structured editor | tests/api/test_career_platform.py::test_resume_studio_versions_exports_and_immutability; studio.test.tsx | JP01-0017, JP01-0026, JP01-0032, JP01-0033, JP01-0036, JP02-0052 +88 |
+| RES-02 | P0 | Resume | Reorder / hide sections | DONE_VERIFIED | section move/hide | studio.test.tsx | JP01-0036, JP02-0075, JP02-0076, JP02-0081, JP02-0090, JP02-0288 +5 |
+| RES-03 | P0 | Resume | Autosave with pending/saved/error feedback | DONE_VERIFIED | autosave with revision 409 | tests/api/test_career_platform.py; studio.test.tsx | JP04-0058, JP04-0068, JP04-0069, JP04-0070, JP04-0071, JP04-0072 +5 |
+| RES-04 | P0 | Resume | Live preview: side-by-side desktop, tabs on mobile, page-break visualisation | DONE_VERIFIED | preview = real PDF, side-by-side / tabs | tests/api/test_career_platform.py; live smoke 24/24 (10 Nov) | JP01-0033, JP01-0041, JP02-0064, JP02-0086, JP02-0087, JP02-0088 +33 |
+| RES-05 | P0 | Resume | Five-plus templates: ATS Simple, Modern Professional, Technical, Finance, Graduate, International | DONE_VERIFIED | 6 templates | tests/api/test_career_platform.py | JP01-0033, JP01-0035, JP02-0021, JP02-0030, JP02-0057, JP02-0069 +46 |
+| RES-06 | P0 | Resume | Typography size, spacing density, columns, section visibility with layout constraints | DONE_VERIFIED | font size, density, page size, mobility line | tests/api/test_career_platform.py | JP02-0069, JP02-0070, JP02-0071, JP02-0072, JP02-0073, JP02-0074 +11 |
+| RES-07 | P0 | Resume | ATS-safe mode: one column, standard headings, no info in images, density/overflow warnings | DONE_VERIFIED | ATS checks + not-a-guarantee note | tests/api/test_career_platform.py | JP01-0033, JP01-0040, JP01-0114, JP02-0062, JP02-0071, JP02-0099 +28 |
+| RES-08 | P0 | Resume | Named versions, job-specific copy with target job, version history and restore | DONE_VERIFIED | versions, clone/restore, target job | tests/api/test_career_platform.py | JP01-0017, JP01-0027, JP01-0033, JP01-0037, JP01-0038, JP01-0043 +65 |
+| RES-09 | P0 | Resume | Submitted versions immutable; edits create new version | DONE_VERIFIED | locked on submission | tests/api/test_career_platform.py; live smoke 24/24 (10 Nov) | JP02-0295, JP05-0299 |
+| RES-10 | P0 | Resume | PDF export with selectable text via secure download | DONE_VERIFIED | selectable-text PDF, escaped | tests/api/test_career_platform.py (text extracted for all 6) | JP01-0027, JP01-0033, JP01-0042, JP02-0020, JP02-0065, JP02-0097 +36 |
+| RES-11 | P0 | Resume | Export cache per content checksum (no regenerate per download) | DONE_VERIFIED | ResumeExport cache per checksum | tests/api/test_career_platform.py | JP02-0084, JP02-0098, JP03-0011, JP03-0012, JP03-0013, JP03-0014 +28 |
+| RES-12 | P1 | Resume | DOCX export with truthful fallback | DONE_VERIFIED | DOCX export with fallback note | tests/api/test_career_platform.py | JP01-0042, JP02-0021, JP02-0065, JP02-0097, JP02-0108, JP03-0015 +6 |
+| RES-13 | P0 | Resume | Suggest-only AI rewriting grounded in verified evidence; accept/reject each bullet | DONE_VERIFIED | suggest-only rewrite/reorder/add_skill; accept/dismiss | studio.test.tsx | JP01-0039, JP01-0045, JP01-0085, JP01-0144, JP02-0043, JP02-0060 +41 |
+| RES-14 | P0 | Resume | Warnings: unsupported claims, repeated keywords, weak bullets, length, parsing risk | DONE_VERIFIED | weak/long bullets, unsupported figures, repeated keywords, overflow | tests/api/test_career_platform.py | JP01-0045, JP01-0098, JP02-0110, JP02-0111, JP02-0112, JP02-0113 +15 |
+| RES-15 | P0 | Resume | Never fabricate metrics/skills/titles/credentials | DONE_VERIFIED | no invented content; unsupported figures flagged | test_compliance_and_scoring.py; tests/api/test_career_platform.py | JP01-0045, JP01-0098, JP02-0296, JP04-0153, JP05-0300 |
+| RES-16 | P0 | Resume | Data model ResumeTemplate/Version/Section/Block/Bullet/Export/Feedback | DONE_VERIFIED | seven resume tables | tests/api/test_career_platform.py | JP02-0077, JP02-0078, JP02-0079, JP02-0080, JP02-0081, JP02-0082 +14 |
+| RES-17 | P0 | Resume | Resume-to-job feedback without altering document | DONE_VERIFIED | job-specific feedback | tests/api/test_career_platform.py | JP01-0085, JP02-0110, JP02-0111, JP02-0112, JP02-0113, JP02-0114 +16 |
+| RES-18 | P0 | Resume | Warnings before destructive changes | DONE_VERIFIED | confirm dialogs before deleting | studio.test.tsx |  |
+| RES-19 | P1 | Resume | Visual regression / preview-PDF consistency across templates | PARTIAL | every template rendered + text-extracted in tests | tests/api/test_career_platform.py |  |
 | APP-01 | P0 | Apply | Prepared application package: checklist, job link, resume version, verified answers, unknown flags, cover material | DONE_VERIFIED | applications.prepare checklist + answers | test_apply_flow_open_is_not_applied | JP01-0018, JP01-0086, JP02-0185, JP02-0186, JP02-0187, JP02-0188 +34 |
-| APP-02 | P0 | Apply | Exact resume_version_id + export checksum linked to application | MISSING |  |  | JP01-0044, JP02-0067, JP02-0081, JP02-0084, JP02-0085, JP02-0134 +7 |
-| APP-03 | P0 | Apply | State machine Saved→Prepared→Opened→Pending→Applied→Screening→Assessment→Interview→Offer + Rejected/Withdrawn/Archived with legal transitions | PARTIAL | application_service.ALLOWED + STAGES | test_stage_requires_submission | JP02-0134, JP02-0196, JP02-0197, JP02-0198, JP02-0199, JP02-0200 +28 |
+| APP-02 | P0 | Apply | Exact resume_version_id + export checksum linked to application | DONE_VERIFIED | resume_version_id + export + checksum on application | tests/api/test_career_platform.py; live smoke 24/24 (10 Nov) | JP01-0044, JP02-0067, JP02-0081, JP02-0084, JP02-0085, JP02-0134 +7 |
+| APP-03 | P0 | Apply | State machine Saved→Prepared→Opened→Pending→Applied→Screening→Assessment→Interview→Offer + Rejected/Withdrawn/Archived with legal transitions | DONE_VERIFIED | STAGE_MOVES legal transitions | tests/api/test_career_platform.py::test_interview_prep_rejection_funnel_and_stage_rules | JP02-0134, JP02-0196, JP02-0197, JP02-0198, JP02-0199, JP02-0200 +28 |
 | APP-04 | P0 | Apply | Opened is not Applied; Applied only on explicit user confirmation | DONE_VERIFIED | open_listing vs confirm | test_apply_flow_open_is_not_applied; test_opening_job_is_not_applying | JP01-0028, JP01-0086, JP01-0129, JP02-0068, JP02-0194, JP02-0196 +42 |
 | APP-05 | P0 | Apply | Event history with timestamps | DONE_VERIFIED | ApplicationEvent | test_apply_flow_open_is_not_applied | JP02-0023, JP02-0135, JP02-0142, JP02-0176, JP03-0024, JP04-0091 +12 |
-| APP-06 | P0 | Tracker | Tracker list/kanban with company, role, status, date, search/filter | PARTIAL | AppliedPage list + filter |  | JP01-0060, JP02-0041, JP04-0087, JP04-0088, JP04-0089, JP04-0090 +6 |
+| APP-06 | P0 | Tracker | Tracker list/kanban with company, role, status, date, search/filter | DONE_VERIFIED | Applications page list/filters | existing + growth.test.tsx | JP01-0060, JP02-0041, JP04-0087, JP04-0088, JP04-0089, JP04-0090 +6 |
 | APP-07 | P0 | Tracker | Notes, next follow-up, reminders, recruiter/ref number | DONE_VERIFIED | tracking notes/follow-up/reference | test_tracking_fields_stages_and_submission_method | JP01-0060, JP04-0086, JP04-0087, JP04-0088, JP04-0089, JP04-0090 +5 |
-| APP-08 | P0 | Tracker | Structured + free-text rejection reasons, outcomes, follow-up actions | PARTIAL | free-text withdraw/fail reason |  | JP01-0144, JP02-0043, JP02-0207, JP02-0217, JP02-0304, JP04-0093 +4 |
+| APP-08 | P0 | Tracker | Structured + free-text rejection reasons, outcomes, follow-up actions | DONE_VERIFIED | structured rejection, known vs guessed | tests/api/test_career_platform.py; growth.test.tsx | JP01-0144, JP02-0043, JP02-0207, JP02-0217, JP02-0304, JP04-0093 +4 |
 | APP-09 | P0 | Extension | MV3 extension: explicit trigger, least-privilege, one-time pairing code, origin checks | DONE_VERIFIED | extension pairing, activeTab | test_pairing_*; extension unit tests | JP02-0019, JP02-0040, JP02-0185, JP02-0186, JP02-0187, JP02-0188 +24 |
 | APP-10 | P0 | Extension | Field detection/mapping/preview; never overwrite user values; no demographic/legal autofill; never submit; no CAPTCHA bypass | DONE_VERIFIED | extension fieldmap/core | fill.test.js; e2e 37/37 | JP01-0018, JP01-0086, JP02-0185, JP02-0186, JP02-0187, JP02-0188 +18 |
 | APP-11 | P0 | Extension | Graceful fallback on unsupported sites (copy/download assistance) | DONE_VERIFIED | popup unsupported fallback | e2e run_e2e.py | JP04-0067 |
 | APP-12 | P1 | Apply | Interviews, offers, contacts on applications; calendar export | DONE_VERIFIED | tracker interviews/offers/contacts/.ics | test_interviews_offers_contacts_and_calendar |  |
 | APP-13 | P1 | Apply | Today view (your move / coming up / waiting) | DONE_VERIFIED | today_view + TodayView | test_today_view_buckets |  |
-| INT-01 | P1 | Interview | Job/role-specific question sets with competencies (behavioural/technical) | MISSING |  |  | JP01-0019, JP01-0061, JP01-0088 |
-| INT-02 | P1 | Interview | Mock practice sessions: answers, notes, feedback, improvement actions | MISSING |  |  | JP01-0019, JP01-0061, JP01-0088, JP03-0075 |
-| INT-03 | P1 | Interview | Reference insight links (Glassdoor, Reddit, AmbitionBox, Indeed) with attribution, no scraping | MISSING |  |  | JP05-0044, JP05-0045 |
-| INT-04 | P1 | Interview | Interview record: type, time, status, outcome, feedback, topics, strengths, weaknesses | PARTIAL | Interview model | test_interviews_offers_contacts_and_calendar | JP02-0137, JP05-0141 |
-| INT-05 | P1 | Rejection | Rejection capture: known vs guessed reasons; no invented employer rationale | MISSING |  |  | JP01-0144, JP02-0043, JP02-0207, JP02-0304, JP04-0093, JP05-0046 +2 |
-| INT-06 | P1 | Rejection | Funnel app→screening→interview→offer, stage losses, patterns, resume-version differences | PARTIAL | dashboard funnel |  | JP01-0020, JP01-0029, JP01-0132, JP01-0133, JP02-0211, JP04-0105 +4 |
-| INT-07 | P1 | Rejection | Confirmed findings feed gap priority / mentor actions | MISSING |  |  | JP01-0088, JP01-0106 |
-| LRN-01 | P1 | Learning | ≥3 credible resources per supported gap with title/URL/provider/type/duration/level/checked date/relevance | MISSING |  |  | JP01-0016, JP01-0025, JP01-0062, JP01-0087, JP01-0143, JP02-0038 +41 |
-| LRN-02 | P1 | Learning | Resource ranking (relevance, credibility, level, recency, feedback) | MISSING |  |  | JP01-0116, JP02-0178, JP05-0182 |
-| LRN-03 | P1 | Learning | Opt-in learning sessions start/stop, idle vs active time, transparent state | MISSING |  |  | JP02-0133, JP02-0177, JP02-0178, JP02-0179, JP02-0180, JP02-0181 +13 |
-| LRN-04 | P1 | Learning | Notes, completion, knowledge checks/exercises, evidence project link | MISSING |  |  | JP02-0172, JP02-0184, JP05-0176, JP05-0188 |
-| LRN-05 | P1 | Learning | Candidate affirms progression state; no surveillance scoring | MISSING |  |  |  |
-| LRN-06 | P1 | Learning | Official/authorized sources only (no dubious scraping) | MISSING |  |  |  |
-| MEN-01 | P1 | AI Mentor | Contextual action planner grounded in career graph | MISSING |  |  | JP01-0021, JP01-0030, JP01-0064, JP01-0073, JP01-0089, JP01-0102 +53 |
-| MEN-02 | P1 | AI Mentor | Weekly reflection: outcome, obstacle, next action | MISSING |  |  | JP01-0136, JP01-0137, JP02-0210, JP02-0211, JP02-0212, JP02-0213 +25 |
-| MEN-03 | P1 | AI Mentor | Bottleneck diagnosis with confidence and limitations | MISSING |  |  | JP01-0020, JP01-0029, JP01-0030, JP01-0061, JP01-0064, JP01-0100 +5 |
-| MEN-04 | P1 | AI Mentor | Action checklist with due dates, priority, completion, reason | MISSING |  |  | JP01-0021, JP01-0030, JP01-0089, JP04-0080, JP04-0106, JP04-0143 +1 |
-| MEN-05 | P1 | AI Mentor | Five documented cases (many apps few interviews; interviews no offers; repeated gap; learning but no applying; better after resume change) | MISSING |  |  | JP01-0104, JP01-0105, JP01-0106, JP01-0107, JP01-0108 |
-| MEN-06 | P2 | Human mentor | Consent-based invite/assignment, revocation | MISSING |  |  | JP01-0064 |
-| MEN-07 | P2 | Human mentor | 1-on-1 virtual session views, privacy-controlled notes | MISSING |  |  | JP01-0146, JP02-0045, JP02-0215, JP02-0306, JP03-0076, JP05-0048 +2 |
-| MEN-08 | P2 | Human mentor | Profile/funnel/gap/action summaries, recommendations/overrides | MISSING |  |  |  |
-| MEN-09 | P2 | Human mentor | Auditable access, no leakage across mentor relationships | MISSING |  |  |  |
-| INTL-01 | P2 | International | Country catalogue | MISSING |  |  | JP01-0031, JP02-0139, JP02-0140, JP02-0219, JP02-0228, JP02-0246 +9 |
-| INTL-02 | P2 | International | Visa route catalogue + sourced rules (dates, requirements, salary thresholds, confidence) | MISSING |  |  | JP01-0031, JP01-0063, JP02-0047, JP02-0140, JP02-0141, JP02-0218 +41 |
-| INTL-03 | P2 | International | Country-specific profile fit: strengths, gaps, pathways, source-linked | MISSING |  |  | JP01-0063, JP01-0070, JP01-0071, JP01-0073, JP01-0090, JP02-0218 +32 |
-| INTL-04 | P2 | International | Sponsorship signals verified / inferred / unknown | MISSING |  |  | JP01-0069, JP02-0166, JP02-0226, JP02-0227, JP04-0113, JP05-0170 +2 |
-| INTL-05 | P2 | International | Sponsorship-aware search/apply and relocation strategy | MISSING |  |  | JP01-0072 |
-| INTL-06 | P2 | International | Source change monitoring + notifications on material change | MISSING |  |  | JP02-0230, JP05-0234, JP06-0561, JP06-0585 |
-| INTL-07 | P2 | International | Not legal advice notices; stale rules flagged | MISSING |  |  | JP04-0108, JP04-0109, JP04-0110, JP04-0111, JP04-0112, JP04-0113 +1 |
-| INTL-08 | P2 | International | One product: India/International/Both share profile, jobs, gaps, applications | MISSING |  |  | JP01-0031, JP01-0065, JP01-0066, JP01-0090 |
+| INT-01 | P1 | Interview | Job/role-specific question sets with competencies (behavioural/technical) | DONE_VERIFIED | questions from job requirements | tests/api/test_career_platform.py | JP01-0019, JP01-0061, JP01-0088 |
+| INT-02 | P1 | Interview | Mock practice sessions: answers, notes, feedback, improvement actions | DONE_VERIFIED | practice + rule feedback | tests/api/test_career_platform.py | JP01-0019, JP01-0061, JP01-0088, JP03-0075 |
+| INT-03 | P1 | Interview | Reference insight links (Glassdoor, Reddit, AmbitionBox, Indeed) with attribution, no scraping | DONE_VERIFIED | attributed links + saved insights, no scraping | tests/api/test_career_platform.py | JP05-0044, JP05-0045 |
+| INT-04 | P1 | Interview | Interview record: type, time, status, outcome, feedback, topics, strengths, weaknesses | DONE_VERIFIED | interview feedback fields | growth.test.tsx | JP02-0137, JP05-0141 |
+| INT-05 | P1 | Rejection | Rejection capture: known vs guessed reasons; no invented employer rationale | DONE_VERIFIED | rejection_reason_known | tests/api/test_career_platform.py; growth.test.tsx | JP01-0144, JP02-0043, JP02-0207, JP02-0304, JP04-0093, JP05-0046 +2 |
+| INT-06 | P1 | Rejection | Funnel app→screening→interview→offer, stage losses, patterns, resume-version differences | DONE_VERIFIED | GET /analytics/funnel + panel | tests/api/test_career_platform.py | JP01-0020, JP01-0029, JP01-0132, JP01-0133, JP02-0211, JP04-0105 +4 |
+| INT-07 | P1 | Rejection | Confirmed findings feed gap priority / mentor actions | DONE_VERIFIED | rejections raise gap score; mentor repeated_gap rule | tests/api/test_career_platform.py | JP01-0088, JP01-0106 |
+| LRN-01 | P1 | Learning | ≥3 credible resources per supported gap with title/URL/provider/type/duration/level/checked date/relevance | DONE_VERIFIED | 57-skill link-checked catalogue | tests/api/test_career_platform.py | JP01-0016, JP01-0025, JP01-0062, JP01-0087, JP01-0143, JP02-0038 +41 |
+| LRN-02 | P1 | Learning | Resource ranking (relevance, credibility, level, recency, feedback) | DONE_VERIFIED | ranking by credibility/level/link/votes | tests/api/test_career_platform.py | JP01-0116, JP02-0178, JP05-0182 |
+| LRN-03 | P1 | Learning | Opt-in learning sessions start/stop, idle vs active time, transparent state | DONE_VERIFIED | opt-in sessions, active vs idle | tests/api/test_career_platform.py; career.test.tsx | JP02-0133, JP02-0177, JP02-0178, JP02-0179, JP02-0180, JP02-0181 +13 |
+| LRN-04 | P1 | Learning | Notes, completion, knowledge checks/exercises, evidence project link | DONE_VERIFIED | notes, knowledge check, evidence link | tests/api/test_career_platform.py | JP02-0172, JP02-0184, JP05-0176, JP05-0188 |
+| LRN-05 | P1 | Learning | Candidate affirms progression state; no surveillance scoring | DONE_VERIFIED | candidate-set state within evidence | tests/api/test_career_platform.py |  |
+| LRN-06 | P1 | Learning | Official/authorized sources only (no dubious scraping) | DONE_VERIFIED | official/established sources only | backend/data/learning_resources.json |  |
+| MEN-01 | P1 | AI Mentor | Contextual action planner grounded in career graph | DONE_VERIFIED | GET /mentor/plan | tests/api/test_career_platform.py | JP01-0021, JP01-0030, JP01-0064, JP01-0073, JP01-0089, JP01-0102 +53 |
+| MEN-02 | P1 | AI Mentor | Weekly reflection: outcome, obstacle, next action | DONE_VERIFIED | weekly reflection | tests/api/test_career_platform.py | JP01-0136, JP01-0137, JP02-0210, JP02-0211, JP02-0212, JP02-0213 +25 |
+| MEN-03 | P1 | AI Mentor | Bottleneck diagnosis with confidence and limitations | DONE_VERIFIED | observations/confidence/limitations | tests/api/test_career_platform.py | JP01-0020, JP01-0029, JP01-0030, JP01-0061, JP01-0064, JP01-0100 +5 |
+| MEN-04 | P1 | AI Mentor | Action checklist with due dates, priority, completion, reason | DONE_VERIFIED | actions with due/priority/completion | tests/api/test_career_platform.py | JP01-0021, JP01-0030, JP01-0089, JP04-0080, JP04-0106, JP04-0143 +1 |
+| MEN-05 | P1 | AI Mentor | Five documented cases (many apps few interviews; interviews no offers; repeated gap; learning but no applying; better after resume change) | PARTIAL | five rules implemented | tests/api/test_career_platform.py (not-enough-data path) | JP01-0104, JP01-0105, JP01-0106, JP01-0107, JP01-0108 |
+| MEN-06 | P2 | Human mentor | Consent-based invite/assignment, revocation | DONE_VERIFIED | consented scoped assignments, revocation | tests/api/test_career_platform.py | JP01-0064 |
+| MEN-07 | P2 | Human mentor | 1-on-1 virtual session views, privacy-controlled notes | DONE_VERIFIED | sessions + shared/private notes | tests/api/test_career_platform.py | JP01-0146, JP02-0045, JP02-0215, JP02-0306, JP03-0076, JP05-0048 +2 |
+| MEN-08 | P2 | Human mentor | Profile/funnel/gap/action summaries, recommendations/overrides | DONE_VERIFIED | mentor workspace summaries + recommendations | tests/api/test_career_platform.py |  |
+| MEN-09 | P2 | Human mentor | Auditable access, no leakage across mentor relationships | DONE_VERIFIED | audit + isolation | tests/api/test_career_platform.py |  |
+| INTL-01 | P2 | International | Country catalogue | DONE_VERIFIED | 10 countries | tests/api/test_career_platform.py | JP01-0031, JP02-0139, JP02-0140, JP02-0219, JP02-0228, JP02-0246 +9 |
+| INTL-02 | P2 | International | Visa route catalogue + sourced rules (dates, requirements, salary thresholds, confidence) | DONE_VERIFIED | 9 routes, sourced, unverified until checked | tests/api/test_career_platform.py | JP01-0031, JP01-0063, JP02-0047, JP02-0140, JP02-0141, JP02-0218 +41 |
+| INTL-03 | P2 | International | Country-specific profile fit: strengths, gaps, pathways, source-linked | DONE_VERIFIED | country fit | tests/api/test_career_platform.py | JP01-0063, JP01-0070, JP01-0071, JP01-0073, JP01-0090, JP02-0218 +32 |
+| INTL-04 | P2 | International | Sponsorship signals verified / inferred / unknown | DONE_VERIFIED | sponsorship verified/none/inferred/unknown | test_compliance_and_scoring.py | JP01-0069, JP02-0166, JP02-0226, JP02-0227, JP04-0113, JP05-0170 +2 |
+| INTL-05 | P2 | International | Sponsorship-aware search/apply and relocation strategy | DONE_VERIFIED | sponsorship signal on every job (+backfill job), Discover filter, card badges, country-fit guidance | tests/api/test_career_platform.py::test_normalisation_job_backfills_signals; local smoke | JP01-0072 |
+| INTL-06 | P2 | International | Source change monitoring + notifications on material change | DONE_VERIFIED | page fingerprint + watcher notifications | tests/api/test_career_platform.py::test_international_routes_fit_watch_and_source_changes | JP02-0230, JP05-0234, JP06-0561, JP06-0585 |
+| INTL-07 | P2 | International | Not legal advice notices; stale rules flagged | DONE_VERIFIED | not-legal-advice notice, stale after review date | tests/api/test_career_platform.py; career.test.tsx | JP04-0108, JP04-0109, JP04-0110, JP04-0111, JP04-0112, JP04-0113 +1 |
+| INTL-08 | P2 | International | One product: India/International/Both share profile, jobs, gaps, applications | DONE_VERIFIED | same profile/jobs/applications | tests/api/test_career_platform.py | JP01-0031, JP01-0065, JP01-0066, JP01-0090 |
 | NOT-01 | P0 | Notifications | New relevant job alerts | DONE_VERIFIED | notification_service.notify_new_match | test_notification_threshold_uses_the_search_score; test_notifications_read_flow | JP02-0048, JP02-0155, JP02-0257, JP02-0258, JP03-0025, JP03-0079 +10 |
-| NOT-02 | P0 | Notifications | Follow-up due, interview/upcoming schedule, action due reminders | MISSING |  |  | JP04-0092, JP05-0051 |
-| NOT-03 | P1 | Notifications | Learning milestone and source-change alerts | MISSING |  |  |  |
-| NOT-04 | P0 | Notifications | Preferences, channel opt-in, throttling, dedupe, retry/error state | PARTIAL | NotificationPref, dedupe_key | test_notification_preferences_filter_and_digest |  |
-| NOT-05 | P1 | Notifications | Email delivery when SMTP configured | MISSING |  |  | JP06-0243, JP06-0244, JP06-0245, JP06-0246, JP06-0247, JP06-0248 |
-| ANA-01 | P0 | Analytics | Candidate dashboard: action, snapshot, matches, active applications, reminders, latest gap | PARTIAL | DashboardPage stats/chart/TodayView | test_today_view_buckets | JP04-0024 |
-| ANA-02 | P0 | Analytics | Funnel counts distinguish Opened / Pending / Applied | PARTIAL | dashboard pending/applied | test_apply_flow_open_is_not_applied | JP01-0060, JP01-0118, JP01-0132, JP01-0133, JP02-0211, JP04-0105 +3 |
-| ANA-03 | P0 | Analytics | Sixteen PRD events instrumented with documented properties | MISSING |  |  | JP04-0115, JP04-0116, JP04-0117, JP04-0118, JP04-0119, JP04-0120 +13 |
-| ANA-04 | P1 | Analytics | North-star metrics: outcomes, conversions, gap closure, resume reuse, WAU, reflection completion | MISSING |  |  | JP01-0128, JP01-0129, JP01-0130, JP01-0131, JP01-0132, JP01-0133 +8 |
-| ANA-05 | P1 | Analytics | Onboarding activation/fall-off, job relevance, learning usefulness, extension success | MISSING |  |  | JP01-0120 |
+| NOT-02 | P0 | Notifications | Follow-up due, interview/upcoming schedule, action due reminders | DONE_VERIFIED | notification_dispatch reminders | tests/api/test_jobs_and_ops.py | JP04-0092, JP05-0051 |
+| NOT-03 | P1 | Notifications | Learning milestone and source-change alerts | DONE_VERIFIED | learning milestone + source change | tests/api/test_career_platform.py |  |
+| NOT-04 | P0 | Notifications | Preferences, channel opt-in, throttling, dedupe, retry/error state | PARTIAL | dedupe keys, prefs, consent | tests/api/test_jobs_and_ops.py |  |
+| NOT-05 | P1 | Notifications | Email delivery when SMTP configured | BLOCKED_EXTERNAL | email_service; dispatch sends when SMTP + consent | tests/api/test_jobs_and_ops.py (reports not configured) | JP06-0243, JP06-0244, JP06-0245, JP06-0246, JP06-0247, JP06-0248 |
+| ANA-01 | P0 | Analytics | Candidate dashboard: action, snapshot, matches, active applications, reminders, latest gap | DONE_VERIFIED | dashboard snapshot + existing sections | career.test.tsx | JP04-0024 |
+| ANA-02 | P0 | Analytics | Funnel counts distinguish Opened / Pending / Applied | DONE_VERIFIED | funnel keeps Opened/Pending/Applied distinct | tests/api/test_career_platform.py | JP01-0060, JP01-0118, JP01-0132, JP01-0133, JP02-0211, JP04-0105 +3 |
+| ANA-03 | P0 | Analytics | Sixteen PRD events instrumented with documented properties | DONE_VERIFIED | 16 PRD events | tests/api/test_career_platform.py::test_prd_events_are_recorded_without_personal_data | JP04-0115, JP04-0116, JP04-0117, JP04-0118, JP04-0119, JP04-0120 +13 |
+| ANA-04 | P1 | Analytics | North-star metrics: outcomes, conversions, gap closure, resume reuse, WAU, reflection completion | DONE_VERIFIED | admin product-metrics north stars | tests/api/test_jobs_and_ops.py | JP01-0128, JP01-0129, JP01-0130, JP01-0131, JP01-0132, JP01-0133 +8 |
+| ANA-05 | P1 | Analytics | Onboarding activation/fall-off, job relevance, learning usefulness, extension success | PARTIAL | activation, feedback | tests/api/test_jobs_and_ops.py | JP01-0120 |
 | ANA-06 | P1 | Analytics | Reports/export (Excel weekly/monthly) | PARTIAL | report_service daily/history | test_reports_are_per_user | JP02-0259, JP04-0035, JP05-0263 |
-| ANA-07 | P1 | Research | In-app feedback prompts on the eleven research topics | MISSING |  |  | JP01-0109, JP01-0110, JP01-0111, JP01-0112, JP01-0113, JP01-0114 +23 |
-| ANA-08 | P1 | Analytics | Failed/aborted actions recorded as operational events, not conversions | PARTIAL | RunError rows | test_all_boards_failing_is_a_failed_run |  |
-| ADM-01 | P0 | Admin | Source health view: runs, compliance, parse/dedup errors | PARTIAL | admin sources list | test_admin_rbac_and_endpoints | JP02-0032, JP02-0050, JP02-0127, JP02-0156, JP03-0093, JP04-0051 +5 |
-| ADM-02 | P1 | Admin | Service health, analytics, model/AI cost view | PARTIAL | system_metrics counts | test_admin_rbac_and_endpoints |  |
-| ADM-03 | P1 | Admin | Audit/security incident view | PARTIAL | /admin/audit-log | test_admin_rbac_and_endpoints |  |
-| ADM-04 | P1 | Admin | Controlled replay/retry of runs | MISSING |  |  |  |
-| ADM-05 | P0 | Admin | Admin role-gated and logged | PARTIAL | require_admin + audit on mutations | test_admin_rbac_and_endpoints | JP02-0050, JP02-0247, JP02-0270, JP02-0274, JP04-0151, JP05-0053 +4 |
-| ADM-06 | P1 | Admin | User management and invites | PARTIAL | users/invites admin | test_admin_rbac_and_endpoints |  |
-| ARC-01 | P0 | Architecture | Linked career graph entities and relationships | PARTIAL | models/__init__.py |  | JP02-0009, JP02-0010, JP02-0025, JP02-0026, JP02-0027, JP02-0028 +119 |
-| ARC-02 | P0 | Architecture | API surface equivalents of spec routes | PARTIAL | /api/v1 routers |  | JP02-0011, JP02-0012, JP02-0013, JP02-0014, JP02-0015, JP02-0016 +73 |
-| ARC-03 | P0 | Architecture | Storage abstraction LocalStorage / S3Storage | MISSING |  |  | JP02-0017, JP02-0268, JP03-0011, JP03-0012, JP03-0013, JP03-0014 +28 |
+| ANA-07 | P1 | Research | In-app feedback prompts on the eleven research topics | DONE_VERIFIED | feedback prompts + summary | tests/api/test_career_platform.py | JP01-0109, JP01-0110, JP01-0111, JP01-0112, JP01-0113, JP01-0114 +23 |
+| ANA-08 | P1 | Analytics | Failed/aborted actions recorded as operational events, not conversions | DONE_VERIFIED | export_failed etc. with success=false | platform_service |  |
+| ADM-01 | P0 | Admin | Source health view: runs, compliance, parse/dedup errors | DONE_VERIFIED | admin sources + jobs | tests/api/test_jobs_and_ops.py | JP02-0032, JP02-0050, JP02-0127, JP02-0156, JP03-0093, JP04-0051 +5 |
+| ADM-02 | P1 | Admin | Service health, analytics, model/AI cost view | DONE_VERIFIED | product metrics, AI costs, system | tests/api/test_jobs_and_ops.py |  |
+| ADM-03 | P1 | Admin | Audit/security incident view | DONE_VERIFIED | audit log incl. mentor access | test_admin.py; tests/api/test_career_platform.py |  |
+| ADM-04 | P1 | Admin | Controlled replay/retry of runs | DONE_VERIFIED | POST /admin/jobs/{name}/run | tests/api/test_jobs_and_ops.py |  |
+| ADM-05 | P0 | Admin | Admin role-gated and logged | DONE_VERIFIED | role-gated, replay audited | tests/api/test_jobs_and_ops.py | JP02-0050, JP02-0247, JP02-0270, JP02-0274, JP04-0151, JP05-0053 +4 |
+| ADM-06 | P1 | Admin | User management and invites | DONE_VERIFIED | users, roles incl. mentor, invites | tests/api/test_jobs_and_ops.py |  |
+| ARC-01 | P0 | Architecture | Linked career graph entities and relationships | DONE_VERIFIED | career graph tables + docs/architecture/CAREER_GRAPH.md | test_migrations.py | JP02-0009, JP02-0010, JP02-0025, JP02-0026, JP02-0027, JP02-0028 +119 |
+| ARC-02 | P0 | Architecture | API surface equivalents of spec routes | DONE_VERIFIED | API map in CAREER_GRAPH.md | tests/api/test_career_platform.py | JP02-0011, JP02-0012, JP02-0013, JP02-0014, JP02-0015, JP02-0016 +73 |
+| ARC-03 | P0 | Architecture | Storage abstraction LocalStorage / S3Storage | DONE_VERIFIED | storage.LocalStorage/S3Storage | tests/api/test_career_platform.py (exports via storage) | JP02-0017, JP02-0268, JP03-0011, JP03-0012, JP03-0013, JP03-0014 +28 |
 | ARC-04 | P1 | Architecture | Provider-agnostic AI gateway: prompt/schema versioning, validation, retries, grounding, token budget, cost per workflow | PARTIAL | core/llm.py |  | JP02-0016, JP02-0022, JP02-0044, JP02-0060, JP02-0213, JP02-0273 +31 |
-| ARC-05 | P0 | Architecture | Background worker / queue for long tasks | PARTIAL | APScheduler in-process | test_scheduler_runs_only_due_enabled_searches | JP02-0011, JP02-0012, JP02-0013, JP02-0014, JP02-0015, JP02-0016 +53 |
+| ARC-05 | P0 | Architecture | Background worker / queue for long tasks | DONE_VERIFIED | jobs_registry + APScheduler | tests/api/test_jobs_and_ops.py | JP02-0011, JP02-0012, JP02-0013, JP02-0014, JP02-0015, JP02-0016 +53 |
 | ARC-06 | P0 | Architecture | Transactions and indexes in Postgres | PARTIAL | indexes; alembic | test_migrated_schema_matches_models | JP02-0018, JP03-0101, JP05-0020, JP06-0183 |
-| ARC-07 | P0 | Architecture | Data provenance rules documented | PARTIAL |  |  |  |
+| ARC-07 | P0 | Architecture | Data provenance rules documented | DONE_VERIFIED | provenance rules doc | docs/architecture/CAREER_GRAPH.md |  |
 | JOB-01 | P0 | Jobs | daily_discovery | DONE_VERIFIED | scheduler daily_discovery + catch-up | test_missed_daily_run_is_scheduled_once_after_start | JP02-0249, JP03-0024, JP05-0253, JP06-0415, JP06-0416, JP06-0417 +5 |
-| JOB-02 | P0 | Jobs | source_refresh | MISSING |  |  | JP02-0250, JP02-0256, JP05-0254, JP05-0260 |
+| JOB-02 | P0 | Jobs | source_refresh | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0250, JP02-0256, JP05-0254, JP05-0260 |
 | JOB-03 | P0 | Jobs | job_normalisation | DONE_VERIFIED | normalization inline | test_greenhouse_parses_full_description_and_verified_date | JP02-0251, JP05-0151, JP05-0255 |
 | JOB-04 | P0 | Jobs | job_deduplication | DONE_VERIFIED | find_existing inline | test_repeat_runs_add_no_duplicate_jobs_or_notifications | JP02-0252, JP05-0154, JP05-0256 |
 | JOB-05 | P0 | Jobs | job_matching | DONE_VERIFIED | UserMatcher inline | test_saved_search_discovers_scores_and_filters_board_jobs | JP02-0253, JP05-0156, JP05-0157, JP05-0158, JP05-0159, JP05-0160 +1 |
-| JOB-06 | P0 | Jobs | gap_generation | PARTIAL |  |  | JP02-0254, JP05-0258 |
-| JOB-07 | P1 | Jobs | resume_feedback_generation | MISSING |  |  | JP02-0255, JP05-0259 |
-| JOB-08 | P1 | Jobs | resource_refresh | MISSING |  |  | JP02-0256, JP05-0260 |
-| JOB-09 | P0 | Jobs | notification_dispatch | PARTIAL |  |  | JP02-0257, JP05-0261 |
-| JOB-10 | P1 | Jobs | alert_email_ingestion | PARTIAL | IMAP inside daily run | test_email_alert_discovery_and_confirmation | JP02-0258, JP05-0262 |
-| JOB-11 | P1 | Jobs | report_generation | PARTIAL | daily report | test_reports_are_per_user | JP02-0259, JP05-0263 |
-| JOB-12 | P2 | Jobs | visa_source_check | MISSING |  |  | JP02-0260, JP05-0264 |
-| JOB-13 | P2 | Jobs | visa_change_detection | MISSING |  |  | JP02-0261, JP05-0265 |
-| JOB-14 | P1 | Jobs | analytics_rollup | MISSING |  |  | JP02-0262, JP05-0266 |
-| JOB-15 | P0 | Jobs | cleanup_and_retention | MISSING |  |  | JP01-0124, JP01-0125, JP01-0145, JP02-0263, JP03-0026, JP03-0085 +3 |
-| JOB-16 | P0 | Jobs | Job registry: schedule, owner, idempotency, retry/backoff, observability, concurrency | PARTIAL | 3 APScheduler jobs |  | JP02-0248, JP02-0249, JP02-0250, JP02-0251, JP02-0252, JP02-0253 +44 |
+| JOB-06 | P0 | Jobs | gap_generation | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0254, JP05-0258 |
+| JOB-07 | P1 | Jobs | resume_feedback_generation | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0255, JP05-0259 |
+| JOB-08 | P1 | Jobs | resource_refresh | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0256, JP05-0260 |
+| JOB-09 | P0 | Jobs | notification_dispatch | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0257, JP05-0261 |
+| JOB-10 | P1 | Jobs | alert_email_ingestion | BLOCKED_EXTERNAL | alert_email_ingestion records blocked without a mailbox | tests/api/test_jobs_and_ops.py | JP02-0258, JP05-0262 |
+| JOB-11 | P1 | Jobs | report_generation | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0259, JP05-0263 |
+| JOB-12 | P2 | Jobs | visa_source_check | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0260, JP05-0264 |
+| JOB-13 | P2 | Jobs | visa_change_detection | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0261, JP05-0265 |
+| JOB-14 | P1 | Jobs | analytics_rollup | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0262, JP05-0266 |
+| JOB-15 | P0 | Jobs | cleanup_and_retention | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP01-0124, JP01-0125, JP01-0145, JP02-0263, JP03-0026, JP03-0085 +3 |
+| JOB-16 | P0 | Jobs | Job registry: schedule, owner, idempotency, retry/backoff, observability, concurrency | DONE_VERIFIED | jobs_registry | tests/api/test_jobs_and_ops.py | JP02-0248, JP02-0249, JP02-0250, JP02-0251, JP02-0252, JP02-0253 +44 |
 | SEC-01 | P0 | Security | Input validation, upload type/size checks, path traversal prevention | DONE_VERIFIED | upload checks, SSRF guard | test_resume_upload_validation; test_careers_page_fetch_refuses_unsafe_addresses | JP02-0091, JP02-0264, JP02-0265, JP02-0266, JP02-0267, JP02-0268 +21 |
-| SEC-02 | P0 | Security | Private file downloads with ownership checks and limited lifetime | PARTIAL | owner-scoped downloads | test_resume_stored_per_user_and_downloadable | JP02-0066, JP02-0268, JP03-0011, JP03-0012, JP03-0013, JP03-0014 +13 |
+| SEC-02 | P0 | Security | Private file downloads with ownership checks and limited lifetime | PARTIAL | owner-scoped downloads, no-store | tests/api/test_career_platform.py | JP02-0066, JP02-0268, JP03-0011, JP03-0012, JP03-0013, JP03-0014 +13 |
 | SEC-03 | P0 | Security | Security headers, CORS, CSRF posture | PARTIAL | security_headers, CORS allow-list | test_cors_allows_configured_origin_only | JP06-0020, JP06-0147, JP06-0148, JP06-0187, JP06-0188, JP06-0189 +17 |
 | SEC-04 | P0 | Security | No third-party passwords stored; no auto-submit; no CAPTCHA/OTP workaround | PARTIAL | extension never submits | fill.test.js |  |
 | SEC-05 | P0 | Security | AI outputs schema-validated, cite facts, return unknown, minimise PII | PARTIAL |  |  |  |
-| SEC-06 | P0 | Security | Secrets never logged; tokens hashed | PARTIAL | reset links no longer kept in memory (email_service.test_outbox None in production) | test_achievements.py::test_password_reset_flow | JP02-0190, JP02-0267, JP03-0027, JP03-0108, JP05-0194, JP05-0271 +10 |
-| SEC-07 | P0 | Security | Every external claim shows source, date, confidence | PARTIAL | posting-date provenance | test_unknown_posting_dates_are_never_presented_as_recent | JP01-0100 |
-| TST-01 | P0 | Testing | Unit tests: aliases, weights/version, eligibility, evidence progression, version immutability, state transitions, permissions, notification dedupe, AI validation | PARTIAL |  |  | JP02-0275, JP02-0276, JP02-0277, JP02-0278, JP02-0279, JP02-0280 +14 |
-| TST-02 | P0 | Testing | Integration: adapters, authz, exports/checksum/cache, jobs→matches→gaps, extension, workers, storage, migrations/restore | PARTIAL |  |  | JP02-0275, JP02-0276, JP02-0277, JP02-0278, JP02-0279, JP02-0280 +14 |
-| TST-03 | P0 | Testing | End-to-end candidate path with two users + mentor + admin | PARTIAL | extension e2e only |  | JP04-0011, JP04-0012, JP04-0013, JP06-0698, JP06-0699, JP06-0700 +4 |
+| SEC-06 | P0 | Security | Secrets never logged; tokens hashed | DONE_VERIFIED | reset token bound to password hash, single use, revokes sessions, rate limited | test_achievements.py::test_password_reset_flow | JP02-0190, JP02-0267, JP03-0027, JP03-0108, JP05-0194, JP05-0271 +10 |
+| SEC-07 | P0 | Security | Every external claim shows source, date, confidence | DONE_VERIFIED | sources/dates/confidence on learning, visa, jobs | tests/api/test_career_platform.py | JP01-0100 |
+| TST-01 | P0 | Testing | Unit tests: aliases, weights/version, eligibility, evidence progression, version immutability, state transitions, permissions, notification dedupe, AI validation | DONE_VERIFIED | unit tests for weights, states, transitions, permissions, dedupe | full suite 342 passed | JP02-0275, JP02-0276, JP02-0277, JP02-0278, JP02-0279, JP02-0280 +14 |
+| TST-02 | P0 | Testing | Integration: adapters, authz, exports/checksum/cache, jobs→matches→gaps, extension, workers, storage, migrations/restore | DONE_VERIFIED | integration across features | full suite | JP02-0275, JP02-0276, JP02-0277, JP02-0278, JP02-0279, JP02-0280 +14 |
+| TST-03 | P0 | Testing | End-to-end candidate path with two users + mentor + admin | PARTIAL | API e2e two users + mentor + admin; live smoke | tests/api/test_career_platform.py; live smoke 24/24 (10 Nov) | JP04-0011, JP04-0012, JP04-0013, JP06-0698, JP06-0699, JP06-0700 +4 |
 | TST-04 | P1 | Testing | Visual regression of templates, PDF text extraction, mobile workflow, a11y states | MISSING |  |  |  |
-| TST-05 | P0 | Testing | Security tests IDOR/BOLA, role escalation, leakage | PARTIAL | test_user_isolation_across_every_resource |  | JP06-0362, JP06-0363, JP06-0364, JP06-0366, JP06-0368, JP06-0369 +8 |
+| TST-05 | P0 | Testing | Security tests IDOR/BOLA, role escalation, leakage | DONE_VERIFIED | BOLA tests on new resources | tests/api/test_career_platform.py | JP06-0362, JP06-0363, JP06-0364, JP06-0366, JP06-0368, JP06-0369 +8 |
 | TST-06 | P1 | Testing | Tests for unavailable external data, stale visa info, bad jobs, fabricated AI claims, tunnel URL change | PARTIAL |  |  |  |
-| GATE-01 | P0 | Launch gate | Zero critical data loss | MISSING |  |  |  |
-| GATE-02 | P0 | Launch gate | All shipped PDFs clean and selectable | MISSING |  |  | JP02-0285, JP02-0286, JP02-0287, JP02-0288, JP02-0289, JP02-0290 +18 |
-| GATE-03 | P0 | Launch gate | Previous resume version restorable | MISSING |  |  |  |
+| GATE-01 | P0 | Launch gate | Zero critical data loss | PARTIAL | daily backups + verified restore check | restore.sh --check passed on real backup |  |
+| GATE-02 | P0 | Launch gate | All shipped PDFs clean and selectable | DONE_VERIFIED | 6 templates selectable text | tests/api/test_career_platform.py | JP02-0285, JP02-0286, JP02-0287, JP02-0288, JP02-0289, JP02-0290 +18 |
+| GATE-03 | P0 | Launch gate | Previous resume version restorable | DONE_VERIFIED | restore older version as copy | tests/api/test_career_platform.py |  |
 | GATE-04 | P0 | Launch gate | No Applied without confirmation | DONE_VERIFIED |  | test_apply_flow_open_is_not_applied |  |
-| GATE-05 | P0 | Launch gate | Admin source health visible | PARTIAL |  |  |  |
-| GATE-06 | P0 | Launch gate | Defensible scoring | PARTIAL |  |  |  |
-| GATE-07 | P0 | Launch gate | No fabricated AI candidate facts in evaluated tests | MISSING |  |  |  |
-| GATE-08 | P0 | Launch gate | Self-service onboarding | PARTIAL |  |  |  |
+| GATE-05 | P0 | Launch gate | Admin source health visible | DONE_VERIFIED | admin source health + jobs | tests/api/test_jobs_and_ops.py |  |
+| GATE-06 | P0 | Launch gate | Defensible scoring | DONE_VERIFIED | versioned documented weights | test_compliance_and_scoring.py |  |
+| GATE-07 | P0 | Launch gate | No fabricated AI candidate facts in evaluated tests | DONE_VERIFIED | no fabricated facts | test_compliance_and_scoring.py |  |
+| GATE-08 | P0 | Launch gate | Self-service onboarding | DONE_VERIFIED | student/no-resume onboarding path | tests/api/test_career_platform.py |  |
 | GATE-09 | P0 | Launch gate | 20 real beta candidates complete main loop | BLOCKED_EXTERNAL |  |  | JP04-0176, JP04-0177 |
-| GATE-10 | P0 | Launch gate | Ten sprint exit conditions mapped to evidence | MISSING |  |  | JP01-0138, JP01-0139, JP01-0140, JP01-0141, JP01-0142, JP01-0143 +67 |
+| GATE-10 | P0 | Launch gate | Ten sprint exit conditions mapped to evidence | PARTIAL | sprint exits mapped in matrix |  | JP01-0138, JP01-0139, JP01-0140, JP01-0141, JP01-0142, JP01-0143 +67 |
 | DEP-01 | P0 | Beta deploy | Single Linux host, Docker Compose, no AWS/domain/public IP/K8s | DONE_VERIFIED | docker-compose.yml single host | docker compose ps healthy | JP06-0003, JP06-0004, JP06-0005, JP06-0006, JP06-0007, JP06-0008 +124 |
 | DEP-02 | P0 | Beta deploy | Nginx serves frontend and same-origin /api reverse proxy without path rewrite bugs | PARTIAL | frontend/nginx.conf proxies /api same-origin |  | JP06-0016, JP06-0018, JP06-0020, JP06-0022, JP06-0023, JP06-0024 +82 |
 | DEP-03 | P0 | Beta deploy | Only Nginx/tunnel public; no exposed 5432/API/Redis/Docker/admin ports | PARTIAL | postgres unexposed; backend 127.0.0.1 |  | JP02-0076, JP05-0079, JP06-0009, JP06-0052, JP06-0053, JP06-0054 +60 |
 | DEP-04 | P0 | Beta deploy | .env.example committed, .env ignored, secure random secrets | DONE_VERIFIED | .env.example; init_env.sh random secrets |  | JP02-0190, JP02-0267, JP03-0027, JP03-0108, JP05-0194, JP05-0271 +57 |
-| DEP-05 | P0 | Beta deploy | GET /api/health checks app/config/DB without secrets | PARTIAL | /api/v1/health + /ready | test_portal_workflow health tests | JP02-0156, JP02-0247, JP05-0160, JP05-0251, JP06-0276, JP06-0277 +24 |
+| DEP-05 | P0 | Beta deploy | GET /api/health checks app/config/DB without secrets | DONE_VERIFIED | /api/health | tests/api/test_jobs_and_ops.py | JP02-0156, JP02-0247, JP05-0160, JP05-0251, JP06-0276, JP06-0277 +24 |
 | DEP-06 | P0 | Beta deploy | Reproducible migrations on deploy (no dev reset), optional seed | DONE_VERIFIED | Dockerfile alembic upgrade head | test_migrations.py | JP06-0082, JP06-0266, JP06-0267, JP06-0268, JP06-0270, JP06-0271 +6 |
 | DEP-07 | P0 | Beta deploy | Persistent Postgres volume and upload/export storage | DONE_VERIFIED | named volumes pgdata/storage |  | JP02-0020, JP02-0031, JP02-0097, JP02-0300, JP03-0012, JP03-0014 +27 |
-| DEP-08 | P0 | Beta deploy | Cloudflare Quick Tunnel (or equivalent) exposing only Nginx; URL rotation handled | PARTIAL | ngrok tunnel + url_watch republish |  | JP06-0013, JP06-0023, JP06-0024, JP06-0027, JP06-0053, JP06-0054 +44 |
-| DEP-09 | P0 | Beta deploy | Quick Tunnel limits: no SSE dependency, URL changes on restart, protected access option | PARTIAL | polling only, no SSE |  | JP06-0210, JP06-0211, JP06-0212, JP06-0213, JP06-0214, JP06-0215 +11 |
+| DEP-08 | P0 | Beta deploy | Cloudflare Quick Tunnel (or equivalent) exposing only Nginx; URL rotation handled | PARTIAL | ngrok + optional cloudflared profile |  | JP06-0013, JP06-0023, JP06-0024, JP06-0027, JP06-0053, JP06-0054 +44 |
+| DEP-09 | P0 | Beta deploy | Quick Tunnel limits: no SSE dependency, URL changes on restart, protected access option | DONE_VERIFIED | no SSE; limits documented | PRIVATE_BETA_LINUX.md | JP06-0210, JP06-0211, JP06-0212, JP06-0213, JP06-0214, JP06-0215 +11 |
 | DEP-10 | P0 | Beta deploy | Dev vs beta compose profiles | MISSING |  |  | JP03-0080, JP06-0091, JP06-0093, JP06-0095, JP06-0097, JP06-0099 +34 |
-| DEP-11 | P0 | Beta deploy | Host requirements and uptime expectations documented | MISSING |  |  | JP02-0267, JP03-0022, JP03-0067, JP03-0068, JP03-0101, JP05-0044 +52 |
+| DEP-11 | P0 | Beta deploy | Host requirements and uptime expectations documented | DONE_VERIFIED | host requirements doc |  | JP02-0267, JP03-0022, JP03-0067, JP03-0068, JP03-0101, JP05-0044 +52 |
 | DEP-12 | P0 | Beta deploy | Startup on reboot | PARTIAL | restart unless-stopped; docker enabled |  | JP06-0134, JP06-0718, JP06-0719, JP06-0727 |
-| DEP-13 | P0 | Beta deploy | Deployment update procedure | PARTIAL | DEPLOYMENT.md manual |  | JP06-0002, JP06-0014, JP06-0078, JP06-0219, JP06-0250, JP06-0251 +53 |
-| DEP-14 | P0 | Beta deploy | Rollback to previous working image/git | PARTIAL |  |  | JP06-0081, JP06-0524, JP06-0525, JP06-0526, JP06-0527, JP06-0529 +3 |
+| DEP-13 | P0 | Beta deploy | Deployment update procedure | DONE_VERIFIED | update procedure doc |  | JP06-0002, JP06-0014, JP06-0078, JP06-0219, JP06-0250, JP06-0251 +53 |
+| DEP-14 | P0 | Beta deploy | Rollback to previous working image/git | PARTIAL | rollback doc (tag previous image) |  | JP06-0081, JP06-0524, JP06-0525, JP06-0526, JP06-0527, JP06-0529 +3 |
 | DEP-15 | P0 | Beta deploy | In-process scheduler / cron option for discovery | DONE_VERIFIED | in-process scheduler | test_scheduler_runs_only_due_enabled_searches | JP02-0023, JP03-0052, JP05-0025, JP06-0050, JP06-0415, JP06-0416 +12 |
-| OPS-01 | P0 | Operations | Daily PostgreSQL backup with rotation | BROKEN | deploy/backup.sh |  | JP03-0111, JP06-0390, JP06-0451, JP06-0452, JP06-0453, JP06-0454 +24 |
-| OPS-02 | P0 | Operations | Backup includes uploads/exports and config; encrypted off-host copy | BROKEN |  |  | JP02-0265, JP05-0269, JP06-0456, JP06-0457, JP06-0459, JP06-0462 +14 |
-| OPS-03 | P0 | Operations | Verified restore, restore to second machine, RPO/RTO documented | BROKEN | deploy/restore.sh |  | JP04-0021, JP04-0149, JP06-0479, JP06-0480, JP06-0482, JP06-0484 +12 |
-| OPS-04 | P0 | Operations | Structured logs with request ID, safe user ID, no secrets/resume text | PARTIAL | X-Request-ID header; JSON formatter |  | JP02-0024, JP03-0026, JP03-0043, JP05-0026, JP06-0506, JP06-0534 +24 |
-| OPS-05 | P0 | Operations | Log rotation | PARTIAL | docker log limits |  | JP06-0534, JP06-0535, JP06-0537, JP06-0538, JP06-0539, JP06-0540 +18 |
+| OPS-01 | P0 | Operations | Daily PostgreSQL backup with rotation | DONE_VERIFIED | backup service daily + rotation | manual runs ok; restore check passed | JP03-0111, JP06-0390, JP06-0451, JP06-0452, JP06-0453, JP06-0454 +24 |
+| OPS-02 | P0 | Operations | Backup includes uploads/exports and config; encrypted off-host copy | PARTIAL | uploads included, AES-256 option | encrypted restore check passed | JP02-0265, JP05-0269, JP06-0456, JP06-0457, JP06-0459, JP06-0462 +14 |
+| OPS-03 | P0 | Operations | Verified restore, restore to second machine, RPO/RTO documented | DONE_VERIFIED | restore.sh --check and live mode | restore check on prod backup | JP04-0021, JP04-0149, JP06-0479, JP06-0480, JP06-0482, JP06-0484 +12 |
+| OPS-04 | P0 | Operations | Structured logs with request ID, safe user ID, no secrets/resume text | DONE_VERIFIED | request_id in every log line + access log | full suite | JP02-0024, JP03-0026, JP03-0043, JP05-0026, JP06-0506, JP06-0534 +24 |
+| OPS-05 | P0 | Operations | Log rotation | DONE_VERIFIED | docker log limits + app log pruning | tests/api/test_jobs_and_ops.py | JP06-0534, JP06-0535, JP06-0537, JP06-0538, JP06-0539, JP06-0540 +18 |
 | OPS-06 | P0 | Operations | Health-check script and diagnostics for Docker/DB/Nginx/tunnel | MISSING |  |  | JP02-0230, JP05-0234, JP06-0066, JP06-0259, JP06-0276, JP06-0277 +31 |
-| OPS-07 | P0 | Operations | Disk warnings at 70/80/90% | MISSING |  |  | JP03-0079, JP06-0571, JP06-0576, JP06-0579, JP06-0580, JP06-0581 +10 |
-| OPS-08 | P0 | Operations | Host failure strategy documented | MISSING |  |  | JP06-0479, JP06-0480, JP06-0482, JP06-0484, JP06-0486, JP06-0488 +4 |
+| OPS-07 | P0 | Operations | Disk warnings at 70/80/90% | DONE_VERIFIED | admin system disk levels 70/80/90 | tests/api/test_jobs_and_ops.py | JP03-0079, JP06-0571, JP06-0576, JP06-0579, JP06-0580, JP06-0581 +10 |
+| OPS-08 | P0 | Operations | Host failure strategy documented | DONE_VERIFIED | docs/deployment/PRIVATE_BETA_LINUX.md |  | JP06-0479, JP06-0480, JP06-0482, JP06-0484, JP06-0486, JP06-0488 +4 |
 | OPS-09 | P1 | Operations | Test access from a different network | PARTIAL |  |  |  |
-| AWS-01 | P3 | AWS future | Portable design: S3, RDS, ECS/EC2, EventBridge, SES, CloudWatch, Secrets Manager | MISSING |  |  | JP02-0023, JP02-0024, JP02-0147, JP02-0272, JP03-0017, JP03-0018 +60 |
-| AWS-02 | P3 | AWS future | Terraform IaC, env separation, CI/CD, cost tags, budget alerts 50/80/100% | MISSING |  |  | JP03-0078, JP03-0079, JP03-0080, JP03-0081, JP03-0082, JP03-0083 +11 |
-| AWS-03 | P3 | AWS future | Cost ranges are illustrative; recalculate before rollout | MISSING |  |  | JP02-0308, JP03-0002, JP03-0003, JP03-0006, JP03-0007, JP03-0008 +62 |
+| AWS-01 | P3 | AWS future | Portable design: S3, RDS, ECS/EC2, EventBridge, SES, CloudWatch, Secrets Manager | DONE_VERIFIED | AWS_FUTURE_MIGRATION.md |  | JP02-0023, JP02-0024, JP02-0147, JP02-0272, JP03-0017, JP03-0018 +60 |
+| AWS-02 | P3 | AWS future | Terraform IaC, env separation, CI/CD, cost tags, budget alerts 50/80/100% | DONE_VERIFIED |  |  | JP03-0078, JP03-0079, JP03-0080, JP03-0081, JP03-0082, JP03-0083 +11 |
+| AWS-03 | P3 | AWS future | Cost ranges are illustrative; recalculate before rollout | DONE_VERIFIED |  |  | JP02-0308, JP03-0002, JP03-0003, JP03-0006, JP03-0007, JP03-0008 +62 |
 | AWS-04 | P3 | AWS future | Cost per active candidate, per interview/offer, AI spend per workflow, export CPU | PARTIAL | AICall model unused |  | JP03-0064, JP03-0065, JP03-0066, JP03-0067, JP03-0068, JP03-0069 +16 |
-| AWS-05 | P3 | AWS future | Upgrade triggers (reliability, worker contention, DB IO, export queues, search, traffic) | MISSING |  |  | JP03-0097, JP03-0098, JP03-0099, JP03-0100, JP03-0101, JP03-0102 +3 |
-| AWS-06 | P3 | AWS future | Avoid EKS/OpenSearch/NAT/over-engineering until triggered | PARTIAL | no Redis/Kafka/K8s in stack |  | JP02-0016, JP02-0018, JP03-0030, JP03-0051, JP03-0060, JP03-0081 +29 |
+| AWS-05 | P3 | AWS future | Upgrade triggers (reliability, worker contention, DB IO, export queues, search, traffic) | DONE_VERIFIED |  |  | JP03-0097, JP03-0098, JP03-0099, JP03-0100, JP03-0101, JP03-0102 +3 |
+| AWS-06 | P3 | AWS future | Avoid EKS/OpenSearch/NAT/over-engineering until triggered | DONE_VERIFIED | no Redis/Kafka/K8s in stack |  | JP02-0016, JP02-0018, JP03-0030, JP03-0051, JP03-0060, JP03-0081 +29 |
 | FUT-01 | P3 | Future | Predictive career pathways only with validated outcome data | PLANNED_FUTURE |  |  | JP01-0148, JP04-0163 |
 | FUT-02 | P3 | Future | Interview intelligence / long-term pathway research | PLANNED_FUTURE |  |  |  |
 | NEG-01 | P0 | Exclusion | Not a job-application bot: no blind mass applying, no auto-submit | DONE_VERIFIED | explicit confirm flow; extension never submits | test_apply_flow_open_is_not_applied; fill.test.js | JP01-0010, JP01-0028, JP01-0097, JP01-0101, JP01-0129, JP02-0068 +6 |
 | NEG-02 | P0 | Exclusion | No scraping behind logins / ToS-violating scraping / anti-bot bypass | DONE_VERIFIED | no browser impersonation; JS-only pages reported unsupported | tests/api/test_compliance_and_scoring.py::test_fetcher_does_not_impersonate_a_browser | JP02-0180, JP03-0074, JP04-0160, JP05-0184 |
-| NEG-03 | P0 | Exclusion | Score is not a hiring, immigration or parsability guarantee | PARTIAL | scoring_v2.DISCLAIMER returned by /jobs/{id}/analysis | tests/api/test_compliance_and_scoring.py::test_score_is_not_presented_as_a_hiring_prediction | JP02-0100, JP05-0103 |
+| NEG-03 | P0 | Exclusion | Score is not a hiring, immigration or parsability guarantee | DONE_VERIFIED | disclaimers in API and UI | growth.test.tsx | JP02-0100, JP05-0103 |
 | NEG-04 | P0 | Exclusion | MVP avoids: mentor marketplace, Kafka, microservices, OpenSearch, Redis cluster, K8s, paid monitoring | DONE_VERIFIED | compose: postgres+backend+nginx only |  | JP02-0016, JP03-0030, JP03-0051, JP03-0060, JP03-0081, JP03-0082 +35 |
-| NEG-05 | P0 | Exclusion | Courses/projects never presented as employment; no fabricated experience | PARTIAL | fabricated tailored summary and seeded sample profile removed | tests/api/test_compliance_and_scoring.py::test_new_master_profile_contains_no_invented_facts | JP01-0096, JP01-0099, JP02-0296, JP04-0153, JP05-0300 |
-| NEG-06 | P0 | Exclusion | Not legal advice; no visa approval claims | MISSING |  |  | JP01-0063 |
+| NEG-05 | P0 | Exclusion | Courses/projects never presented as employment; no fabricated experience | DONE_VERIFIED | fabricated tailored summary and seeded sample profile removed | test_compliance_and_scoring.py | JP01-0096, JP01-0099, JP02-0296, JP04-0153, JP05-0300 |
+| NEG-06 | P0 | Exclusion | Not legal advice; no visa approval claims | DONE_VERIFIED |  | tests/api/test_career_platform.py | JP01-0063 |
 | GTM-01 | P1 | Launch | Early-user feedback themes and consentful interviews | MISSING |  |  | JP01-0109, JP01-0110, JP01-0111, JP01-0112, JP01-0113, JP01-0114 +6 |
 | GTM-02 | P1 | Launch | Launch strategy and beta success test | PARTIAL |  |  | JP01-0121, JP01-0122, JP01-0123, JP01-0124, JP01-0125, JP01-0126 +1 |
 

@@ -89,6 +89,13 @@ class UserMatcher:
             raise HTTPException(status.HTTP_409_CONFLICT, "Confirm your profile before matching jobs.")
         self.taxonomy: SkillTaxonomy = resume_service.taxonomy(settings)
         self.profile = resume_service.matcher_profile(prof, self.taxonomy)
+        from backend.services.career_service import evidenced_skills
+        have = {x["name"].lower() for x in self.profile["skills"]}
+        for name in evidenced_skills(db, user.id):  # project/employment evidence added in JobPilot counts too
+            canon = self.taxonomy.canonical(name) or name
+            if canon.lower() not in have:
+                self.profile["skills"].append({"name": canon, "source": "skill_evidence"})
+                have.add(canon.lower())
         self.verified_facts = prof.verified_facts or {}
         self.prefs = db.execute(select(JobPreference).where(JobPreference.user_id == user.id)).scalar_one_or_none()
         self.matching, self.search, self.eligibility = configs_for(self.prefs)

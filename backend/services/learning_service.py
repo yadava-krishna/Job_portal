@@ -175,6 +175,7 @@ def complete(db: Session, settings, user: User, session_id: int, notes: str | No
     skill = db.execute(select(CandidateSkill).where(CandidateSkill.user_id == user.id, CandidateSkill.canonical == canonical)).scalar_one_or_none()
     if skill is None:
         skill = career_service.add_skill(db, settings, user, canonical, None, None)
+    state_before = skill.state
     ev_type = "project" if evidence_url else ("practice" if (res and res.resource_type in ("exercise", "lab")) or s.knowledge_check else "course")
     title = evidence_title or (f"Project: {s.skill}" if evidence_url else f"Completed: {res.title}" if res else f"Studied {s.skill}")
     career_service.add_evidence(db, user, skill, ev_type, title, evidence_url or (res.url if res else None),
@@ -186,7 +187,12 @@ def complete(db: Session, settings, user: User, session_id: int, notes: str | No
                         body=f"You finished a learning session ({s.active_seconds // 60} active minutes). Evidence recorded as {ev_type}.",
                         link="/career", dedupe_key=f"learning:{s.id}"))
     db.commit()
-    return {"session": s, "skill_state": skill.state}
+    changes = []
+    if skill.state != state_before:
+        changes = career_service.rescore_after_evidence(
+            db, settings, user, skill.canonical,
+            f"{skill.name}: learning session ({ev_type}) moved it to {career_service.STATE_LABELS[skill.state]}")
+    return {"session": s, "skill_state": skill.state, "score_changes": changes}
 
 
 def sessions(db: Session, user: User, limit: int = 50) -> list[LearningSession]:

@@ -202,7 +202,7 @@ class Job(Base):
     freshness_score: Mapped[float] = mapped_column(Float, default=1.0, server_default=text("1.0"), nullable=False)
     is_expired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     # verified (the posting says so) | inferred (e.g. international company + relocation wording) | unknown
-    sponsorship_signal: Mapped[str] = mapped_column(String(10), default="unknown", server_default=text("'unknown'"), nullable=False)
+    sponsorship_signal: Mapped[str] = mapped_column(String(10), default="unknown", server_default=text("'unknown'"), nullable=False, index=True)
     sponsorship_evidence: Mapped[str | None] = mapped_column(String(300))
     last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -240,6 +240,7 @@ class UserJob(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "job_id", name="uq_user_jobs_user_job"),
         Index("ix_user_jobs_user_status", "user_id", "status"),
+        Index("ix_user_jobs_user_eligibility", "user_id", "eligibility"),
         Index("ix_user_jobs_user_score", "user_id", "match_score"),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

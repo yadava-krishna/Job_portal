@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Field, NativeSelect } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { backendMessage, useAddEvidence, useAddSkill, useDeleteEvidence, useDeleteSkill, useSetSkillState, useSkills } from "./hooks";
+import { backendMessage, useAddEvidence, useAddSkill, useDeleteEvidence, useDeleteSkill, useMatchHistory, useSetSkillState, useSkills } from "./hooks";
 import { EVIDENCE_TYPES, evidenceLabel, isHttpsLink, SKILL_STATES, stateLabel } from "./format";
 import { StateStepper } from "./labels";
 import type { Evidence, EvidenceType, Skill } from "./types";
@@ -32,6 +32,7 @@ export function SkillsTab() {
           </p>
         </div>
       </div>
+      <ScoreHistory />
       <AddSkillForm />
       {list.length === 0 ? (
         <EmptyState title="No skills yet">Skills from your resume appear here automatically. You can also add one above.</EmptyState>
@@ -165,6 +166,38 @@ function SkillCard({ skill }: { skill: Skill }) {
   );
 }
 
+/** Before/after match scores caused by evidence the candidate added or removed (MAT-13). */
+function ScoreHistory() {
+  const h = useMatchHistory();
+  const rows = Array.isArray(h.data) ? h.data.slice(0, 8) : [];
+  if (!rows.length) return null;
+  return (
+    <Card data-testid="score-history">
+      <CardHeader>
+        <CardTitle className="text-base">How your evidence changed your matches</CardTitle>
+        <CardDescription>When a skill reaches project or work evidence, the jobs that ask for it are re-scored. Courses alone don't change scores.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y text-sm">
+          {rows.map((r) => {
+            const up = (r.new_score ?? 0) >= (r.old_score ?? 0);
+            return (
+              <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+                <span className="min-w-0"><a className="font-medium hover:underline" href={`#/discover?job=${r.user_job_id}`}>{r.title}</a>
+                  <span className="text-muted-foreground"> · {r.company}</span>
+                  <span className="block text-xs text-muted-foreground">{r.reason} · {formatDate(r.created_at)}</span></span>
+                <span className={up ? "font-semibold text-emerald-700 dark:text-emerald-400" : "font-semibold text-rose-700 dark:text-rose-400"}>
+                  {Math.round(r.old_score ?? 0)}% → {Math.round(r.new_score ?? 0)}%
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AddEvidenceDialog({ skill, open, onOpenChange }: { skill: Skill; open: boolean; onOpenChange: (o: boolean) => void }) {
   const add = useAddEvidence();
   const blank = { evidence_type: "course" as EvidenceType, title: "", url: "", description: "", occurred_on: "" };
@@ -179,7 +212,12 @@ function AddEvidenceDialog({ skill, open, onOpenChange }: { skill: Skill; open: 
       skillId: skill.id,
       body: { evidence_type: f.evidence_type, title: f.title.trim(), url: f.url.trim() || null, description: f.description.trim() || null, occurred_on: f.occurred_on || null },
     }, {
-      onSuccess: (s) => { toast.success(`Evidence added. ${s.name} is now "${s.state_label}".`); setF(blank); onOpenChange(false); },
+      onSuccess: (s) => {
+        const ups = (s.score_changes ?? []).filter((c) => (c.new_score ?? 0) > (c.old_score ?? 0));
+        toast.success(`Evidence added. ${s.name} is now "${s.state_label}".`,
+                      ups.length ? { description: `${ups.length} job match${ups.length === 1 ? "" : "es"} went up, e.g. ${ups[0].title}: ${Math.round(ups[0].old_score ?? 0)}% → ${Math.round(ups[0].new_score ?? 0)}%.` } : undefined);
+        setF(blank); onOpenChange(false);
+      },
       onError: (err) => toast.error(backendMessage(err)),
     });
   };

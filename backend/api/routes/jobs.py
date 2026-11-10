@@ -119,6 +119,10 @@ def list_jobs(
     salary_min_lpa: float | None = Query(None, ge=0),
     min_score: float | None = Query(None, ge=0, le=100),
     skill: str | None = Query(None, max_length=100, description="Jobs that ask for this skill (in requirements or description)"),
+    country: str | None = Query(None, min_length=2, max_length=2, description="ISO country code (stated, or inferred from an unambiguous location)"),
+    seniority: str | None = Query(None, max_length=50),
+    sponsorship: list[Literal["verified", "inferred", "none", "unknown"]] | None = Query(None, description="Visa sponsorship signal from the posting"),
+    eligibility: list[Literal["pass", "fail", "unknown"]] | None = Query(None),
     application_status: list[Literal["none", "PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"]] | None = Query(None),
     sort: Literal["score", "posted", "discovered"] = "score",
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
@@ -133,8 +137,27 @@ def list_jobs(
     elif view == "applied":
         stmt = stmt.where(UserJob.status == "applied")
     if q:
-        like = f"%{q.lower()}%"
-        stmt = stmt.where(or_(func.lower(Job.title).like(like), func.lower(Job.company).like(like), func.lower(Job.description).like(like)))
+        if db.get_bind().dialect.name == "postgresql":  # indexed full-text search (migration 0008), plus title/company prefix
+            doc = func.to_tsvector("simple", func.coalesce(Job.title, "") + " " + func.coalesce(Job.company, "") + " " + func.coalesce(Job.description, ""))
+            like = f"%{q.lower()}%"
+            stmt = stmt.where(or_(doc.op("@@")(func.websearch_to_tsquery("simple", q)), func.lower(Job.title).like(like), func.lower(Job.company).like(like)))
+        else:
+            like = f"%{q.lower()}%"
+            stmt = stmt.where(or_(func.lower(Job.title).like(like), func.lower(Job.company).like(like), func.lower(Job.description).like(like)))
+    if country:
+        from backend.services.scoring_v2 import _COUNTRY_WORDS
+        words = _COUNTRY_WORDS.get(country.upper(), ())
+        stmt = stmt.where(or_(func.upper(Job.country) == country.upper(),
+                              *[func.lower(Job.location).like(f"%{w}%") for w in words]))
+    if seniority:
+        stmt = stmt.where(func.lower(Job.seniority) == seniority.lower())
+    if sponsorship:
+        stmt = stmt.where(Job.sponsorship_signal.in_(sponsorship))
+    if eligibility:
+        conds = [UserJob.eligibility.in_([e for e in eligibility if e != "unknown"])] if any(e != "unknown" for e in eligibility) else []
+        if "unknown" in eligibility:
+            conds.append(or_(UserJob.eligibility.is_(None), UserJob.eligibility == "unknown"))
+        stmt = stmt.where(or_(*conds))
     if platform:
         linked = select(JobSourceLink.id).where(JobSourceLink.job_id == Job.id, JobSourceLink.platform.in_(platform)).exists()
         stmt = stmt.where(or_(Job.platform.in_(platform), linked))

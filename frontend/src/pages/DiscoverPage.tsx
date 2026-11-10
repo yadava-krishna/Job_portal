@@ -246,6 +246,15 @@ export function DiscoverPage() {
                           options={[{ value: "", label: "Any date confidence" }, { value: "verified", label: "Verified dates" }, { value: "estimated", label: "Estimated dates" }, { value: "unknown", label: "Unknown dates" }]} />
             <NativeSelect ariaLabel="Found by saved search" value={draft.saved_search_id ? String(draft.saved_search_id) : ""} onChange={(v) => set("saved_search_id", v ? Number(v) : undefined)}
                           options={[{ value: "", label: "Any saved search" }, ...(searches.data ?? []).map((s) => ({ value: String(s.id), label: s.name }))]} />
+            <Input value={draft.country ?? ""} maxLength={2} onChange={(e) => set("country", e.target.value.toUpperCase() || undefined)}
+                   placeholder="Country code (e.g. GB)" aria-label="Country code" />
+            <NativeSelect ariaLabel="Seniority" value={draft.seniority ?? ""} onChange={(v) => set("seniority", v || undefined)}
+                          options={[{ value: "", label: "Any seniority" }, ...["Intern", "Entry", "Mid", "Senior", "Lead", "Manager"].map((s) => ({ value: s.toLowerCase(), label: s }))]} />
+            <NativeSelect ariaLabel="Visa sponsorship" value={draft.sponsorship?.[0] ?? ""} onChange={(v) => set("sponsorship", v ? [v as "verified"] : [])}
+                          options={[{ value: "", label: "Any sponsorship" }, { value: "verified", label: "Sponsorship stated" },
+                                    { value: "inferred", label: "Sponsorship likely" }, { value: "none", label: "No sponsorship" }, { value: "unknown", label: "Not mentioned" }]} />
+            <NativeSelect ariaLabel="Eligibility" value={draft.eligibility?.[0] ?? ""} onChange={(v) => set("eligibility", v ? [v as "pass"] : [])}
+                          options={[{ value: "", label: "Any eligibility" }, { value: "pass", label: "I'm eligible" }, { value: "unknown", label: "Eligibility unknown" }, { value: "fail", label: "Not eligible" }]} />
             <NativeSelect ariaLabel="Sort" value={draft.sort ?? "score"} onChange={(v) => set("sort", v as JobQuery["sort"])}
                           options={[{ value: "score", label: "Best match" }, { value: "posted", label: "Newest posting" }, { value: "discovered", label: "Recently added" }]} />
             <label className="flex items-center gap-2 text-sm">

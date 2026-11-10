@@ -200,6 +200,8 @@ export interface JobListing {
   closed_at: string | null;
   industry: string | null;
   department: string | null;
+  seniority?: string | null;
+  sponsorship_signal?: "verified" | "inferred" | "none" | "unknown" | null;
   sources: JobSource[];
 }
 export type PostedConfidence = "verified" | "estimated" | "unknown";
@@ -218,6 +220,7 @@ export interface UserJob {
   matching_skills: string[];
   missing_skills: string[];
   eligibility_status: string | null;
+  eligibility?: "pass" | "fail" | "unknown" | null;
   scoring_method: string | null;
   discovered_at: string;
   saved_at: string | null;

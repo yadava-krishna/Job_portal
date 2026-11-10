@@ -49,12 +49,19 @@ export function ResumeUpload({ profile, onUploaded }: { profile?: ProfileRespons
 
 // ---- Editable profile ------------------------------------------------------------------
 
-export function ProfileForm({ profile, onSaved, submitLabel = "Save profile" }: { profile: ProfileResponse; onSaved?: () => void; submitLabel?: string }) {
+export const EMPTY_PROFILE: EditableProfile = {
+  full_name: null, email: null, phone: null, location: null, headline: null, summary: null, skills: [], experience: [],
+  education: [], certifications: [], projects: [], achievements: [], languages: [],
+};
+
+/** `manual`: no resume yet (students / early career): start from an empty profile the candidate fills in. */
+export function ProfileForm({ profile, onSaved, submitLabel = "Save profile", manual = false }: { profile: ProfileResponse; onSaved?: () => void; submitLabel?: string; manual?: boolean }) {
   const save = useSaveProfile();
   const [p, setP] = useState<EditableProfile | null>(null);
   useEffect(() => {
-    setP(structuredClone(profile.confirmed ?? profile.parsed ?? null));
-  }, [profile.confirmed, profile.parsed]);
+    const start = profile.confirmed ?? profile.parsed ?? (manual ? EMPTY_PROFILE : null);
+    setP(start ? structuredClone(start) : null);
+  }, [profile.confirmed, profile.parsed, manual]);
   if (!p) return <p className="text-sm text-muted-foreground">Upload a resume first.</p>;
   const set = <K extends keyof EditableProfile>(k: K, v: EditableProfile[K]) => setP({ ...p, [k]: v });
 

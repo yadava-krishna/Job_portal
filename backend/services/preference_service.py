@@ -147,6 +147,8 @@ def onboarding_status(db: Session, user: User) -> OnboardingStatus:
     resume = db.execute(select(Resume.id).where(Resume.user_id == user.id, Resume.is_active.is_(True))).first() is not None
     prof = db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id)).scalar_one_or_none()
     confirmed = bool(prof and prof.confirmed_profile)
+    # A hand-built profile (no resume yet) satisfies the resume step: the resume is optional for students.
+    resume = resume or bool(confirmed and (prof.verified_facts or {}).get("profile_source") == "manual")
     prefs = get_preferences(db, user) is not None
     platforms = bool(enabled_platform_names(db, user))
     done = resume and confirmed and prefs and platforms

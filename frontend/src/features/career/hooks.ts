@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "@/lib/api";
 import type {
   CareerGoals, CareerSnapshot, CompleteResult, Consent, ConsentRequired, Country, CountryFit, EvidenceType, GapDetail,
-  GapsResponse, LearningSession, SessionsResponse, Skill, SkillsResponse, VisaRoute,
+  GapsResponse, LearningSession, MatchHistoryItem, ScoreChange, SessionsResponse, Skill, SkillsResponse, VisaRoute,
 } from "./types";
 
 export const ck = {
@@ -82,7 +82,7 @@ export const useSkills = () => useQuery({ queryKey: ck.skills, queryFn: async ()
 
 function useInvalidateCareer() {
   const qc = useQueryClient();
-  return () => ["skills", "gaps", "gap", "career-snapshot"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
+  return () => ["skills", "gaps", "gap", "career-snapshot", "match-history", "jobs", "snapshot"].forEach((k) => void qc.invalidateQueries({ queryKey: [k] }));
 }
 
 export function useAddSkill() {
@@ -117,7 +117,7 @@ export interface EvidenceInput {
 export function useAddEvidence() {
   const invalidate = useInvalidateCareer();
   return useMutation({
-    mutationFn: async ({ skillId, body }: { skillId: number; body: EvidenceInput }) => (await api.post<Skill>(`/skills/${skillId}/evidence`, body)).data,
+    mutationFn: async ({ skillId, body }: { skillId: number; body: EvidenceInput }) => (await api.post<Skill & { score_changes?: ScoreChange[] }>(`/skills/${skillId}/evidence`, body)).data,
     onSuccess: invalidate,
   });
 }
@@ -126,6 +126,9 @@ export function useDeleteEvidence() {
   const invalidate = useInvalidateCareer();
   return useMutation({ mutationFn: async (id: number) => { await api.delete(`/evidence/${id}`); }, onSuccess: invalidate });
 }
+
+export const useMatchHistory = () =>
+  useQuery({ queryKey: ["match-history"], queryFn: async () => (await api.get<MatchHistoryItem[]>("/matches/history")).data });
 
 // ---------- gaps & learning ----------
 

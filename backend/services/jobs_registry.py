@@ -107,11 +107,30 @@ def _source_refresh(db, settings):
 
 
 def _normalise_and_dedupe(db, settings):
-    return {"note": "normalisation and deduplication run inline in every discovery run (discovery_service.upsert_normalized)"}
+    """Deduplication runs inline in every discovery run; this back-fills derived signals on jobs stored before they
+    existed (visa sponsorship from the description, seniority from the title or stated experience)."""
+    from sqlalchemy import or_, select
+
+    from backend.models import Job
+    from backend.services.career_service import infer_seniority, sponsorship_signal
+    out = {"sponsorship": 0, "seniority": 0}
+    rows = db.execute(select(Job).where(or_(Job.seniority.is_(None), Job.sponsorship_signal.is_(None),
+                                            Job.sponsorship_signal == "unknown"))).scalars().all()
+    for job in rows:
+        sig, ev = sponsorship_signal(job.description)
+        if sig != (job.sponsorship_signal or "unknown"):
+            job.sponsorship_signal, job.sponsorship_evidence = sig, (ev or None) and ev[:300]
+            out["sponsorship"] += 1
+        if not job.seniority and (lvl := infer_seniority(job.title, job.experience_min)):
+            job.seniority = lvl
+            out["seniority"] += 1
+    db.commit()
+    return out
 
 
 def _job_matching(db, settings):
     from backend.services import matching_service
+    _normalise_and_dedupe(db, settings)  # signals the scorer and filters rely on
     n = 0
     for u in _users(db):
         try:

@@ -187,8 +187,10 @@ def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
         _fit_columns(job)
     if nj.source in ATS_SOURCES:
         job.last_verified_at, job.closed_at = now, None  # listed on the employer's board right now
-    from backend.services.career_service import sponsorship_signal
+    from backend.services.career_service import infer_seniority, sponsorship_signal
     job.sponsorship_signal, job.sponsorship_evidence = sponsorship_signal(job.description)
+    if not job.seniority:
+        job.seniority = infer_seniority(job.title, job.experience_min)
     if job.sponsorship_evidence:
         job.sponsorship_evidence = job.sponsorship_evidence[:300]
     link = db.execute(select(JobSourceLink).where(JobSourceLink.source_key == nj.source_key)).scalar_one_or_none()

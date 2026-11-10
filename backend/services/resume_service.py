@@ -216,8 +216,12 @@ def experience_summary(profile: EditableProfile, today: date | None = None) -> E
 
 def confirm_profile(db: Session, user: User, profile: EditableProfile) -> CandidateProfile:
     prof = get_or_create_profile(db, user)
-    if prof.parsed_profile is None and prof.active_resume_id is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Upload and parse a resume before confirming the profile.")
+    manual = prof.parsed_profile is None and prof.active_resume_id is None
+    if manual and not (profile.full_name and (profile.skills or profile.experience or profile.education or profile.projects)):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "To create a profile without a resume, add your name and at least your education, a project, experience or skills.")
+    # Students and early-career candidates may build the profile by hand; record where the facts came from.
+    prof.verified_facts = {**(prof.verified_facts or {}), "profile_source": "manual" if manual else "resume_reviewed"}
     summary = experience_summary(profile)
     prof.confirmed_profile = profile.model_dump(mode="json")
     prof.experience_months = summary.months

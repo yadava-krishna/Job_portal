@@ -40,6 +40,8 @@ class JobListing(BaseModel):
     closed_at: datetime | None = None
     industry: str | None = None
     department: str | None = None
+    seniority: str | None = None
+    sponsorship_signal: str | None = None  # verified | inferred | none | unknown
     sources: list[JobSourceOut] = Field(default_factory=list)
 
 
@@ -54,6 +56,7 @@ class UserJobOut(BaseModel):
     matching_skills: list[str]
     missing_skills: list[str]
     eligibility_status: str | None
+    eligibility: str | None = None  # pass | fail | unknown (v2, separate from the score)
     scoring_method: str | None
     discovered_at: datetime
     saved_at: datetime | None

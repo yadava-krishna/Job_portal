@@ -5,6 +5,8 @@ Everything is scoped to the requesting user; other users' rows are always 404.
 
 from __future__ import annotations
 
+import json
+
 import shutil
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
@@ -304,6 +306,34 @@ def export(db: Session, user: User) -> dict[str, Any]:
         "discovery_runs": [_row(r, {"user_id"}) for r in q(DiscoveryRun)],
         "browser_extension_connections": [_row(t, {"user_id", "token_hash"}) for t in q(ExtensionToken)],
         "activity_sessions": [_row(s, {"user_id"}) for s in q(UserActivitySession)],
+        **_career_export(db, user, q),
+    }
+
+
+def _career_export(db: Session, user: User, q) -> dict[str, Any]:
+    """Career graph data (skills, evidence, gaps, learning, resume studio, interview practice, mentor, consents).
+    Storage keys are left out; resume versions include their full content."""
+    from backend.models import (Consent, CandidateSkill, Gap, InterviewInsight, InterviewPractice, LearningSession, MentorAction,
+                                MentorAssignment, MentorNote, Reflection, ResumeExport, ResumeVersion, UserFeedback, VisaWatch)
+    from backend.services import studio_service
+
+    mine = [a.id for a in db.execute(select(MentorAssignment).where(MentorAssignment.candidate_id == user.id)).scalars()]
+    notes = db.execute(select(MentorNote).where(MentorNote.assignment_id.in_(mine or [-1]))).scalars().all()
+    return {
+        "consents": [_row(c, {"user_id"}) for c in q(Consent)],
+        "skills": [{**_row(s, {"user_id"}), "evidence": [_row(e, {"user_id"}) for e in s.evidence]} for s in q(CandidateSkill)],
+        "gaps": [_row(g, {"user_id"}) for g in q(Gap)],
+        "learning_sessions": [_row(s, {"user_id"}) for s in q(LearningSession)],
+        "resume_versions": [json.loads(json.dumps(studio_service.version_out(v), default=str)) for v in q(ResumeVersion)],
+        "resume_exports": [_row(e, {"user_id", "file_key"}) for e in q(ResumeExport)],
+        "interview_practice": [_row(p, {"user_id"}) for p in q(InterviewPractice)],
+        "interview_insights": [_row(i, {"user_id"}) for i in q(InterviewInsight)],
+        "reflections": [_row(r, {"user_id"}) for r in q(Reflection)],
+        "mentor_actions": [_row(a, {"user_id"}) for a in q(MentorAction)],
+        "mentor_access": [_row(a, set()) for a in db.execute(select(MentorAssignment).where(MentorAssignment.candidate_id == user.id)).scalars()],
+        "mentor_notes_visible_to_you": [_row(n, set()) for n in notes if n.visibility == "shared" or n.author_id == user.id],
+        "watched_visa_routes": [_row(w, {"user_id"}) for w in q(VisaWatch)],
+        "research_feedback": [_row(f, {"user_id"}) for f in q(UserFeedback)],
     }
 
 

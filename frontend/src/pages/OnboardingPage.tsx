@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { qk, useOnboarding, usePlatforms, usePreferences, useProfile } from "@/services/queries";
 import { cn } from "@/lib/utils";
 
-const steps = ["Upload resume", "Review profile", "Job preferences", "Job portals", "Confirm"];
+const steps = ["Resume", "Review profile", "Job preferences", "Job portals", "Confirm"];
 
 export function OnboardingPage() {
   const status = useOnboarding();
@@ -21,6 +21,7 @@ export function OnboardingPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
+  const [manual, setManual] = useState(false);
 
   useEffect(() => {
     const s = status.data;
@@ -64,13 +65,20 @@ export function OnboardingPage() {
               <CardContent className="space-y-4">
                 <ResumeUpload profile={profile.data} onUploaded={() => setStep(1)} />
                 {profile.data?.has_resume && <div className="flex justify-end"><Button onClick={() => setStep(1)}>Continue</Button></div>}
+                {!profile.data?.has_resume && (
+                  <div className="rounded-lg border border-dashed p-4 text-sm">
+                    <p className="font-medium">No resume yet?</p>
+                    <p className="mt-1 text-muted-foreground">Students and early-career candidates can build a profile by hand: your education, projects and skills. You can make a resume from it later in Resume Studio.</p>
+                    <Button variant="outline" size="sm" className="mt-3" onClick={() => { setManual(true); setStep(1); }}>Create my profile without a resume</Button>
+                  </div>
+                )}
               </CardContent>
             </>
           )}
           {step === 1 && (
             <>
-              <CardHeader><CardTitle>Review your profile</CardTitle><CardDescription>Correct anything the parser got wrong. Only confirmed details are used for matching and screening answers.</CardDescription></CardHeader>
-              <CardContent>{profile.data ? <ProfileForm profile={profile.data} submitLabel="Confirm profile & continue" onSaved={() => setStep(2)} /> : <Loader2 className="animate-spin" />}</CardContent>
+              <CardHeader><CardTitle>{manual ? "Create your profile" : "Review your profile"}</CardTitle><CardDescription>{manual ? "Add what is true today: education, projects and skills count; you don't need work experience. Only what you enter here is used." : "Correct anything the parser got wrong. Only confirmed details are used for matching and screening answers."}</CardDescription></CardHeader>
+              <CardContent>{profile.data ? <ProfileForm profile={profile.data} manual={manual || !profile.data.has_resume} submitLabel="Confirm profile & continue" onSaved={() => setStep(2)} /> : <Loader2 className="animate-spin" />}</CardContent>
             </>
           )}
           {step === 2 && (
@@ -89,7 +97,7 @@ export function OnboardingPage() {
             <>
               <CardHeader><CardTitle>All set</CardTitle><CardDescription>Here's what JobPilot will use.</CardDescription></CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <Summary label="Resume" value={profile.data?.resume?.original_filename} />
+                <Summary label="Resume" value={profile.data?.resume?.original_filename ?? (status.data?.completed ? "None yet: profile created by hand" : undefined)} />
                 <Summary label="Experience" value={profile.data?.experience?.years_months} />
                 <Summary label="Skills" value={profile.data?.confirmed?.skills.slice(0, 12).join(", ")} />
                 <Summary label="Roles" value={prefs.data?.job_titles.join(", ")} />

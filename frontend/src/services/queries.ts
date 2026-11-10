@@ -89,6 +89,10 @@ export interface JobQuery {
   skill?: string;
   salary_min_lpa?: number;
   application_status?: string[];
+  country?: string;
+  seniority?: string;
+  sponsorship?: ("verified" | "inferred" | "none" | "unknown")[];
+  eligibility?: ("pass" | "fail" | "unknown")[];
   sort?: "score" | "posted" | "discovered";
   page?: number;
   page_size?: number;

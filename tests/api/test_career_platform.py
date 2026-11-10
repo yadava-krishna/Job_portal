@@ -232,3 +232,97 @@ def test_prd_events_are_recorded_without_personal_data(client, resume_bytes):
     for n in ("onboarding_completed", "job_viewed", "job_saved", "resume_created", "resume_exported", "application_prepared", "application_submitted"):
         assert n in names, n
     assert "events@example.com" not in props
+
+
+def test_student_can_onboard_without_a_resume(client):
+    h = auth(register(client, "student@example.com"))
+    assert client.put(f"{API}/profile", headers=h, json={"full_name": "S"}).status_code == 422  # needs something real
+    prof = {"full_name": "Student Example", "email": "student@example.com", "skills": ["Microsoft Excel", "SQL"],
+            "education": [{"degree": "B.Com", "institution": "Example College", "year": "2026"}],
+            "projects": [{"name": "Sales dashboard", "bullets": ["Built a sales dashboard in Excel for a college fest"]}]}
+    assert client.put(f"{API}/profile", headers=h, json=prof).status_code == 200
+    assert client.put(f"{API}/preferences", headers=h, json={"job_titles": ["Accounts Trainee"], "locations": ["Pune"],
+                                                              "work_modes": ["On-site"], "employment_types": ["Full-time"]}).status_code == 200
+    plats = {"platforms": [{"platform": "LinkedIn", "enabled": True, "discovery_sources": ["user_job_url"]}]}
+    assert client.put(f"{API}/platforms/preferences", headers=h, json=plats).status_code == 200
+    st = client.get(f"{API}/onboarding", headers=h).json()
+    assert st["completed"] is True and st["resume_uploaded"] is True
+    v = client.post(f"{API}/studio/versions", headers=h, json={"name": "First resume", "template_key": "graduate"}).json()
+    assert any(s["type"] == "projects" and s["visible"] for s in v["sections"])  # a student's first resume comes from the manual profile
+    skills = {s["canonical"]: s["state"] for s in client.get(f"{API}/skills", headers=h).json()["skills"]}
+    assert "professional_experience" not in skills.values()  # no employment, so nothing is shown as work experience
+
+
+def test_export_includes_career_data_without_storage_keys(client, resume_bytes):
+    h = onboard(client, "exp2@example.com", resume_bytes)
+    v = client.post(f"{API}/studio/versions", headers=h, json={"name": "Exported"}).json()
+    client.post(f"{API}/studio/versions/{v['id']}/export", headers=h, json={"format": "pdf"})
+    client.post(f"{API}/skills", headers=h, json={"name": "Tableau"})
+    data = client.get(f"{API}/account/export", headers=h).json()
+    assert data["resume_versions"][0]["name"] == "Exported" and data["resume_versions"][0]["sections"]
+    assert any(s["canonical"] == "Tableau" for s in data["skills"]) and data["resume_exports"]
+    assert "file_key" not in str(data["resume_exports"]) and "users/" not in str(data["resume_exports"])
+
+
+def test_job_filters_for_country_sponsorship_and_eligibility(client, resume_bytes):
+    h = onboard(client, "filters@example.com", resume_bytes)
+    import_job(client, h)  # Bengaluru
+    import_job(client, h, url="https://www.linkedin.com/jobs/view/4000000077/", title="AR Specialist", company="Far Away Ltd",
+               location="London, United Kingdom", description="We offer visa sponsorship is available for this role. " * 3)
+    titles = lambda **p: sorted(i["job"]["title"] for i in client.get(f"{API}/jobs", headers=h, params={"view": "all", **p}).json()["items"])  # noqa: E731
+    assert titles(country="IN") == ["Accounts Receivable Analyst"]
+    assert titles(country="GB") == ["AR Specialist"]
+    assert titles(sponsorship=["verified"]) == ["AR Specialist"]
+    assert set(titles(eligibility=["pass", "fail", "unknown"])) == {"AR Specialist", "Accounts Receivable Analyst"}
+    import_job(client, h, url="https://www.linkedin.com/jobs/view/4000000078/", title="Senior Accounts Executive", company="Ledger Co",
+               location="Pune, India", description="Own month-end close and receivables reporting for the region. " * 3)
+    assert titles(seniority="senior") == ["Senior Accounts Executive"]
+    assert titles(seniority="entry") == []  # no title cue and no stated experience: unknown, not guessed
+
+
+def test_infer_seniority_never_guesses():
+    from backend.services.career_service import infer_seniority
+    assert infer_seniority("Finance Intern", None) == "intern"
+    assert infer_seniority("Head of Finance", None) == "director"
+    assert infer_seniority("Accounts Manager", None) == "manager"
+    assert infer_seniority("Principal Engineer", None) == "lead"
+    assert infer_seniority("Sr. Analyst", None) == "senior"
+    assert infer_seniority("Software Engineer II", None) == "mid"
+    assert infer_seniority("Analyst", 6) == "senior"
+    assert infer_seniority("Analyst", None) is None
+    assert infer_seniority("Analyst", 0) is None
+
+
+def test_normalisation_job_backfills_signals(client):
+    from backend.db import session_factory
+    from backend.models import Job
+    from backend.services import jobs_registry
+    with session_factory()() as db:
+        db.add(Job(job_key="bf-1", platform="manual", source="manual", title="Senior Payroll Specialist", company="Old Co", location="Dubai",
+                   description="Visa sponsorship is available for the right candidate.", seniority=None, sponsorship_signal="unknown"))
+        db.commit()
+        out = jobs_registry._normalise_and_dedupe(db, None)
+        job = db.query(Job).filter_by(job_key="bf-1").one()
+        assert (job.seniority, job.sponsorship_signal) == ("senior", "verified")
+        assert out["seniority"] >= 1 and out["sponsorship"] >= 1
+
+
+def test_closing_a_gap_rescores_with_before_after_reasoning(client, resume_bytes):
+    h = onboard(client, "beforeafter@example.com", resume_bytes)
+    uj = import_job(client, h)["user_job_ids"][0]
+    job = client.get(f"{API}/jobs/{uj}", headers=h).json()
+    missing = job["missing_skills"]
+    assert missing, job
+    skill = client.post(f"{API}/skills", headers=h, json={"name": missing[0]}).json()
+    before = job["match_score"]
+    # A course doesn't reach project evidence, so the score must not move.
+    r = client.post(f"{API}/skills/{skill['id']}/evidence", headers=h, json={"evidence_type": "course", "title": "Intro"}).json()
+    assert r["score_changes"] == []
+    r = client.post(f"{API}/skills/{skill['id']}/evidence", headers=h,
+                    json={"evidence_type": "project", "title": "Portfolio piece", "url": "https://github.com/example/p"}).json()
+    assert r["state"] == "project_evidence"
+    ch = [c for c in r["score_changes"] if c["user_job_id"] == uj]
+    assert ch and ch[0]["old_score"] == before and ch[0]["new_score"] > before, r["score_changes"]
+    hist = client.get(f"{API}/matches/history", headers=h).json()
+    assert hist[0]["user_job_id"] == uj and "Project evidence" in hist[0]["reason"]
+    assert client.get(f"{API}/matches/history", headers=auth(register(client, "ba-other@example.com"))).json() == []

@@ -32,7 +32,7 @@ def job_listing(job: Job, links: list[JobSourceLink] | None = None) -> JobListin
         posted_label=posted_label(job), description_preview=preview,
         has_full_description=bool(desc) and len(desc) >= 80 and not job.description_is_snippet, source=job.source,
         posted_at_confidence=posted_confidence(job.posted_at, job.posted_at_source), first_seen_at=job.discovered_at or job.created_at,
-        last_verified_at=job.last_verified_at, closed_at=job.closed_at, industry=job.industry, department=job.department,
+        last_verified_at=job.last_verified_at, closed_at=job.closed_at, industry=job.industry, department=job.department, seniority=job.seniority, sponsorship_signal=job.sponsorship_signal,
         sources=[JobSourceOut(source=l.source, platform=l.platform, url=l.url, first_seen_at=l.first_seen_at) for l in links or []],
     )
 
@@ -55,7 +55,7 @@ def user_jobs(db: Session, items: list[UserJob]) -> list[UserJobOut]:
 def user_job(uj: UserJob, app: Application | None, links: list[JobSourceLink] | None = None) -> UserJobOut:
     return UserJobOut(
         user_job_id=uj.id, status=uj.status, is_saved=uj.is_saved, match_score=uj.match_score, match_category=uj.match_category,
-        matching_skills=uj.matching_skills or [], missing_skills=uj.missing_skills or [], eligibility_status=uj.eligibility_status,
+        matching_skills=uj.matching_skills or [], missing_skills=uj.missing_skills or [], eligibility_status=uj.eligibility_status, eligibility=uj.eligibility,
         scoring_method=uj.scoring_method, discovered_at=uj.discovered_at, saved_at=uj.saved_at, dismissed_at=uj.dismissed_at,
         application_id=app.id if app else None, application_status=app.status if app else None, job=job_listing(uj.job, links),
     )

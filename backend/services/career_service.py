@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
 from backend.models import (Application, CandidateProfile, CandidateSkill, Gap, Interview, Job, JobPreference, JobRequirement,
-                            ResumeVersion, SkillEvidence, User, UserJob, VisaWatch, utcnow)
+                            MatchHistory, ResumeVersion, SkillEvidence, User, UserJob, VisaWatch, utcnow)
 from backend.models.career import EVIDENCE_TYPES, SKILL_STATES
 from backend.services import platform_service, resume_service
 
@@ -145,6 +145,46 @@ def add_evidence(db: Session, user: User, skill: CandidateSkill, evidence_type: 
     db.commit()
     _refresh_gap_state(db, user, skill)
     return ev
+
+
+def evidenced_skills(db: Session, user_id: int) -> list[str]:
+    """Skills the candidate has shown with project or professional evidence: these count in job scoring even when the
+    confirmed resume profile doesn't list them. Course/practice evidence alone never does."""
+    rows = db.execute(select(CandidateSkill).where(CandidateSkill.user_id == user_id)).scalars()
+    return [s.canonical for s in rows if STATE_RANK.get(s.state, 0) >= STATE_RANK[CLOSING_STATE]]
+
+
+def rescore_after_evidence(db: Session, settings: BackendSettings, user: User, canonical: str, reason: str) -> list[dict[str, Any]]:
+    """Re-score the jobs that ask for this skill and record each before/after change (MatchHistory) with the reason."""
+    from backend.services import matching_service
+    try:
+        um = matching_service.UserMatcher(db, settings, user, use_llm=False)
+    except HTTPException:
+        return []
+    key = canonical.lower()
+    rows = db.execute(select(UserJob).where(UserJob.user_id == user.id, UserJob.status.in_(("new", "shortlisted")))).unique().scalars().all()
+    changes = []
+    for uj in rows:
+        asked = {x.lower() for x in [*(uj.missing_skills or []), *(uj.matching_skills or []), *(uj.job.required_skills or []), *(uj.job.preferred_skills or [])]}
+        if key not in asked:
+            continue
+        before = uj.match_score
+        um.apply(uj)
+        after = uj.match_score
+        if before is not None and after is not None and abs(after - before) < 0.5:
+            continue
+        db.add(MatchHistory(user_id=user.id, user_job_id=uj.id, score_version=uj.score_version or "", old_score=before,
+                            new_score=after, reason=reason[:300]))
+        changes.append({"user_job_id": uj.id, "title": uj.job.title, "company": uj.job.company, "old_score": before, "new_score": after})
+    db.commit()
+    return changes
+
+
+def match_history(db: Session, user: User, limit: int = 50) -> list[dict[str, Any]]:
+    rows = db.execute(select(MatchHistory, UserJob).join(UserJob, UserJob.id == MatchHistory.user_job_id)
+                      .where(MatchHistory.user_id == user.id).order_by(MatchHistory.created_at.desc(), MatchHistory.id.desc()).limit(limit)).all()
+    return [{"id": h.id, "user_job_id": h.user_job_id, "title": uj.job.title, "company": uj.job.company, "old_score": h.old_score,
+             "new_score": h.new_score, "reason": h.reason, "score_version": h.score_version, "created_at": h.created_at} for h, uj in rows]
 
 
 def delete_evidence(db: Session, user: User, evidence_id: int) -> None:
@@ -406,6 +446,36 @@ _SPONSOR_YES = re.compile(r"\b(visa sponsorship (is )?(available|provided|offere
 _SPONSOR_NO = re.compile(r"\b(no (visa )?sponsorship|(unable|not able) to sponsor|does not (offer|provide) (visa )?sponsorship|"
                          r"must (already )?(have|hold) (the )?right to work|without (the need for )?sponsorship)\b", re.I)
 _RELOCATION = re.compile(r"\b(relocation (assistance|support|package)|we (help|support) (with )?relocation)\b", re.I)
+
+
+SENIORITY_LEVELS = ("intern", "entry", "junior", "mid", "senior", "lead", "manager", "director")
+_SENIORITY_TITLE = [  # first match wins; checked against the job title only
+    ("director", r"\b(director|head of|vice president|vp|chief|cxo|cto|cfo|coo)\b"),
+    ("intern", r"\b(intern|internship|trainee|apprentice)\b"),
+    ("manager", r"\b(manager|mgr)\b"),
+    ("lead", r"\b(lead|principal|staff|architect)\b"),
+    ("senior", r"\b(senior|sr\.?|iii|iv)\b"),
+    ("junior", r"\b(junior|jr\.?)\b"),
+    ("entry", r"\b(entry[- ]level|graduate|fresher|new grad)\b"),
+    ("mid", r"\b(mid[- ]level|ii)\b"),
+]
+
+
+def infer_seniority(title: str | None, experience_min: float | None) -> str | None:
+    """Seniority from the title, else from a *stated* minimum experience. Unknown stays None (never guessed as entry)."""
+    t = (title or "").lower()
+    for level, rx in _SENIORITY_TITLE:
+        if re.search(rx, t):
+            return level
+    if experience_min is None:
+        return None
+    if experience_min >= 8:
+        return "lead"
+    if experience_min >= 5:
+        return "senior"
+    if experience_min >= 2:
+        return "mid"
+    return "entry" if experience_min > 0 else None
 
 
 def sponsorship_signal(text: str | None) -> tuple[str, str | None]:

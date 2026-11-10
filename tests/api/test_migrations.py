@@ -153,5 +153,5 @@ def test_migrated_schema_matches_models(engine):
 
     _alembic("upgrade", "head")
     with engine.connect() as conn:
-        diff = compare_metadata(MigrationContext.configure(conn, opts={"compare_type": True}), Base.metadata)
+        diff = compare_metadata(MigrationContext.configure(conn, opts={"compare_type": True, "include_object": lambda o, n, t, r, c: not (t == "index" and n == "ix_jobs_fulltext")}), Base.metadata)
     assert diff == []

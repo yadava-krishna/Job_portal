@@ -22,8 +22,16 @@ config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 
+# Expression indexes created by raw SQL in migrations (not expressible in the models) are intentional.
+SQL_ONLY_INDEXES = {"ix_jobs_fulltext"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    return not (type_ == "index" and name in SQL_ONLY_INDEXES)
+
+
 def run_migrations_offline() -> None:
-    context.configure(url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True)
+    context.configure(url=url, target_metadata=target_metadata, literal_binds=True, compare_type=True, include_object=include_object)
     with context.begin_transaction():
         context.run_migrations()
 
@@ -31,7 +39,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     connectable = engine_from_config(config.get_section(config.config_ini_section, {}), prefix="sqlalchemy.", poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True, include_object=include_object)
         with context.begin_transaction():
             context.run_migrations()
 
