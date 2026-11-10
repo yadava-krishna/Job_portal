@@ -143,3 +143,15 @@ Licence status decides what we may reuse: **ideas are always fine; code only whe
 - **Capture** from LinkedIn, Indeed, Naukri, Foundit, Glassdoor and Wellfound: extension on the user's click, in their own logged-in browser. No cookies leave it.
 - **Application**: on employer ATS forms (Greenhouse/Lever/Ashby, later Workday), a user-clicked "Fill with JobPilot" that fills fields from the reviewed profile. On LinkedIn/Indeed/Naukri, a side panel with copy-ready answers (no auto-filling or clicking on those sites).
 - **Never**: auto-submit, background crawling, cookie export, CAPTCHA/OTP bypass, marking "Applied" without confirmation.
+
+---
+
+## 7. Session Evaluation & Implementation: Scrapling Framework (2026-11-06)
+
+Following evaluation of the [Scrapling](https://github.com/D4Vinci/Scrapling) framework and its official documentation:
+- **Adopted**: Scrapling 0.5.1 (`scrapling[fetchers]==0.5.1`) with `Fetcher` (curl_cffi HTTP/2 TLS browser impersonation) and `StealthyFetcher` (Patchright headless isolation).
+- **Selector Engine**: Utilized `scrapling.parser.Adaptor` with CSS and XPath selectors for resilient extraction of semi-structured listings and Schema.org JSON-LD microdata.
+- **Safety Hardening**: Enforced pre-flight DNS SSRF vetting, token-bucket per-domain rate limiting, and cached robots.txt compliance parsing.
+- **Implemented Connectors**: Delivered 12 multi-source connectors (Remotive, Himalayas, RemoteOK, Arbeitnow, NCS India, Indian Government agencies, Academic institutions, Schema.org, RSS/Atom, XML Sitemaps, HTML Adaptor, and Career URL detector).
+- **Phases 4–8 Fulfilled**: Completed Today View, Interview/Offer tracking, Recruiter contacts, Data export, Account deletion, Admin console, Dark theme toggle, Maritime nicknames, Achievements, SMTP email, and DevOps backup automation.
+

@@ -90,7 +90,10 @@ def test_import_scores_and_dedups(client, resume_bytes):
     assert "Accounts Receivable" in item["matching_skills"]
     analysis = client.get(f"/api/v1/jobs/{uj}/analysis", headers=h).json()
     assert [c["name"] for c in analysis["components"]] == ["core_skills", "experience", "responsibilities", "education", "location"]
-    assert abs(sum(c["weighted"] for c in analysis["components"]) - analysis["overall_score"]) < 0.2
+    assert abs(sum(c["weighted"] for c in analysis["dimensions"]) - analysis["overall_score"]) < 0.2
+    assert analysis["score_version"].startswith("v2") and len(analysis["dimensions"]) == 8
+    assert sum(d["base_weight"] for d in analysis["dimensions"]) == 100
+    assert analysis["eligibility"] in ("pass", "fail", "unknown")
     detail = client.get(f"/api/v1/jobs/{uj}", headers=h).json()
     assert detail["description"].startswith("About the role") and detail["responsibilities"]
 

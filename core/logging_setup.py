@@ -90,13 +90,37 @@ class _LocalTimeFormatter(logging.Formatter):
         return datetime.fromtimestamp(record.created, timeutil.tz()).strftime("%Y-%m-%d %H:%M:%S%z")
 
 
+class JSONFormatter(logging.Formatter):
+    """Structured JSON formatter for production log aggregation."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        from datetime import datetime
+        ts = datetime.fromtimestamp(record.created, timeutil.tz()).isoformat()
+        payload = {
+            "timestamp": ts,
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if hasattr(record, "request_id"):
+            payload["request_id"] = getattr(record, "request_id")
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload)
+
+
 def setup_logging(logs_dir: Path, level: str = "INFO", console: bool = True) -> None:
+    import os
+
     root = logging.getLogger()
     for h in list(root.handlers):
         root.removeHandler(h)
         h.close()
     root.setLevel(level.upper())
-    fmt = _LocalTimeFormatter("%(asctime)s %(levelname)-7s [%(name)s] %(message)s")
+
+    use_json = os.environ.get("LOG_FORMAT", "").lower() == "json"
+    fmt = JSONFormatter() if use_json else _LocalTimeFormatter("%(asctime)s %(levelname)-7s [%(name)s] %(message)s")
     redactor = RedactingFilter()
 
     file_handler = DailyFileHandler(logs_dir)

@@ -33,6 +33,8 @@ class UserOut(BaseModel):
     id: int
     email: str
     full_name: str | None
+    role: str = "user"
+    is_active: bool = True
     created_at: datetime
     onboarding_completed_at: datetime | None
 
@@ -44,3 +46,13 @@ class AuthResponse(TokenPair):
 class AuthConfig(BaseModel):
     registration_requires_invite: bool
     password_rules: list[str]
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=10)
+    new_password: str = Field(min_length=10, max_length=128)
+

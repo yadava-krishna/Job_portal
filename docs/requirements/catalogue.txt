@@ -1,0 +1,223 @@
+# JobPilot requirement catalogue — one line per requirement:  ID | priority | area | title :: acceptance
+# Edit statuses in jobpilot-requirements.csv (generated once from this file, then maintained there) and run
+#   python docs/requirements/tracker.py
+# to push them into JobPilot_FULL_SOURCE_COVERAGE_INVENTORY.csv and the matrix markdown.
+ID-01 | P0 | Identity | Register, login, logout, refresh, session expiry :: password hashing, JWT expiry, logout revokes refresh token, tests
+ID-02 | P0 | Identity | Roles candidate / mentor / admin with least privilege :: role column supports candidate(user), mentor, admin; role-gated deps; 403 tests per role
+ID-03 | P0 | Identity | Per-object ownership on every resource (BOLA/IDOR) :: every owned ID scoped by current user server-side; never trust client userId; cross-user tests
+ID-04 | P0 | Identity | Password reset / account access recovery :: reset flow works when SMTP configured; disabled honestly otherwise
+ID-05 | P0 | Privacy | Data export (self-service) :: JSON export of all user data, no secrets
+ID-06 | P0 | Privacy | Account deletion with confirmation :: password + typed confirmation; cascades rows and files; audit row
+ID-07 | P0 | Privacy | Explicit consent records (AI processing, mentor sharing, extension, learning tracking) :: consent table; toggles in settings; features check consent
+ID-08 | P0 | Privacy | Retention rules and cleanup :: documented retention; cleanup job deletes expired tokens/logs/exports
+ID-09 | P0 | Privacy | Audited cross-role access :: admin/mentor reads of candidate data write AuditEvent
+ID-10 | P0 | Identity | Brute-force / rate limiting on auth :: per-IP and per-account throttling tested
+ID-11 | P1 | Identity | Invite-only beta registration :: invite codes create/revoke/usage
+PRF-01 | P0 | Profile | Canonical master candidate profile separate from resume :: typed profile: identity/contact, education, experience, projects, certifications, publications, skills
+PRF-02 | P0 | Profile | Provenance + verification flag on every extracted fact :: source (resume_parse/manual/import), confidence, verified_at; unverified never shown as verified
+PRF-03 | P0 | Profile | Resume PDF upload with progress, parse status, error/retry :: upload progress, parse state, retry on failure
+PRF-04 | P0 | Profile | Manual profile creation without a resume (students) :: onboarding path "no resume" builds profile manually
+PRF-05 | P0 | Profile | Review/correct/confirm all critical extracted fields :: confirmation step blocks treating guesses as verified
+PRF-06 | P0 | Profile | Career goals: titles, seniority, industry, locations, salary, work mode, relocation, notice period :: persisted CareerGoal; used by discovery and scoring
+PRF-07 | P0 | Profile | Search mode India / International / Both + work authorization & sponsorship :: persisted; changes discovery regions, eligibility and country fit
+PRF-08 | P0 | Onboarding | Under-10-minute first run flow :: account→profile→review→goals→preferences→snapshot→3 jobs→first gap→one CTA; skippable, resumable
+PRF-09 | P0 | Onboarding | Career snapshot: profile completeness, top match, top gap :: snapshot endpoint + card on dashboard
+PRF-10 | P0 | Onboarding | One clear next-step CTA (Apply/Build resume/Learn/Interview prep/Explore international) :: computed from state, shown on dashboard
+PRF-11 | P1 | UX | Progressive disclosure by activity stage :: dashboard sections appear as user progresses (tracker after applications, reflection after interviews, international on intent)
+PRF-12 | P1 | Profile | Skills with proficiency, years and evidence links :: CandidateSkill with level, years, evidence refs
+DSC-01 | P0 | Discovery | JobSource registry with type, URL, compliance notes, status, health, last run, failure reason :: table + admin view + enable/disable
+DSC-02 | P0 | Discovery | Scheduled daily discovery + manual Run now :: scheduler, run-now button, no duplicate concurrent runs
+DSC-03 | P0 | Discovery | Run status, progress, errors, timestamps visible :: DiscoveryRun status/progress polled in UI
+DSC-04 | P0 | Discovery | Traceable pipeline DiscoveryRun→policy→fetch→normalize→extract→canonicalize→dedupe→persist→filter→score→gaps→notify→health :: each stage recorded on run
+DSC-05 | P0 | Discovery | Official ATS/job-board APIs via adapter interface with pagination, rate limits, retries, circuit breaker :: adapters + tests
+DSC-06 | P0 | Discovery | Normalization + canonical title/company/location :: canonical fields stored
+DSC-07 | P0 | Discovery | Stable-hash dedupe (+ optional semantic) :: fingerprint unique, no duplicate jobs across sources
+DSC-08 | P0 | Discovery | Provenance: source, raw reference, canonical URL, checked date :: JobSourceLink rows, shown in job details
+DSC-09 | P0 | Discovery | Stale / closed posting handling :: last_seen tracking; closed postings marked and hidden
+DSC-10 | P0 | Discovery | Search/filter: title, company, location, work mode, seniority, salary, posted date, country :: filters on /jobs; Postgres FTS index
+DSC-11 | P0 | Discovery | Persistent Save / Dismiss :: save/dismiss/restore persisted
+DSC-12 | P0 | Discovery | Job details: original description, company, provenance, posted/checked date, apply link, source label :: detail sheet shows all
+DSC-13 | P0 | Discovery | Compliance: robots/ToS respected, no login scraping, no anti-bot bypass, no fake results :: policy registry; StealthyFetcher/anti-bot paths disabled
+DSC-14 | P0 | Discovery | Manual job import (URL/file) and assisted links for restricted boards :: import endpoints + search links
+DSC-15 | P1 | Discovery | Structured requirement extraction (JobRequirement: skill, importance, hard/soft, years) :: per-job requirements stored
+MAT-01 | P0 | Matching | Separate suitability match from hard eligibility :: two outputs; eligibility pass/fail/unknown
+MAT-02 | P0 | Matching | Eight weighted dimensions 30/20/15/10/10/5/5/5 summing to 100 :: config + unit test of weight sum
+MAT-03 | P0 | Matching | score_version + component breakdown stored per match :: JobMatch row with version + components
+MAT-04 | P0 | Matching | Unknown salary/authorization stays unknown :: unknown never coerced to pass/fail; test
+MAT-05 | P0 | Matching | Explainable breakdown with source facts in UI :: job detail shows per-dimension reason
+MAT-06 | P0 | Matching | Skill normalization and aliases :: alias table/map + unit test
+MAT-07 | P0 | Gaps | Specific gaps with severity, explanation, job/goal link, next action :: Gap rows per job; GET /gaps, /jobs/:id/gaps
+MAT-08 | P0 | Gaps | Single best next gap plus alternatives :: ranking + UI card
+MAT-09 | P0 | Evidence | Six-state skill progression Aware→Learning→Practising→Project Evidence→Professional Experience→Interview Ready :: state enum; transitions; courses/projects never shown as employment
+MAT-10 | P0 | Evidence | SkillEvidence with type, link, verification, timestamps, provenance :: table + UI to add evidence
+MAT-11 | P1 | Matching | Recompute matches on profile/goal change :: POST /matches/recompute
+MAT-12 | P1 | Matching | Calibration from measured outcomes (no predictive claims) :: outcome-by-score report; no hiring-probability wording
+MAT-13 | P1 | Gaps | Closing a gap updates match explanation with before/after reasoning :: evidence change triggers rescore with diff
+RES-01 | P0 | Resume | Structured browser editor backed by master profile :: sections, headings, summary, bullets, education, projects, work, dates, skills, certs, publications editable
+RES-02 | P0 | Resume | Reorder / hide sections :: position + visibility persisted
+RES-03 | P0 | Resume | Autosave with pending/saved/error feedback :: debounced save + status indicator
+RES-04 | P0 | Resume | Live preview: side-by-side desktop, tabs on mobile, page-break visualisation :: preview renders same HTML as PDF
+RES-05 | P0 | Resume | Five-plus templates: ATS Simple, Modern Professional, Technical, Finance, Graduate, International :: six templates, one content model, switching preserves content
+RES-06 | P0 | Resume | Typography size, spacing density, columns, section visibility with layout constraints :: options validated
+RES-07 | P0 | Resume | ATS-safe mode: one column, standard headings, no info in images, density/overflow warnings :: checker returns warnings; not presented as guarantee
+RES-08 | P0 | Resume | Named versions, job-specific copy with target job, version history and restore :: clone/restore endpoints
+RES-09 | P0 | Resume | Submitted versions immutable; edits create new version :: locked on application submit; test
+RES-10 | P0 | Resume | PDF export with selectable text via secure download :: text-extractable PDF test
+RES-11 | P0 | Resume | Export cache per content checksum (no regenerate per download) :: ResumeExport with checksum reuse
+RES-12 | P1 | Resume | DOCX export with truthful fallback :: docx generated for supported templates
+RES-13 | P0 | Resume | Suggest-only AI rewriting grounded in verified evidence; accept/reject each bullet :: suggestions with evidence markers; never auto-applied
+RES-14 | P0 | Resume | Warnings: unsupported claims, repeated keywords, weak bullets, length, parsing risk :: feedback endpoint returns issues
+RES-15 | P0 | Resume | Never fabricate metrics/skills/titles/credentials :: fabrication guard tests
+RES-16 | P0 | Resume | Data model ResumeTemplate/Version/Section/Block/Bullet/Export/Feedback :: tables exist and used
+RES-17 | P0 | Resume | Resume-to-job feedback without altering document :: ResumeFeedback per job
+RES-18 | P0 | Resume | Warnings before destructive changes :: confirm on delete/template overwrite
+RES-19 | P1 | Resume | Visual regression / preview-PDF consistency across templates :: automated test renders every template
+APP-01 | P0 | Apply | Prepared application package: checklist, job link, resume version, verified answers, unknown flags, cover material :: package endpoint + dialog
+APP-02 | P0 | Apply | Exact resume_version_id + export checksum linked to application :: FK + checksum on application
+APP-03 | P0 | Apply | State machine Saved→Prepared→Opened→Pending→Applied→Screening→Assessment→Interview→Offer + Rejected/Withdrawn/Archived with legal transitions :: transition table + tests
+APP-04 | P0 | Apply | Opened is not Applied; Applied only on explicit user confirmation :: tests
+APP-05 | P0 | Apply | Event history with timestamps :: ApplicationEvent per transition
+APP-06 | P0 | Tracker | Tracker list/kanban with company, role, status, date, search/filter :: Applied page
+APP-07 | P0 | Tracker | Notes, next follow-up, reminders, recruiter/ref number :: tracking fields + reminders
+APP-08 | P0 | Tracker | Structured + free-text rejection reasons, outcomes, follow-up actions :: rejection reason fields (known vs guessed)
+APP-09 | P0 | Extension | MV3 extension: explicit trigger, least-privilege, one-time pairing code, origin checks :: extension + tests
+APP-10 | P0 | Extension | Field detection/mapping/preview; never overwrite user values; no demographic/legal autofill; never submit; no CAPTCHA bypass :: e2e tests
+APP-11 | P0 | Extension | Graceful fallback on unsupported sites (copy/download assistance) :: popup fallback
+APP-12 | P1 | Apply | Interviews, offers, contacts on applications; calendar export :: tracker endpoints + UI
+APP-13 | P1 | Apply | Today view (your move / coming up / waiting) :: dashboard
+INT-01 | P1 | Interview | Job/role-specific question sets with competencies (behavioural/technical) :: generated from job requirements, not generic dumps
+INT-02 | P1 | Interview | Mock practice sessions: answers, notes, feedback, improvement actions :: practice session model + UI
+INT-03 | P1 | Interview | Reference insight links (Glassdoor, Reddit, AmbitionBox, Indeed) with attribution, no scraping :: public search links + curated manual entries with timestamps
+INT-04 | P1 | Interview | Interview record: type, time, status, outcome, feedback, topics, strengths, weaknesses :: InterviewFeedback
+INT-05 | P1 | Rejection | Rejection capture: known vs guessed reasons; no invented employer rationale :: fields + UI
+INT-06 | P1 | Rejection | Funnel app→screening→interview→offer, stage losses, patterns, resume-version differences :: analytics endpoint + chart
+INT-07 | P1 | Rejection | Confirmed findings feed gap priority / mentor actions :: repeated-gap boost
+LRN-01 | P1 | Learning | ≥3 credible resources per supported gap with title/URL/provider/type/duration/level/checked date/relevance :: LearningResource catalogue
+LRN-02 | P1 | Learning | Resource ranking (relevance, credibility, level, recency, feedback) :: ranking + feedback
+LRN-03 | P1 | Learning | Opt-in learning sessions start/stop, idle vs active time, transparent state :: LearningSession + consent
+LRN-04 | P1 | Learning | Notes, completion, knowledge checks/exercises, evidence project link :: session completion + evidence
+LRN-05 | P1 | Learning | Candidate affirms progression state; no surveillance scoring :: manual state change
+LRN-06 | P1 | Learning | Official/authorized sources only (no dubious scraping) :: curated catalogue with source column
+MEN-01 | P1 | AI Mentor | Contextual action planner grounded in career graph :: GET /mentor/plan from funnel + gaps
+MEN-02 | P1 | AI Mentor | Weekly reflection: outcome, obstacle, next action :: POST /mentor/reflection
+MEN-03 | P1 | AI Mentor | Bottleneck diagnosis with confidence and limitations :: diagnosis rules with explicit observations
+MEN-04 | P1 | AI Mentor | Action checklist with due dates, priority, completion, reason :: MentorAction CRUD
+MEN-05 | P1 | AI Mentor | Five documented cases (many apps few interviews; interviews no offers; repeated gap; learning but no applying; better after resume change) :: unit tests per case
+MEN-06 | P2 | Human mentor | Consent-based invite/assignment, revocation :: MentorAssignment with consent
+MEN-07 | P2 | Human mentor | 1-on-1 virtual session views, privacy-controlled notes :: MentorSession + notes visibility
+MEN-08 | P2 | Human mentor | Profile/funnel/gap/action summaries, recommendations/overrides :: mentor workspace
+MEN-09 | P2 | Human mentor | Auditable access, no leakage across mentor relationships :: audit + isolation tests
+INTL-01 | P2 | International | Country catalogue :: Country rows with source and checked date
+INTL-02 | P2 | International | Visa route catalogue + sourced rules (dates, requirements, salary thresholds, confidence) :: VisaRoute/VisaRule
+INTL-03 | P2 | International | Country-specific profile fit: strengths, gaps, pathways, source-linked :: GET /country-fit
+INTL-04 | P2 | International | Sponsorship signals verified / inferred / unknown :: job-level signal with evidence
+INTL-05 | P2 | International | Sponsorship-aware search/apply and relocation strategy :: filters + guidance
+INTL-06 | P2 | International | Source change monitoring + notifications on material change :: visa_source_check, visa_change_detection
+INTL-07 | P2 | International | Not legal advice notices; stale rules flagged :: notice + staleness check
+INTL-08 | P2 | International | One product: India/International/Both share profile, jobs, gaps, applications :: no separate app
+NOT-01 | P0 | Notifications | New relevant job alerts :: in-app notifications on new matches
+NOT-02 | P0 | Notifications | Follow-up due, interview/upcoming schedule, action due reminders :: reminder notifications
+NOT-03 | P1 | Notifications | Learning milestone and source-change alerts :: notifications
+NOT-04 | P0 | Notifications | Preferences, channel opt-in, throttling, dedupe, retry/error state :: prefs + dedupe keys
+NOT-05 | P1 | Notifications | Email delivery when SMTP configured :: email channel, disabled honestly without credentials
+ANA-01 | P0 | Analytics | Candidate dashboard: action, snapshot, matches, active applications, reminders, latest gap :: dashboard
+ANA-02 | P0 | Analytics | Funnel counts distinguish Opened / Pending / Applied :: reports
+ANA-03 | P0 | Analytics | Sixteen PRD events instrumented with documented properties :: AnalyticsEvent rows for each
+ANA-04 | P1 | Analytics | North-star metrics: outcomes, conversions, gap closure, resume reuse, WAU, reflection completion :: admin metrics endpoint
+ANA-05 | P1 | Analytics | Onboarding activation/fall-off, job relevance, learning usefulness, extension success :: metrics
+ANA-06 | P1 | Analytics | Reports/export (Excel weekly/monthly) :: report generation
+ANA-07 | P1 | Research | In-app feedback prompts on the eleven research topics :: feedback widget + storage
+ANA-08 | P1 | Analytics | Failed/aborted actions recorded as operational events, not conversions :: event types
+ADM-01 | P0 | Admin | Source health view: runs, compliance, parse/dedup errors :: admin page
+ADM-02 | P1 | Admin | Service health, analytics, model/AI cost view :: admin metrics
+ADM-03 | P1 | Admin | Audit/security incident view :: audit log
+ADM-04 | P1 | Admin | Controlled replay/retry of runs :: admin re-run endpoint
+ADM-05 | P0 | Admin | Admin role-gated and logged :: require_admin + audit
+ADM-06 | P1 | Admin | User management and invites :: users/invites admin
+ARC-01 | P0 | Architecture | Linked career graph entities and relationships :: CAREER_GRAPH.md + FKs
+ARC-02 | P0 | Architecture | API surface equivalents of spec routes :: mapping table + routes
+ARC-03 | P0 | Architecture | Storage abstraction LocalStorage / S3Storage :: interface + local impl
+ARC-04 | P1 | Architecture | Provider-agnostic AI gateway: prompt/schema versioning, validation, retries, grounding, token budget, cost per workflow :: gateway + AICall logging
+ARC-05 | P0 | Architecture | Background worker / queue for long tasks :: in-process worker with task table
+ARC-06 | P0 | Architecture | Transactions and indexes in Postgres :: indexes on hot queries
+ARC-07 | P0 | Architecture | Data provenance rules documented :: doc
+JOB-01 | P0 | Jobs | daily_discovery :: scheduled, idempotent, tested
+JOB-02 | P0 | Jobs | source_refresh :: source health refresh
+JOB-03 | P0 | Jobs | job_normalisation :: in pipeline
+JOB-04 | P0 | Jobs | job_deduplication :: in pipeline
+JOB-05 | P0 | Jobs | job_matching :: in pipeline
+JOB-06 | P0 | Jobs | gap_generation :: job
+JOB-07 | P1 | Jobs | resume_feedback_generation :: job
+JOB-08 | P1 | Jobs | resource_refresh :: job (link checks)
+JOB-09 | P0 | Jobs | notification_dispatch :: job
+JOB-10 | P1 | Jobs | alert_email_ingestion :: job (IMAP when configured)
+JOB-11 | P1 | Jobs | report_generation :: job
+JOB-12 | P2 | Jobs | visa_source_check :: job
+JOB-13 | P2 | Jobs | visa_change_detection :: job
+JOB-14 | P1 | Jobs | analytics_rollup :: job
+JOB-15 | P0 | Jobs | cleanup_and_retention :: job
+JOB-16 | P0 | Jobs | Job registry: schedule, owner, idempotency, retry/backoff, observability, concurrency :: registry + admin view + tests
+SEC-01 | P0 | Security | Input validation, upload type/size checks, path traversal prevention :: tests
+SEC-02 | P0 | Security | Private file downloads with ownership checks and limited lifetime :: signed/short-lived download
+SEC-03 | P0 | Security | Security headers, CORS, CSRF posture :: headers + CORS allow-list
+SEC-04 | P0 | Security | No third-party passwords stored; no auto-submit; no CAPTCHA/OTP workaround :: review + tests
+SEC-05 | P0 | Security | AI outputs schema-validated, cite facts, return unknown, minimise PII :: validation layer
+SEC-06 | P0 | Security | Secrets never logged; tokens hashed :: log scrub test
+SEC-07 | P0 | Security | Every external claim shows source, date, confidence :: UI labels
+TST-01 | P0 | Testing | Unit tests: aliases, weights/version, eligibility, evidence progression, version immutability, state transitions, permissions, notification dedupe, AI validation :: tests exist and pass
+TST-02 | P0 | Testing | Integration: adapters, authz, exports/checksum/cache, jobs→matches→gaps, extension, workers, storage, migrations/restore :: tests
+TST-03 | P0 | Testing | End-to-end candidate path with two users + mentor + admin :: e2e script
+TST-04 | P1 | Testing | Visual regression of templates, PDF text extraction, mobile workflow, a11y states :: tests
+TST-05 | P0 | Testing | Security tests IDOR/BOLA, role escalation, leakage :: tests
+TST-06 | P1 | Testing | Tests for unavailable external data, stale visa info, bad jobs, fabricated AI claims, tunnel URL change :: tests
+GATE-01 | P0 | Launch gate | Zero critical data loss :: backups + restore verified
+GATE-02 | P0 | Launch gate | All shipped PDFs clean and selectable :: test
+GATE-03 | P0 | Launch gate | Previous resume version restorable :: test
+GATE-04 | P0 | Launch gate | No Applied without confirmation :: test
+GATE-05 | P0 | Launch gate | Admin source health visible :: admin page
+GATE-06 | P0 | Launch gate | Defensible scoring :: documented weights + breakdown
+GATE-07 | P0 | Launch gate | No fabricated AI candidate facts in evaluated tests :: test
+GATE-08 | P0 | Launch gate | Self-service onboarding :: e2e
+GATE-09 | P0 | Launch gate | 20 real beta candidates complete main loop :: real-world; cannot be a test
+GATE-10 | P0 | Launch gate | Ten sprint exit conditions mapped to evidence :: matrix section
+DEP-01 | P0 | Beta deploy | Single Linux host, Docker Compose, no AWS/domain/public IP/K8s :: compose stack
+DEP-02 | P0 | Beta deploy | Nginx serves frontend and same-origin /api reverse proxy without path rewrite bugs :: nginx conf + test
+DEP-03 | P0 | Beta deploy | Only Nginx/tunnel public; no exposed 5432/API/Redis/Docker/admin ports :: port audit
+DEP-04 | P0 | Beta deploy | .env.example committed, .env ignored, secure random secrets :: files
+DEP-05 | P0 | Beta deploy | GET /api/health checks app/config/DB without secrets :: endpoint + test
+DEP-06 | P0 | Beta deploy | Reproducible migrations on deploy (no dev reset), optional seed :: alembic upgrade on start
+DEP-07 | P0 | Beta deploy | Persistent Postgres volume and upload/export storage :: named volumes
+DEP-08 | P0 | Beta deploy | Cloudflare Quick Tunnel (or equivalent) exposing only Nginx; URL rotation handled :: tunnel profile + URL republish
+DEP-09 | P0 | Beta deploy | Quick Tunnel limits: no SSE dependency, URL changes on restart, protected access option :: polling only; documented
+DEP-10 | P0 | Beta deploy | Dev vs beta compose profiles :: docker-compose.dev.yml / beta profile
+DEP-11 | P0 | Beta deploy | Host requirements and uptime expectations documented :: PRIVATE_BETA_LINUX.md
+DEP-12 | P0 | Beta deploy | Startup on reboot :: restart policies + docker enabled
+DEP-13 | P0 | Beta deploy | Deployment update procedure :: documented + script
+DEP-14 | P0 | Beta deploy | Rollback to previous working image/git :: documented + tagged images
+DEP-15 | P0 | Beta deploy | In-process scheduler / cron option for discovery :: scheduler service
+OPS-01 | P0 | Operations | Daily PostgreSQL backup with rotation :: scheduled backup service + retention
+OPS-02 | P0 | Operations | Backup includes uploads/exports and config; encrypted off-host copy :: script + encryption
+OPS-03 | P0 | Operations | Verified restore, restore to second machine, RPO/RTO documented :: restore script tested
+OPS-04 | P0 | Operations | Structured logs with request ID, safe user ID, no secrets/resume text :: middleware + test
+OPS-05 | P0 | Operations | Log rotation :: docker logging limits
+OPS-06 | P0 | Operations | Health-check script and diagnostics for Docker/DB/Nginx/tunnel :: deploy/healthcheck.sh
+OPS-07 | P0 | Operations | Disk warnings at 70/80/90% :: check script + admin view
+OPS-08 | P0 | Operations | Host failure strategy documented :: doc
+OPS-09 | P1 | Operations | Test access from a different network :: manual check documented
+AWS-01 | P3 | AWS future | Portable design: S3, RDS, ECS/EC2, EventBridge, SES, CloudWatch, Secrets Manager :: AWS_FUTURE_MIGRATION.md + storage/email abstractions
+AWS-02 | P3 | AWS future | Terraform IaC, env separation, CI/CD, cost tags, budget alerts 50/80/100% :: plan documented, not provisioned
+AWS-03 | P3 | AWS future | Cost ranges are illustrative; recalculate before rollout :: doc
+AWS-04 | P3 | AWS future | Cost per active candidate, per interview/offer, AI spend per workflow, export CPU :: metrics hooks (AICall cost)
+AWS-05 | P3 | AWS future | Upgrade triggers (reliability, worker contention, DB IO, export queues, search, traffic) :: documented
+AWS-06 | P3 | AWS future | Avoid EKS/OpenSearch/NAT/over-engineering until triggered :: doc
+FUT-01 | P3 | Future | Predictive career pathways only with validated outcome data :: labelled experimental; no predictions shipped
+FUT-02 | P3 | Future | Interview intelligence / long-term pathway research :: tracked
+NEG-01 | P0 | Exclusion | Not a job-application bot: no blind mass applying, no auto-submit :: enforced
+NEG-02 | P0 | Exclusion | No scraping behind logins / ToS-violating scraping / anti-bot bypass :: enforced
+NEG-03 | P0 | Exclusion | Score is not a hiring, immigration or parsability guarantee :: wording checks
+NEG-04 | P0 | Exclusion | MVP avoids: mentor marketplace, Kafka, microservices, OpenSearch, Redis cluster, K8s, paid monitoring :: not built
+NEG-05 | P0 | Exclusion | Courses/projects never presented as employment; no fabricated experience :: enforced
+NEG-06 | P0 | Exclusion | Not legal advice; no visa approval claims :: notices
+GTM-01 | P1 | Launch | Early-user feedback themes and consentful interviews :: feedback prompts + guide
+GTM-02 | P1 | Launch | Launch strategy and beta success test :: documented; tracked separately from 2–4 user pilot
+INFO | - | Informational | Context, narrative, marketing or reference text with no buildable requirement :: INFORMATIONAL_ONLY

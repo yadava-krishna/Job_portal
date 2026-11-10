@@ -34,7 +34,7 @@ ALLOWED: dict[str, set[str]] = {
     "WITHDRAWN": set(),
 }
 ACTIVE = ("PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED")
-STAGES = ("applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "archived")
+STAGES = ("applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "ghosted", "archived")
 # How the user applied, from the confirmation source (shown in the tracker).
 SUBMISSION_METHODS = {"user_confirmed": "Employer website, confirmed in JobPilot",
                       "extension_user_confirmed": "Employer website, confirmed in the extension"}

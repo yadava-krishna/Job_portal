@@ -20,9 +20,9 @@ from core.skills import normalize_text
 from intelligence.jd_analyzer import JDAnalyzer
 
 # Posting-date provenance, strongest first. Only these count as "verified" for date filters.
-VERIFIED_DATE_SOURCES = ("platform_api", "platform_page", "user_provided")
+VERIFIED_DATE_SOURCES = ("platform_api", "platform_page", "platform_feed", "user_provided")
 ESTIMATED_DATE_SOURCES = ("alert_email",)
-DATE_SOURCE_RANK = {"platform_api": 4, "platform_page": 3, "user_provided": 2, "alert_email": 1, None: 0}
+DATE_SOURCE_RANK = {"platform_api": 4, "platform_page": 3, "platform_feed": 3, "user_provided": 2, "alert_email": 1, None: 0}
 
 ATS_SOURCES = ("greenhouse", "lever", "ashby", "smartrecruiters", "recruitee")
 SOURCE_PLATFORM = {"greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby", "smartrecruiters": "SmartRecruiters",
@@ -64,6 +64,13 @@ class NormalizedJob:
     department: str | None = None
     company_id: int | None = None
     fingerprint: str | None = None   # legacy CLI fingerprint, kept for reports
+    country: str | None = None
+    seniority: str | None = None
+    application_url: str | None = None
+    source_name: str | None = None
+    extraction_method: str | None = None
+    extraction_confidence: float | None = None
+    parser_version: str | None = None
 
     @property
     def key(self) -> str:

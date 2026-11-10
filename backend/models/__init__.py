@@ -45,7 +45,7 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # user | admin. Enforced by the backend (require_admin), never only by the UI.
+    # user (candidate) | mentor | admin. Enforced by the backend (require_admin), never only by the UI.
     role: Mapped[str] = mapped_column(String(20), default="user", server_default=text("'user'"), nullable=False)
     nickname: Mapped[str | None] = mapped_column(String(60))
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -113,6 +113,13 @@ class JobPreference(Base, TimestampMixin):
     min_match_score: Mapped[float] = mapped_column(Float, default=70, nullable=False)
     weights: Mapped[dict[str, float]] = mapped_column(JSONType, default=dict, nullable=False)
     application_settings: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    # Career goals (PRD onboarding): these drive discovery regions, eligibility and country fit.
+    search_mode: Mapped[str] = mapped_column(String(15), default="india", server_default=text("'india'"), nullable=False)  # india|international|both
+    target_countries: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))
+    seniority: Mapped[str | None] = mapped_column(String(30))
+    open_to_relocation: Mapped[bool | None] = mapped_column(Boolean)
+    work_authorization: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))  # ISO country codes
+    needs_sponsorship: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class PlatformPreference(Base, TimestampMixin):
@@ -186,8 +193,22 @@ class Job(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(String(30), nullable=False)
     application_method: Mapped[str | None] = mapped_column(String(300))
+    country: Mapped[str | None] = mapped_column(String(10))
+    seniority: Mapped[str | None] = mapped_column(String(50))
+    application_url: Mapped[str | None] = mapped_column(String(1000))
+    extraction_method: Mapped[str | None] = mapped_column(String(50))
+    extraction_confidence: Mapped[float | None] = mapped_column(Float)
+    parser_version: Mapped[str | None] = mapped_column(String(50))
+    freshness_score: Mapped[float] = mapped_column(Float, default=1.0, server_default=text("1.0"), nullable=False)
+    is_expired: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    # verified (the posting says so) | inferred (e.g. international company + relocation wording) | unknown
+    sponsorship_signal: Mapped[str] = mapped_column(String(10), default="unknown", server_default=text("'unknown'"), nullable=False)
+    sponsorship_evidence: Mapped[str | None] = mapped_column(String(300))
+    last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    __table_args__ = (Index("ix_jobs_active_posted", "is_expired", "posted_at"),)
 
 
 class DiscoveryRun(Base):
@@ -237,6 +258,10 @@ class UserJob(Base):
     eligibility_reasons: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
     scoring_method: Mapped[str | None] = mapped_column(String(100))
     scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # JobMatch: versioned 8-dimension breakdown (scoring_v2). Eligibility is separate and may be "unknown".
+    score_version: Mapped[str | None] = mapped_column(String(20))
+    match_components: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))
+    eligibility: Mapped[str | None] = mapped_column(String(10))  # pass | fail | unknown
     saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
@@ -272,6 +297,19 @@ class Application(Base, TimestampMixin):
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
     follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Route orchestration: ROUTE_A_DIRECT_API | ROUTE_B_ATS_FORM | ROUTE_C_EMAIL | ROUTE_D_EXTERNAL_MANUAL
+    application_route: Mapped[str] = mapped_column(String(50), default="ROUTE_D_EXTERNAL_MANUAL", nullable=False)
+    tailored_resume_id: Mapped[int | None] = mapped_column(ForeignKey("tailored_resumes.id", ondelete="SET NULL"))
+    route_metadata: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    # Exact resume used: version + the export file checksum. Locked versions are immutable.
+    resume_version_id: Mapped[int | None] = mapped_column(ForeignKey("resume_versions.id", ondelete="SET NULL"))
+    resume_export_id: Mapped[int | None] = mapped_column(ForeignKey("resume_exports.id", ondelete="SET NULL"))
+    resume_checksum: Mapped[str | None] = mapped_column(String(64))
+    # Rejection intelligence: structured code + free text; "known" only when the employer actually said so.
+    rejection_reason: Mapped[str | None] = mapped_column(String(40))
+    rejection_detail: Mapped[str | None] = mapped_column(Text)
+    rejection_reason_known: Mapped[bool | None] = mapped_column(Boolean)
+    outcome_notes: Mapped[str | None] = mapped_column(Text)
 
     job: Mapped[Job] = relationship(lazy="joined")
 
@@ -468,6 +506,12 @@ class Interview(Base, TimestampMixin):
     location: Mapped[str | None] = mapped_column(String(300))
     interviewers: Mapped[str | None] = mapped_column(String(300))
     outcome: Mapped[str] = mapped_column(String(20), default="scheduled", nullable=False)  # scheduled|passed|failed|cancelled
+    interview_type: Mapped[str | None] = mapped_column(String(20))  # hr|technical|behavioural|case|panel|final
+    topics: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))
+    strengths: Mapped[str | None] = mapped_column(Text)
+    weaknesses: Mapped[str | None] = mapped_column(Text)
+    candidate_feedback: Mapped[str | None] = mapped_column(Text)
+    feedback_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
 
 
@@ -563,6 +607,53 @@ class JobSourceLink(Base):
     posted_at_source: Mapped[str | None] = mapped_column(String(20))
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    extraction_method: Mapped[str | None] = mapped_column(String(50))
+    extraction_confidence: Mapped[float | None] = mapped_column(Float)
+    connector_id: Mapped[int | None] = mapped_column(ForeignKey("source_connectors.id", ondelete="SET NULL"))
+
+
+class SourceConnector(Base, TimestampMixin):
+    """Metadata, policy state, and telemetry for a discovery source connector."""
+
+    __tablename__ = "source_connectors"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    domain: Mapped[str | None] = mapped_column(String(255))
+    category: Mapped[str] = mapped_column(String(50), nullable=False)
+    access_method: Mapped[str] = mapped_column(String(50), nullable=False)
+    permission_status: Mapped[str] = mapped_column(String(50), default="permission_required", nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    rate_limit_rpm: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    health_status: Mapped[str] = mapped_column(String(20), default="unknown", nullable=False)
+    jobs_discovered: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    jobs_updated: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    jobs_rejected: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class UserCareerUrl(Base, TimestampMixin):
+    """A user-submitted company careers URL to monitor for new listings."""
+
+    __tablename__ = "user_career_urls"
+    __table_args__ = (UniqueConstraint("user_id", "url", name="uq_user_career_urls_user_url"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"))
+    detected_ats: Mapped[str | None] = mapped_column(String(50))
+    detected_sources: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    robots_txt_status: Mapped[str | None] = mapped_column(String(20))
+    sitemap_url: Mapped[str | None] = mapped_column(Text)
+    feed_url: Mapped[str | None] = mapped_column(Text)
+    has_json_ld: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_crawled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    jobs_found: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class UserAchievement(Base):
@@ -574,7 +665,179 @@ class UserAchievement(Base):
     earned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+# --- Phase 10: Career Intelligence Models ---
+
+class CandidateProfileV2(Base, TimestampMixin):
+    __tablename__ = "candidate_profiles_v2"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    headline: Mapped[str | None] = mapped_column(String(255))
+    summary: Mapped[str | None] = mapped_column(Text)
+    years_experience: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    relevant_it_experience: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    highest_education_level: Mapped[str | None] = mapped_column(String(50))
+    preferred_locations: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    work_modes: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    work_authorization: Mapped[str] = mapped_column(String(100), default="India (Citizen)", nullable=False)
+    expected_ctc_inr: Mapped[int | None] = mapped_column(Integer)
+    notice_period_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    verified_facts: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+
+    # Master profile sections beyond work history. Each item: {..., "source": "resume_parse|manual", "verified": bool}
+    contact: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False, server_default=text("'{}'"))
+    education: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))
+    projects: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))
+    certifications: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))
+    publications: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False, server_default=text("'{}'"))
+
+    experiences: Mapped[list["ProfileWorkExperience"]] = relationship(back_populates="profile", cascade="all, delete-orphan", lazy="selectin")
+    skills: Mapped[list["ProfileSkill"]] = relationship(back_populates="profile", cascade="all, delete-orphan", lazy="selectin")
+
+
+class ProfileWorkExperience(Base):
+    __tablename__ = "profile_work_experiences"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("candidate_profiles_v2.id", ondelete="CASCADE"), nullable=False, index=True)
+    company: Mapped[str] = mapped_column(String(200), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    start_date: Mapped[date | None] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    technologies: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    verified_bullets: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+    profile: Mapped[CandidateProfileV2] = relationship(back_populates="experiences")
+
+
+class ProfileSkill(Base):
+    __tablename__ = "profile_skills"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("candidate_profiles_v2.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(50), default="technical", nullable=False)
+    proficiency: Mapped[str] = mapped_column(String(30), default="INTERMEDIATE", nullable=False)
+    years: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    profile: Mapped[CandidateProfileV2] = relationship(back_populates="skills")
+
+
+class JobMatchReport(Base):
+    __tablename__ = "job_match_reports"
+    __table_args__ = (UniqueConstraint("user_id", "job_id", name="uq_job_match_reports_user_job"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    composite_score: Mapped[float] = mapped_column(Float, nullable=False)
+    eligibility_score: Mapped[float] = mapped_column(Float, nullable=False)
+    skill_score: Mapped[float] = mapped_column(Float, nullable=False)
+    experience_score: Mapped[float] = mapped_column(Float, nullable=False)
+    preference_score: Mapped[float] = mapped_column(Float, nullable=False)
+    matched_skills: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    missing_skills: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    disqualifiers: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    explanation: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+# --- Phase 11: Resume Studio Models ---
+
+class TailoredResume(Base, TimestampMixin):
+    __tablename__ = "tailored_resumes"
+    __table_args__ = (UniqueConstraint("user_id", "job_id", name="uq_tailored_resumes_user_job"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    selected_bullets: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False)
+    tailored_summary: Mapped[str | None] = mapped_column(Text)
+    is_truthful_audited: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class ATSDiagnosticReport(Base):
+    __tablename__ = "ats_diagnostic_reports"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    resume_id: Mapped[int | None] = mapped_column(Integer)
+    tailored_resume_id: Mapped[int | None] = mapped_column(ForeignKey("tailored_resumes.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tier1_structure_score: Mapped[float] = mapped_column(Float, nullable=False)
+    tier2_content_score: Mapped[float] = mapped_column(Float, nullable=False)
+    tier3_parsing_score: Mapped[float] = mapped_column(Float, nullable=False)
+    overall_score: Mapped[float] = mapped_column(Float, nullable=False)
+    findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+# --- Phase 13: Stage Transition Models ---
+
+class StageTransition(Base):
+    __tablename__ = "stage_transitions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    from_stage: Mapped[str | None] = mapped_column(String(30))
+    to_stage: Mapped[str] = mapped_column(String(30), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    transitioned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+# --- Phase 14: IT Government Schemes Models ---
+
+class ITGovernmentScheme(Base):
+    __tablename__ = "it_government_schemes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    state_or_central: Mapped[str] = mapped_column(String(50), nullable=False)  # Karnataka, Central, Telangana, Tamil Nadu
+    beneficiary_type: Mapped[str] = mapped_column(String(50), nullable=False)  # INDIVIDUAL, STARTUP, MSME_TECH, SOFTWARE_EXPORTER
+    max_funding_inr: Mapped[float | None] = mapped_column(Float)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    eligibility_criteria: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    benefits_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    application_url: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class UserSavedScheme(Base):
+    __tablename__ = "user_saved_schemes"
+    __table_args__ = (UniqueConstraint("user_id", "scheme_id", name="uq_user_saved_schemes_user_scheme"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    scheme_id: Mapped[int] = mapped_column(ForeignKey("it_government_schemes.id", ondelete="CASCADE"), nullable=False, index=True)
+    is_eligible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    eligibility_reasons: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+# --- Phase 16: Task Queue Model ---
+
+class TaskQueueItem(Base):
+    __tablename__ = "task_queue"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="QUEUED", nullable=False, index=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
 USER_OWNED_MODELS = (Resume, CandidateProfile, JobPreference, PlatformPreference, EmailIntegration, DiscoveryRun,
                      UserJob, Application, ApplicationEvent, Report, RunError, RefreshToken, Notification, NotificationPref,
                      UserActivitySession, JobView, ExtensionToken, Interview, Offer, ApplicationContact, SavedSearch,
-                     UserAchievement, UserCompany)
+                     UserAchievement, UserCompany, UserCareerUrl, CandidateProfileV2, JobMatchReport, TailoredResume,
+                     ATSDiagnosticReport, StageTransition, UserSavedScheme)
+
+
+from backend.models.career import *  # noqa: E402,F401,F403  (career graph tables, migration 0007)
+from backend.models.career import CAREER_USER_OWNED  # noqa: E402
+
+USER_OWNED_MODELS = USER_OWNED_MODELS + CAREER_USER_OWNED

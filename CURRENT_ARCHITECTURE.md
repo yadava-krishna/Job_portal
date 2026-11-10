@@ -121,3 +121,55 @@ matching_service.UserMatcher (rule-based, labelled; LLM when configured) → not
   `notification_prefs` tables, and JSON columns.
 - **Deployment:** `restart: unless-stopped`, health checks on all four services, and `deploy/url_watch.sh`
   (republishes the tunnel URL; cron entry to be added by the owner). See DEPLOYMENT.md.
+
+
+## 7. Scrapling Multi-Source Expansion & Phases 4–8 Completion (Added in this Session - 2026-11-06)
+
+This session transformed JobPilot into a multi-source discovery engine powered by the Scrapling framework, and delivered the remaining roadmap phases (Phase 4 tracking completion, Phase 5 Admin Dashboard, Phase 6 Visual Delight & Gamification, Phase 7 SMTP & Password Reset, and Phase 8 DevOps Hardening).
+
+### Multi-Source Discovery & Scrapling Architecture
+- **Framework Integration**: `scrapling[fetchers]==0.5.1` (with `lxml 6.1.3`, `curl_cffi 0.17.0`, `patchright 1.64.4`, `orjson`, `cssselect`, `protego`).
+- **Scrapling Engine (`backend/services/scrapling_client.py`)**: Wraps `Fetcher` and `StealthyFetcher` with strict SSRF defense (DNS resolution checks against loopback, private IPv4/IPv6, link-local, multicast, cloud metadata), token-bucket per-domain rate limiting, `robots.txt` compliance caching, response size caps (25 MB), and mock hooks for isolated unit testing.
+- **Source Policy Registry (`backend/services/source_policies.py`)**: Centralized compliance registry with 50+ pre-registered sources categorized by category (`EMPLOYER_DIRECT`, `PUBLIC_SECTOR`, `ACADEMIC`, `AGGREGATOR`, `FEED`), access method, and rate limits. Strictly enforces zero scraping on LinkedIn, Indeed, and Naukri (reserved exclusively for assisted clipper and alert emails).
+- **Connector Suite (`backend/services/connectors/`)**: 12 modular connectors registering with the connector registry:
+  1. `jsonld_connector.py`: Schema.org `JobPosting` extractor.
+  2. `rss_connector.py`: RSS 2.0 and Atom XML feed parser.
+  3. `sitemap_connector.py`: XML sitemap crawler with `<url><loc>` pattern filtering.
+  4. `html_connector.py`: Scrapling CSS/XPath selector extractor using `scrapling.parser.Adaptor`.
+  5. `career_url_connector.py`: SSRF-vetted employer career URL explorer with ATS auto-detection and fallback discovery.
+  6. `remotive_connector.py`: Remotive tech & remote jobs API connector.
+  7. `himalayas_connector.py`: Himalayas remote jobs API connector.
+  8. `remoteok_connector.py`: RemoteOK API feed connector.
+  9. `arbeitnow_connector.py`: Arbeitnow European & global jobs API connector.
+  10. `ncs_connector.py`: National Career Service (NCS) India public portal connector.
+  11. `government_connector.py`: Indian public sector exam and job notices (UPSC, SSC, ISRO, DRDO).
+  12. `academic_connector.py`: Indian premier institutions (IIT Bombay, IIT Delhi, IIT Madras, IISc).
+- **Database Schema Migration (`0004_multi_source_discovery.py`)**:
+  - `source_connectors`: Tracks source health, status, rate limits, and discovery counts.
+  - `user_career_urls`: Stores user-submitted custom career sites.
+  - Multi-source columns on `jobs`: `country`, `seniority`, `application_url`, `source_name`, `extraction_method`, `extraction_confidence`, `parser_version`.
+  - Columns on `job_source_links`: `source_name`, `extraction_confidence`, `discovered_via`.
+
+### Phase 4–8 Deliverables Added
+- **Phase 4 (Tracking & Actions)**:
+  - `<TodayView />`: Tri-bucket agenda (Your Move, Coming Up, Waiting On Them) mounted prominently on the Dashboard.
+  - Interview tracker: Round scheduling, notes, meeting links, and iCalendar export (`/api/v1/interviews/calendar.ics`).
+  - Offer tracker: Salary, bonus, equity, currency, deadlines, and offer negotiation status.
+  - Contacts manager: Per-application recruiter and hiring manager directory.
+  - Data privacy: Full JSON account export (`/api/v1/account/export`) and password-verified account deletion.
+  - Heartbeat monitor (`useHeartbeat`): Tracks active user sessions without battery drain.
+- **Phase 5 (Admin Console)**:
+  - RBAC security: `require_admin` dependency and role-protected API endpoints under `/api/v1/admin/`.
+  - Frontend `/admin` route: Metrics dashboard, user activation/deactivation, role toggling, single/multi-use invite code generation, and immutable audit logs.
+- **Phase 6 (Visual Delights & Gamification)**:
+  - Theme system: Persistent Dark/Light mode toggle (`<ThemeToggle />`) in the top navigation bar.
+  - Nautical nicknames: Random maritime moniker generator (`services/nickname_service.py`).
+  - Milestone badges: Achievement badge system (`services/achievement_service.py`) celebrating search milestones.
+- **Phase 7 (Transactional Email & SMTP)**:
+  - SMTP dispatcher (`services/email_service.py`) supporting SSL/STARTTLS.
+  - Password recovery: Secure tokenized password reset (`/auth/forgot-password`, `/auth/reset-password`).
+- **Phase 8 (DevOps & Hardening)**:
+  - Automated zero-downtime database and storage backup (`deploy/backup.sh`) with SHA256 checksums and 7-day retention.
+  - Safe restoration script (`deploy/restore.sh`) with checksum verification and dry-run preview.
+  - Production logging: Structured JSON formatter (`JSONFormatter` when `LOG_FORMAT=json`) and `X-Request-ID` correlation middleware.
+

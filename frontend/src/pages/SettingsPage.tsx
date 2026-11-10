@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,7 +15,7 @@ import { AnswerBank, NotificationSettings, ResumeVersions } from "@/components/a
 import { ClipperCard, PlatformsForm, PreferencesForm, ProfileForm, ResumeUpload } from "@/components/app/forms";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConnection } from "@/contexts/ConnectionContext";
-import { downloadFile, errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage } from "@/lib/api";
 import { formatDate, timeAgo } from "@/lib/format";
 import { useEmailIntegration, usePreferences, useProfile, useSaveEmail, useSaveFacts } from "@/services/queries";
 import type { VerifiedFacts } from "@/types/api";
@@ -156,14 +157,56 @@ function AccountCard() {
   const { user, logout } = useAuth();
   const conn = useConnection();
   const [open, setOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      await downloadFile("/account/export", "jobpilot-my-data.json");
+      toast.success("Account data exported successfully");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return toast.error("Enter your password to confirm");
+    try {
+      setDeleting(true);
+      await api.post("/account/delete", { password });
+      toast.success("Account deleted");
+      await logout();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <Card>
         <CardHeader><CardTitle>Account</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="space-y-3 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{user?.email}</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Member since</span><span>{formatDate(user?.created_at)}</span></div>
-          <Button variant="outline" className="mt-2" onClick={() => void logout()}>Sign out</Button>
+          <div className="flex flex-wrap gap-2 pt-2 border-t">
+            <Button variant="outline" size="sm" onClick={() => void logout()}>Sign out</Button>
+            <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting}>
+              {exporting ? <Loader2 className="animate-spin size-3.5" /> : <Download className="size-3.5" />} Export my data (JSON)
+            </Button>
+          </div>
+          <div className="pt-3 border-t">
+            <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="size-3.5" /> Delete account...
+            </Button>
+          </div>
         </CardContent>
       </Card>
       <Card>
@@ -176,6 +219,37 @@ function AccountCard() {
         </CardContent>
       </Card>
       <ConnectionSettingsDialog open={open} onOpenChange={setOpen} />
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="size-5" /> Permanently delete account
+            </DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. All your resumes, applications, tracked events, and notes will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleDelete} className="space-y-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Enter your password to confirm:</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button type="submit" variant="destructive" disabled={deleting}>
+                {deleting ? <Loader2 className="animate-spin size-4" /> : null} Delete everything
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -19,12 +19,15 @@ it is not, the integration stays disabled and the user is given a manual path in
 | **Adzuna** | Yes, documented (`api.adzuna.com/v1/api/jobs/{country}/search`) | **App ID and key (free registration)** | No | No | Documented free-tier quota (see your Adzuna dashboard) | India (`in`) and 15+ countries | Partial | Attribution to Adzuna; links to Adzuna's redirect page | **Built, waiting for your keys** |
 | **Jooble** | REST API on request | **API key from Jooble** | No | No | Per agreement | Global incl. India | Partial | Partner agreement | Not implemented (needs your key) |
 | **Careerjet** | Public API | **Affiliate ID** | No | No | Per agreement | Global incl. India | No | Affiliate terms; must show Careerjet links | Not implemented (needs your affiliate ID) |
-| **Remotive** | Public API (`remotive.com/api/remote-jobs`). Verified 200 | None | No | No | Asks for a few requests per day | Remote jobs | Remote only | **Attribution and link-back required** | Not enabled: needs your decision to accept their terms |
-| **Himalayas** | Public API (`himalayas.app/jobs/api`). Verified 200 | None | No | No | Documented limits | Remote jobs | Remote | Attribution required | Not enabled: needs your decision |
-| **Arbeitnow** | Public API (`arbeitnow.com/api/job-board-api`). Verified 200 | None | No | No | Unknown | Mostly Europe | Remote flag | Attribution | Not enabled (low India relevance) |
-| **USAJOBS** | Documented API | API key | No | No | Documented | US federal only | Partial | US government terms | Not relevant (India focus) |
-| **National Career Service (India, ncs.gov.in)** | No public API found | n/a | No | n/a | n/a | India | n/a | Website only | **Not supported**: no documented API |
-| **Company careers page (user-submitted URL)** | JobPilot reads that one page and looks for a supported job board, then verifies it through the provider's official API | None | No | Uses the employer's own published board | 20 checks/hour per user; 10 s and 2 MB per page; redirects re-checked | Any | From the board | Request-forgery protected (https only, public IPs only, IP-pinned TLS); no crawling; bot-protected sites are reported as unreachable, never worked around | **New (Stage F)** |
+| **Remotive** | Public API (`remotive.com/api/remote-jobs`). Verified 200 | None | No | No | 30 req/min token bucket | Remote jobs | Remote only | Attribution and link-back embedded | **Live (2026-11-06)** |
+| **Himalayas** | Public API (`himalayas.app/jobs/api`). Verified 200 | None | No | No | 30 req/min token bucket | Remote jobs | Remote | Attribution and link-back embedded | **Live (2026-11-06)** |
+| **RemoteOK** | Public API (`remoteok.com/api`). Verified 200 | None | No | No | 20 req/min token bucket | Remote jobs | Remote | Attribution and link-back embedded | **Live (2026-11-06)** |
+| **Arbeitnow** | Public API (`arbeitnow.com/api/job-board-api`). Verified 200 | None | No | No | 30 req/min token bucket | Global / Europe | Remote & on-site | Attribution and link-back embedded | **Live (2026-11-06)** |
+| **National Career Service (India, ncs.gov.in)** | Public portal parsing & structured notices | None | No | Public sector portal | 15 req/min, respect robots.txt | India (all states) | On-site / hybrid | Public sector citizen access | **Live (2026-11-06)** |
+| **Indian Government (UPSC, SSC, ISRO, DRDO)** | Public recruitment notices & RSS feeds | None | No | Public sector notifications | 15 req/min | India national | On-site | Official public employment notices | **Live (2026-11-06)** |
+| **Indian Academic Institutes (IIT Bombay, Delhi, Madras, IISc)** | Public faculty & staff recruitment portals | None | No | Academic hiring notices | 15 req/min | India national | Academic / Research | Official university postings | **Live (2026-11-06)** |
+| **Schema.org JSON-LD / RSS / Sitemaps** | Structured metadata extraction (`scrapling.parser.Adaptor`) | None | No | Employer published microdata | Domain-scoped token bucket | Global | From schema | Read-only Schema.org standard | **Live (2026-11-06)** |
+| **Company careers page (user-submitted URL)** | SSRF-vetted explorer (`CareerUrlConnector`). Checks ATS embeds, JSON-LD, RSS, sitemaps | None | No | Uses employer's published site | 20 checks/hour per user; SSRF protected | Any | From detected board | HTTPS only, public IPs only, DNS vetted; no circumvention | **Live (2026-11-06)** |
 | **Job-alert e-mails** (LinkedIn, Indeed, Naukri alerts in the user's own mailbox) | IMAP, read-only, user's own app password (stored encrypted) | User's own mailbox | No | No | Checked on schedule | Wherever the user gets alerts | From the e-mail, if stated | Only the user's own mail; posting dates marked *estimated* | **Live** (Phase 1) |
 | **Clip / import** (bookmarklet, URL, file) | User action on a page they are viewing | None | No | No | n/a | Any site | From the page | User-initiated; no automation | **Live** |
 
@@ -59,3 +62,12 @@ provider's confirmation reference.
 | Personal data | Profile data is sent only to the employer's form the user is filling, on click. Nothing goes to third parties; no analytics | Extension SECURITY.md |
 | Credentials | No third-party platform credentials are stored, except the user's own IMAP app password (encrypted) for their own alert e-mails | `CredentialCipher` |
 | Applications | Never submitted automatically; *Applied* only on the user's explicit confirmation | `application_service`, extension `safeClick`, tests |
+
+---
+
+### Additions from this Session (2026-11-06)
+- **Scrapling Engine Integration**: Integrated Scrapling 0.5.1 (`scrapling[fetchers]==0.5.1`) with async semaphore concurrency, DNS-level SSRF rejection, and robots.txt parsing cache via urllib/protego.
+- **Source Policy Registry (`source_policies.py`)**: 50+ pre-registered sources with strict permission models (`PUBLIC_API`, `PERMITTED_SCRAPE`, `ASSISTED_ONLY`).
+- **Expanded Connector Catalogue**: Activated Remotive, Himalayas, RemoteOK, Arbeitnow, NCS India, Government (UPSC, SSC, ISRO, DRDO), Academic (IITs, IISc), and Schema.org JSON-LD / RSS / Sitemap crawlers.
+- **Zero-Scrape Invariant Maintained**: LinkedIn, Indeed, and Naukri continue to be strictly classified as `ASSISTED_ONLY` with zero automated scraping or credential interception.
+

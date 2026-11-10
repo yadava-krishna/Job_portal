@@ -4,6 +4,8 @@ export interface User {
   id: number;
   email: string;
   full_name: string | null;
+  role?: string;
+  is_active?: boolean;
   created_at: string;
   onboarding_completed_at: string | null;
 }
@@ -508,4 +510,47 @@ export interface AppNotification {
 export interface NotificationList {
   items: AppNotification[];
   unread: number;
+}
+
+export interface Interview {
+  id: number;
+  application_id: number;
+  round: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  meeting_url: string | null;
+  interviewer: string | null;
+  notes: string | null;
+  outcome: string;
+  created_at: string;
+  company?: string;
+  title?: string;
+}
+
+export interface Offer {
+  id: number;
+  application_id: number;
+  base_salary: number | null;
+  currency: string;
+  bonus: number | null;
+  equity: string | null;
+  signing_bonus: number | null;
+  deadline: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  company?: string;
+  title?: string;
+}
+
+export interface ApplicationContact {
+  id: number;
+  application_id: number;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  notes: string | null;
+  created_at: string;
 }

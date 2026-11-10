@@ -80,6 +80,9 @@ def application(app: Application, uj: UserJob | None = None) -> ApplicationOut:
         resume_used=app.resume_used, reference_id=app.reference_id, confirmation_text=app.confirmation_text,
         confirmation_source=app.confirmation_source, created_at=app.created_at, opened_at=app.opened_at, submitted_at=app.submitted_at,
         submission_method=application_service.submission_method(app), follow_up_at=app.follow_up_at, job=job_listing(app.job),
+        application_route=getattr(app, "application_route", "ROUTE_D_EXTERNAL_MANUAL") or "ROUTE_D_EXTERNAL_MANUAL",
+        tailored_resume_id=getattr(app, "tailored_resume_id", None),
+        route_metadata=getattr(app, "route_metadata", {}) or {},
     )
 
 

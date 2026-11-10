@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
+import { Calendar, ExternalLink, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, NativeSelect, PageHeader, PlatformBadge, ScoreBadge, StageBadge, StatusBadge } from "@/components/app/common";
 import { ApplyDialog } from "@/components/app/ApplyDialog";
-import { errorMessage } from "@/lib/api";
+import { api, downloadFile, errorMessage } from "@/lib/api";
 import { formatDate, stageLabels, statusLabels } from "@/lib/format";
 import { useApplication, useApplicationAction, useApplications, useUpdateTracking } from "@/services/queries";
-import type { Application, Stage, UserJob } from "@/types/api";
+import type { Application, ApplicationContact, Interview, Offer, Stage, UserJob } from "@/types/api";
 
 const STAGES: Stage[] = ["applied", "screening", "assessment", "interview", "offer", "rejected"];
 const MOVE_TO: Stage[] = [...STAGES, "archived"];
@@ -40,7 +40,19 @@ export function AppliedPage() {
 
   return (
     <>
-      <PageHeader title="Applications" description="Everything you prepared or applied to, and where each application stands." />
+      <PageHeader
+        title="Applications"
+        description="Everything you prepared or applied to, and where each application stands."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void downloadFile("/interviews/calendar.ics", "jobpilot-interviews.ics").catch((e) => toast.error(errorMessage(e)))}
+          >
+            <Calendar className="size-4" /> Download calendar (.ics)
+          </Button>
+        }
+      />
       <Tabs defaultValue="list">
         <TabsList>
           <TabsTrigger value="list">All applications</TabsTrigger>
@@ -136,34 +148,60 @@ export function AppliedPage() {
 function ApplicationDetailDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
   const { data } = useApplication(id);
   const action = useApplicationAction();
+
   return (
     <Dialog open={id != null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
         {!data ? <Loader2 className="animate-spin" /> : (
           <>
             <DialogHeader>
               <DialogTitle>{data.job.title}</DialogTitle>
               <DialogDescription>{data.job.company} · {data.job.platform} · <StatusBadge status={data.status} /></DialogDescription>
             </DialogHeader>
-            <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1.5 text-sm">
-              <dt className="text-muted-foreground">Prepared</dt><dd>{formatDate(data.created_at, true)}</dd>
-              <dt className="text-muted-foreground">Submitted</dt><dd>{data.submitted_at ? formatDate(data.submitted_at, true) : "—"}</dd>
-              <dt className="text-muted-foreground">Reference</dt><dd>{data.reference_id ?? "—"}</dd>
-              <dt className="text-muted-foreground">How you applied</dt><dd>{data.submission_method ?? "—"}</dd>
-              <dt className="text-muted-foreground">Resume used</dt><dd>{data.resume_used ?? "—"}</dd>
-              {data.job.job_url && <><dt className="text-muted-foreground">Original listing</dt><dd><a className="underline" href={data.job.job_url} target="_blank" rel="noopener noreferrer">Open</a></dd></>}
-            </dl>
-            <TrackingForm id={data.id} notes={data.notes} followUp={data.follow_up_at ?? null} />
-            <div>
-              <h4 className="mb-2 text-sm font-medium">History</h4>
-              <ol className="space-y-1.5 border-l pl-4 text-sm">
-                {data.events.map((e) => (
-                  <li key={e.id}><span className="font-medium">{e.event_type.replaceAll("_", " ").toLowerCase()}</span> <span className="text-muted-foreground">· {formatDate(e.created_at, true)}</span>{e.details && <div className="text-xs text-muted-foreground">{e.details}</div>}</li>
-                ))}
-              </ol>
-            </div>
+
+            <Tabs defaultValue="overview" className="mt-2">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="interviews">Interviews</TabsTrigger>
+                <TabsTrigger value="offer">Offer</TabsTrigger>
+                <TabsTrigger value="contacts">Contacts</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview" className="space-y-4 pt-3">
+                <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1.5 text-sm">
+                  <dt className="text-muted-foreground">Prepared</dt><dd>{formatDate(data.created_at, true)}</dd>
+                  <dt className="text-muted-foreground">Submitted</dt><dd>{data.submitted_at ? formatDate(data.submitted_at, true) : "—"}</dd>
+                  <dt className="text-muted-foreground">Reference</dt><dd>{data.reference_id ?? "—"}</dd>
+                  <dt className="text-muted-foreground">How you applied</dt><dd>{data.submission_method ?? "—"}</dd>
+                  <dt className="text-muted-foreground">Resume used</dt><dd>{data.resume_used ?? "—"}</dd>
+                  {data.job.job_url && <><dt className="text-muted-foreground">Original listing</dt><dd><a className="underline" href={data.job.job_url} target="_blank" rel="noopener noreferrer">Open</a></dd></>}
+                </dl>
+                <TrackingForm id={data.id} notes={data.notes} followUp={data.follow_up_at ?? null} />
+                <div>
+                  <h4 className="mb-2 text-sm font-medium">History</h4>
+                  <ol className="space-y-1.5 border-l pl-4 text-sm">
+                    {data.events.map((e) => (
+                      <li key={e.id}><span className="font-medium">{e.event_type.replaceAll("_", " ").toLowerCase()}</span> <span className="text-muted-foreground">· {formatDate(e.created_at, true)}</span>{e.details && <div className="text-xs text-muted-foreground">{e.details}</div>}</li>
+                    ))}
+                  </ol>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="interviews" className="pt-3">
+                <InterviewsSection applicationId={data.id} />
+              </TabsContent>
+
+              <TabsContent value="offer" className="pt-3">
+                <OfferSection applicationId={data.id} />
+              </TabsContent>
+
+              <TabsContent value="contacts" className="pt-3">
+                <ContactsSection applicationId={data.id} />
+              </TabsContent>
+            </Tabs>
+
             {data.status !== "WITHDRAWN" && (
-              <div className="flex justify-end gap-2">
+              <div className="mt-4 flex justify-end gap-2 border-t pt-3">
                 {data.status !== "SUBMITTED" && <Button variant="outline" size="sm" onClick={() => action.mutate({ kind: "fail", id: data.id, reason: "Marked failed by user" }, { onError: (e) => toast.error(errorMessage(e)) })}>Mark failed</Button>}
                 <Button variant="outline" size="sm" onClick={() => action.mutate({ kind: "withdraw", id: data.id }, { onSuccess: () => toast("Withdrawn"), onError: (e) => toast.error(errorMessage(e)) })}>Withdraw</Button>
               </div>
@@ -193,6 +231,338 @@ function TrackingForm({ id, notes, followUp }: { id: number; notes: string | nul
                 onClick={() => save.mutate({ id, notes: n || null, follow_up_at: f ? `${f}T09:00:00` : null },
                   { onSuccess: () => toast.success("Saved"), onError: (e) => toast.error(errorMessage(e)) })}>Save notes</Button>
       </div>
+    </div>
+  );
+}
+
+function InterviewsSection({ applicationId }: { applicationId: number }) {
+  const [items, setItems] = useState<Interview[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [round, setRound] = useState("Screening");
+  const [schedAt, setSchedAt] = useState("");
+  const [duration, setDuration] = useState(45);
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [interviewer, setInterviewer] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.get<Interview[]>(`/interviews?application_id=${applicationId}`)
+      .then((res) => setItems(res.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [applicationId]);
+
+  const handleAdd = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!schedAt) return toast.error("Select interview date and time");
+    try {
+      setSubmitting(true);
+      await api.post(`/applications/${applicationId}/interviews`, {
+        round,
+        scheduled_at: new Date(schedAt).toISOString(),
+        duration_minutes: duration,
+        meeting_url: meetingUrl || null,
+        interviewer: interviewer || null,
+        notes: notes || null,
+      });
+      toast.success("Interview scheduled");
+      setMeetingUrl("");
+      setInterviewer("");
+      setNotes("");
+      load();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (ivId: number) => {
+    try {
+      await api.delete(`/interviews/${ivId}`);
+      toast.success("Interview removed");
+      load();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {loading ? <Loader2 className="animate-spin" /> : items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No interviews scheduled yet for this application.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((iv: Interview) => (
+            <div key={iv.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
+              <div>
+                <div className="font-medium text-foreground">{iv.round} ({iv.duration_minutes}m)</div>
+                <div className="text-xs text-muted-foreground">{formatDate(iv.scheduled_at, true)}</div>
+                {iv.interviewer && <div className="text-xs text-muted-foreground">With: {iv.interviewer}</div>}
+                {iv.meeting_url && (
+                  <a href={iv.meeting_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline block mt-0.5">
+                    Meeting link
+                  </a>
+                )}
+              </div>
+              <Button size="icon-xs" variant="ghost" onClick={() => handleDelete(iv.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleAdd} className="rounded-lg border p-3 space-y-3 bg-muted/20">
+        <h5 className="text-xs font-semibold text-foreground">Schedule Interview</h5>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <label className="block text-muted-foreground mb-1">Round</label>
+            <Input value={round} onChange={(e) => setRound(e.target.value)} placeholder="e.g. Technical Round 1" required />
+          </div>
+          <div>
+            <label className="block text-muted-foreground mb-1">Date & Time</label>
+            <Input type="datetime-local" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} required />
+          </div>
+          <div>
+            <label className="block text-muted-foreground mb-1">Interviewer (optional)</label>
+            <Input value={interviewer} onChange={(e) => setInterviewer(e.target.value)} placeholder="e.g. John Doe" />
+          </div>
+          <div>
+            <label className="block text-muted-foreground mb-1">Duration (minutes)</label>
+            <Input type="number" min={15} max={240} value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-muted-foreground mb-1">Meeting URL (optional)</label>
+            <Input value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-muted-foreground mb-1">Notes (optional)</label>
+            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Topics, preparation links, etc." />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button size="sm" type="submit" disabled={submitting}>
+            {submitting ? <Loader2 className="animate-spin size-3.5" /> : <Plus className="size-3.5" />} Schedule
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function OfferSection({ applicationId }: { applicationId: number }) {
+  const [baseSalary, setBaseSalary] = useState<string>("");
+  const [currency, setCurrency] = useState("INR");
+  const [bonus, setBonus] = useState<string>("");
+  const [equity, setEquity] = useState("");
+  const [status, setStatus] = useState("received");
+  const [deadline, setDeadline] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    api.get<Offer[]>("/offers")
+      .then((res) => {
+        const found = res.data.find((o) => o.application_id === applicationId);
+        if (found) {
+          setBaseSalary(found.base_salary != null ? String(found.base_salary) : "");
+          setCurrency(found.currency || "INR");
+          setBonus(found.bonus != null ? String(found.bonus) : "");
+          setEquity(found.equity || "");
+          setStatus(found.status || "received");
+          setDeadline(found.deadline ? found.deadline.slice(0, 10) : "");
+          setNotes(found.notes || "");
+        }
+      })
+      .catch(() => {});
+  }, [applicationId]);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      await api.put(`/applications/${applicationId}/offer`, {
+        base_salary: baseSalary ? Number(baseSalary) : null,
+        currency,
+        bonus: bonus ? Number(bonus) : null,
+        equity: equity || null,
+        deadline: deadline ? `${deadline}T18:00:00` : null,
+        status,
+        notes: notes || null,
+      });
+      toast.success("Offer details saved");
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="rounded-lg border p-3 space-y-3 bg-muted/20">
+      <h5 className="text-xs font-semibold text-foreground">Offer Details</h5>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <label className="block text-muted-foreground mb-1">Base Salary</label>
+          <Input type="number" value={baseSalary} onChange={(e) => setBaseSalary(e.target.value)} placeholder="e.g. 1500000" />
+        </div>
+        <div>
+          <label className="block text-muted-foreground mb-1">Currency</label>
+          <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="INR, USD, EUR" />
+        </div>
+        <div>
+          <label className="block text-muted-foreground mb-1">Bonus</label>
+          <Input type="number" value={bonus} onChange={(e) => setBonus(e.target.value)} placeholder="e.g. 200000" />
+        </div>
+        <div>
+          <label className="block text-muted-foreground mb-1">Equity</label>
+          <Input value={equity} onChange={(e) => setEquity(e.target.value)} placeholder="e.g. 5,000 ESOPs / 4-yr vest" />
+        </div>
+        <div>
+          <label className="block text-muted-foreground mb-1">Decision Deadline</label>
+          <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-muted-foreground mb-1">Status</label>
+          <NativeSelect
+            ariaLabel="Offer status"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: "received", label: "Offer Received" },
+              { value: "negotiating", label: "Negotiating" },
+              { value: "accepted", label: "Accepted" },
+              { value: "declined", label: "Declined" },
+            ]}
+          />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-muted-foreground mb-1">Notes</label>
+          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Benefits, insurance, start date details..." />
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Button size="sm" type="submit" disabled={submitting}>
+          {submitting ? <Loader2 className="animate-spin size-3.5" /> : null} Save Offer
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function ContactsSection({ applicationId }: { applicationId: number }) {
+  const [items, setItems] = useState<ApplicationContact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [linkedin, setLinkedin] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.get<ApplicationContact[]>(`/applications/${applicationId}/contacts`)
+      .then((res) => setItems(res.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [applicationId]);
+
+  const handleAdd = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    try {
+      setSubmitting(true);
+      await api.post(`/applications/${applicationId}/contacts`, {
+        name: name.trim(),
+        role: role.trim() || null,
+        email: email.trim() || null,
+        phone: phone.trim() || null,
+        linkedin_url: linkedin.trim() || null,
+      });
+      toast.success("Contact added");
+      setName("");
+      setRole("");
+      setEmail("");
+      setPhone("");
+      setLinkedin("");
+      load();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (contactId: number) => {
+    try {
+      await api.delete(`/contacts/${contactId}`);
+      toast.success("Contact removed");
+      load();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {loading ? <Loader2 className="animate-spin" /> : items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No contacts saved yet for this application.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((c: ApplicationContact) => (
+            <div key={c.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
+              <div>
+                <div className="font-medium text-foreground">{c.name} {c.role && <span className="text-xs text-muted-foreground">({c.role})</span>}</div>
+                {c.email && <div className="text-xs text-muted-foreground">Email: {c.email}</div>}
+                {c.phone && <div className="text-xs text-muted-foreground">Phone: {c.phone}</div>}
+                {c.linkedin_url && (
+                  <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline block mt-0.5">
+                    LinkedIn Profile
+                  </a>
+                )}
+              </div>
+              <Button size="icon-xs" variant="ghost" onClick={() => handleDelete(c.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleAdd} className="rounded-lg border p-3 space-y-3 bg-muted/20">
+        <h5 className="text-xs font-semibold text-foreground">Add Contact</h5>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div>
+            <label className="block text-muted-foreground mb-1">Name</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Recruiter / Hiring Manager" required />
+          </div>
+          <div>
+            <label className="block text-muted-foreground mb-1">Role / Title</label>
+            <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Technical Recruiter" />
+          </div>
+          <div>
+            <label className="block text-muted-foreground mb-1">Email</label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="recruiter@company.com" />
+          </div>
+          <div>
+            <label className="block text-muted-foreground mb-1">Phone</label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-muted-foreground mb-1">LinkedIn URL</label>
+            <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." />
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <Button size="sm" type="submit" disabled={submitting}>
+            {submitting ? <Loader2 className="animate-spin size-3.5" /> : <Plus className="size-3.5" />} Add Contact
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

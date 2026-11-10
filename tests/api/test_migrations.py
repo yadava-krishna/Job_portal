@@ -19,6 +19,8 @@ pytestmark = pytest.mark.skipif(not PG, reason="needs TEST_POSTGRES_URL (disposa
 V2_TABLES = {"invites", "audit_logs", "job_sources", "notifications", "notification_prefs", "user_activity_sessions",
              "job_views", "ai_calls", "extension_tokens", "interviews", "offers", "application_contacts",
              "saved_searches", "user_achievements"}
+V3_TABLES = {"companies", "user_companies", "job_source_links"}
+V4_TABLES = {"source_connectors", "user_career_urls"}
 
 
 def _alembic(*args: str) -> None:

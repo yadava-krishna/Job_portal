@@ -13,6 +13,8 @@ from backend.schemas.applications import (
     ApplicationOut,
     ApplyOptions,
     ConfirmRequest,
+    EmailDraftRequest,
+    EmailDraftResponse,
     OpenResponse,
     PrepareRequest,
     StageRequest,
@@ -105,3 +107,29 @@ def list_applications(user: CurrentUser, db: DbSession,
 @router.get("/{application_id}", response_model=ApplicationDetail)
 def get_application(application_id: int, user: CurrentUser, db: DbSession) -> ApplicationDetail:
     return serializers.application_detail(db, user, svc.owned_application(db, user, application_id))
+
+
+# --- Phase 12: Apply Orchestrator & Recruiter Email Endpoints ---
+
+@router.post("/jobs/{job_id}/orchestrate", response_model=ApplicationDetail)
+def orchestrate_application(job_id: int, user: CurrentUser, db: DbSession) -> ApplicationDetail:
+    """Orchestrates candidate application route (A, B, C, or D) with tailored resume and screening Q&A."""
+    from backend.services.apply_orchestrator import ApplyOrchestrator
+    app = ApplyOrchestrator.orchestrate_job(db, user, job_id)
+    return serializers.application_detail(db, user, app)
+
+
+@router.post("/{application_id}/email-draft", response_model=EmailDraftResponse)
+def get_recruiter_email_draft(application_id: int, body: EmailDraftRequest, user: CurrentUser, db: DbSession) -> EmailDraftResponse:
+    """Generates professional, verified recruiter email draft with explicit consent gate."""
+    from backend.services.recruiter_email_service import RecruiterEmailService
+    app = svc.owned_application(db, user, application_id)
+    draft = RecruiterEmailService.generate_draft(db, user, app, target_email=body.target_email)
+    return EmailDraftResponse(
+        recipient_email=draft.recipient_email,
+        subject=draft.subject,
+        body_text=draft.body_text,
+        attachment_name=draft.attachment_name,
+        candidate_consent_required=draft.candidate_consent_required,
+    )
+

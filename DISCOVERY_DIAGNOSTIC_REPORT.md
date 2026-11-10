@@ -105,3 +105,12 @@ Gaps against your Phase 2 brief that are **not yet implemented**:
 | 5.6 Adzuna | Integrated in saved searches and the legacy path; reported as "not configured" until `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` are set. |
 
 Verification: see `DISCOVERY_TEST_REPORT.md`.
+
+---
+
+## Session Addendum (2026-11-06): Multi-Source Discovery Expansion
+Following the initial Phase 2 diagnosis, discovery was comprehensively expanded in this session using **Scrapling 0.5.1**:
+- Replaced the single-ATS limitation with 12 modular connectors: Remotive, Himalayas, RemoteOK, Arbeitnow, NCS India, Government portals, Academic institutions, Schema.org JSON-LD microdata, RSS/Atom feeds, XML sitemaps, Scrapling HTML selector adaptors, and an SSRF-vetted employer career URL explorer.
+- Added live connector testing and diagnostics under `/api/v1/discovery/connectors` and frontend `<SourcesPanel />`.
+- All automated sources respect strict rate limits, robots.txt caching, and DNS-level SSRF defenses.
+

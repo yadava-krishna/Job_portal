@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader, PlatformBadge } from "@/components/app/common";
+import { TodayView } from "@/components/app/TodayView";
 import { useConnection } from "@/contexts/ConnectionContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDate, statusLabels, timeAgo } from "@/lib/format";
@@ -32,6 +33,9 @@ export function DashboardPage() {
     <>
       <PageHeader title={`Welcome${user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}`} description="Your job search at a glance."
                   actions={<Button render={<Link to="/discover" />}><Search /> Discover jobs</Button>} />
+      <div className="mb-6">
+        <TodayView />
+      </div>
       {!s ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
       ) : (

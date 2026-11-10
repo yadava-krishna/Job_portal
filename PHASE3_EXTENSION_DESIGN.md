@@ -193,3 +193,11 @@ Plain JavaScript with no bundler and no third-party runtime dependencies, so eve
 - **D5 Live-form testing (Stage D)**: fill live public forms with **fictional** data from a temporary account, never submit, then delete the account. Note that some employers' analytics may observe typed values even without a submit.
 - **D6 Token lifetime**: 90 days (recommended), or 30.
 - **D7 Static ngrok domain**: optional; if you create one, set `NGROK_DOMAIN` in `.env`.
+
+---
+
+## 12. Session Addendum (2026-11-06): Relationship with Multi-Source Expansion
+With the delivery of Scrapling-based multi-source discovery:
+- Employer career URLs submitted via `<CareerUrlForm />` automatically resolve to Greenhouse, Lever, Ashby, SmartRecruiters, or Recruitee boards where supported, linking directly into extension autofill capabilities.
+- Non-ATS sources (RSS feeds, Schema.org microdata, and aggregators) discover the direct application URLs and link the candidate directly to the external employer application form for manual review and submission.
+

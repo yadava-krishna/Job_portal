@@ -96,6 +96,12 @@ class JobAnalysis(BaseModel):
     scoring_method: str | None
     confidence: str | None
     notes: list[str]
+    # Versioned 8-dimension breakdown (scoring_v2). `components` above is the underlying v1 matcher output.
+    score_version: str | None = None
+    dimensions: list[dict[str, Any]] = []
+    eligibility: str | None = None  # pass | fail | unknown, separate from the suitability score
+    unknown_dimensions: list[str] = []
+    disclaimer: str | None = None
 
 
 class JobList(BaseModel):

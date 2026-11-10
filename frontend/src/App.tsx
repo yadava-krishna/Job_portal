@@ -21,6 +21,7 @@ const OnboardingPage = lazy(() => import("@/pages/OnboardingPage").then((m) => (
 const ReportsPage = lazy(() => import("@/pages/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const SearchesPage = lazy(() => import("@/pages/SearchesPage").then((m) => ({ default: m.SearchesPage })));
+const AdminPage = lazy(() => import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -82,6 +83,12 @@ function ClipRoute() {
   return <Splash text="Opening captured job…" />;
 }
 
+function RequireAdmin() {
+  const { user } = useAuth();
+  if (user?.role !== "admin") return <Navigate to="/dashboard" replace />;
+  return <Outlet />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -107,6 +114,9 @@ export default function App() {
                         <Route path="/applied" element={<AppliedPage />} />
                         <Route path="/reports" element={<ReportsPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
+                        <Route element={<RequireAdmin />}>
+                          <Route path="/admin" element={<AdminPage />} />
+                        </Route>
                       </Route>
                     </Route>
                   </Route>

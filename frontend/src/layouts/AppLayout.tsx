@@ -1,10 +1,12 @@
 import { Suspense, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BarChart3, Loader2, Bookmark, Briefcase, FileSpreadsheet, LayoutDashboard, LogOut, Menu, Radar, Search, Settings, X } from "lucide-react";
+import { BarChart3, Loader2, Bookmark, Briefcase, FileSpreadsheet, LayoutDashboard, LogOut, Menu, Radar, Search, Settings, Shield, X } from "lucide-react";
 import { NotificationBell } from "@/components/app/discovery";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useConnection } from "@/contexts/ConnectionContext";
+import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/format";
 
@@ -35,9 +37,15 @@ export function AppLayout() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
+  useHeartbeat(true);
+
+  const navItems = user?.role === "admin"
+    ? [...nav, { to: "/admin", label: "Admin Console", icon: Shield }]
+    : nav;
+
   const links = (
     <nav className="flex flex-col gap-1">
-      {nav.map(({ to, label, icon: Icon }) => (
+      {navItems.map(({ to, label, icon: Icon }) => (
         <NavLink key={to} to={to} onClick={() => setOpen(false)}
                  className={({ isActive }) => cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                    isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
@@ -73,6 +81,7 @@ export function AppLayout() {
             <div className="lg:hidden"><Brand compact /></div>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <NotificationBell />
             <BackendIndicator />
           </div>

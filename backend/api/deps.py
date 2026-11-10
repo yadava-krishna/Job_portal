@@ -42,6 +42,17 @@ def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+def require_admin(user: CurrentUser) -> User:
+    """Ensure current authenticated user holds admin role."""
+    if getattr(user, "role", "user") != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin privileges required.")
+    return user
+
+
+CurrentAdmin = Annotated[User, Depends(require_admin)]
+
+
+
 def scoped(model: type[T], user: User) -> Select:
     """SELECT restricted to rows owned by `user`. All user-data queries start here."""
     return select(model).where(model.user_id == user.id)  # type: ignore[attr-defined]

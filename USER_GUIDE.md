@@ -165,12 +165,11 @@ This free helper for Chrome or Edge fills in application forms for you on three 
 
 ---
 
-## 8. Your privacy
-
 - Your profile, resumes, jobs and applications are private to you. Other JobPilot users cannot see them.
 - JobPilot only shares your details with an employer's form when **you** click Fill, on that employer's page.
 - JobPilot never asks for your LinkedIn, Indeed or Naukri password and never logs in to those sites.
-- You can delete old resume versions at any time. To close your account, contact the person who invited you.
+- **Export your data**: In Settings → Account & connection, click **Export my data (JSON)** to download a complete copy of your resumes, profile, applications, notes, interviews, and offers.
+- **Delete your account**: In Settings → Account & connection, you can permanently delete your account and all associated data by entering your password.
 
 ---
 
@@ -181,20 +180,26 @@ JobPilot only shows jobs that match your job titles and cities. On some days the
 new in your field. To see more jobs:
 - add more job titles in Settings → Job preferences,
 - add more cities, or allow remote work,
-- follow more companies in Searches & sources → Companies.
+- follow more companies or paste new careers URLs in Searches & sources.
 
 **Can JobPilot apply for me automatically?**
 No. You always review and submit applications yourself. This keeps your applications accurate and in your control.
 
 **Does JobPilot find every job on the internet?**
-No. It searches the official job pages of the employers it knows about, plus the jobs you add yourself and your
-job-alert e-mails. Check the **Sources** tab to see exactly where it looks.
+It searches official employer career pages, multi-source aggregators (Remotive, Himalayas, RemoteOK, Arbeitnow), public sector portals (NCS India, government notices), and feeds you configure. Check the **Searches & sources → Source health** tab to see all active discovery connectors.
 
-**I marked a job as applied by mistake.**
-Open it in **Applications** and use **Withdraw**, or move it to **Archived**.
-
-**The helper says "This browser was disconnected".**
-Create a new connection code in Settings → Browser extension and connect again.
+**How do I export my interviews to Google Calendar or Apple Calendar?**
+In **Applications**, click **Download calendar (.ics)** to save a calendar file that imports directly into your favorite calendar app.
 
 **I forgot my password.**
-Ask the person who invited you to reset it. Self-service password reset is coming later.
+Click **Forgot password?** on the sign-in screen. If email integration is configured on the server, you will receive a secure reset link.
+
+---
+
+## 10. Additions from this Session (2026-11-06)
+- **Today's Focus Dashboard Widget**: Instantly shows urgent items ("Your Move" applications needing action, "Coming Up" interviews in the next 3 days, and "Waiting On Them" statuses).
+- **Career URL Explorer**: Add any employer's careers page link under Searches & sources. JobPilot automatically identifies embedded ATS platforms, Schema.org JSON-LD job postings, RSS feeds, and XML sitemaps.
+- **Full Interview & Offer Tracking**: In Applications detail view, schedule interview rounds with interviewer names and meeting links, record offers (base salary, bonus, equity, decision deadlines), and save recruiter contact info.
+- **Theme Switcher**: Click the Sun/Moon icon in the header to switch between light and dark themes anytime.
+- **Self-Service Privacy Controls**: Download your complete dataset as JSON or permanently delete your account with password verification in Settings.
+

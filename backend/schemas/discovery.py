@@ -146,3 +146,62 @@ class NotificationPrefs(BaseModel):
 class NotificationList(BaseModel):
     items: list[NotificationOut]
     unread: int
+
+
+class CareerUrlRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=500, description="Company careers page URL, e.g. https://company.com/careers")
+    company_name: str | None = Field(default=None, max_length=120)
+
+
+class CareerAnalysisOut(BaseModel):
+    url: str
+    company_name: str
+    detected_ats: str | None = None
+    ats_token: str | None = None
+    has_json_ld: bool = False
+    json_ld_count: int = 0
+    discovered_feed_url: str | None = None
+    discovered_sitemap_url: str | None = None
+    jobs_count: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class SourceConnectorOut(BaseModel):
+    source_id: str
+    name: str
+    domain: str
+    category: str
+    access_method: str
+    permission_status: str
+    is_discoverable: bool
+    status: str
+    rate_limit_rpm: int
+    last_success_at: datetime | None = None
+    last_error: str | None = None
+    jobs_discovered: int = 0
+
+
+class ATSDetectRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=500, description="Employer career or job board URL")
+
+
+class ATSDetectResponse(BaseModel):
+    url: str
+    domain: str
+    ats_platform: str | None = None
+    board_token: str | None = None
+    api_endpoint: str | None = None
+    detected_sources: list[str] = Field(default_factory=list)
+    has_json_ld: bool = False
+    sitemap_url: str | None = None
+    feed_url: str | None = None
+    confidence: float = 0.0
+    method: str = "url_pattern"
+    error: str | None = None
+
+
+class ReapResponse(BaseModel):
+    reaped_count: int
+    cutoff_days: int
+    timestamp: datetime
+

@@ -84,3 +84,41 @@ git checkout 635a177 -- .           # last Phase 2 commit (or: git revert <phase
 Keep `.deploy/extension-key.pem` private and backed up. It fixes the extension ID and therefore the allowed CORS
 origin. For a Chrome Web Store listing (needs the owner's approval and developer account), remove `"key"` from
 `manifest.json`, upload the zip, then add the store-assigned ID to `CORS_ORIGINS`.
+
+---
+
+## 7. Automated Backups & Safe Restore (Added in Session 2026-11-06)
+
+Phase 8 automated backup and recovery with dedicated shell scripts:
+
+### Running an automated backup:
+```bash
+./deploy/backup.sh
+```
+- Performs a live `pg_dump -Fc` from the Postgres container.
+- Creates a timestamped tarball of `/data` from the `jobpilot_storage` volume.
+- Generates `SHA256SUMS` verification hash.
+- Prunes backups older than 7 days (`RETENTION_DAYS=7`).
+- Recommended daily cron entry:
+  ```bash
+  0 2 * * * $HOME/job_automation/deploy/backup.sh >> $HOME/job_automation/backups/backup.log 2>&1
+  ```
+
+### Restoring from backup:
+```bash
+# Dry run verification:
+./deploy/restore.sh --dry-run backups/20261106-120000
+
+# Full restoration:
+./deploy/restore.sh backups/20261106-120000
+```
+- Validates SHA256 checksums before touching any live services.
+- Halts backend gracefully, applies `pg_restore --clean --if-exists`, unpacks storage volume, and restarts services.
+
+---
+
+## 8. Scrapling Runtime Dependencies (Added in Session 2026-11-06)
+- Backend dependency `scrapling[fetchers]==0.5.1` is installed in `.venv` and Docker backend image.
+- Includes `patchright` (Patchright stealth browser driver) and `curl_cffi` for TLS-fingerprinted HTTP/2 requests.
+- No Redis/RabbitMQ brokers required: concurrency is bounded in-process via `asyncio.Semaphore(4)`.
+

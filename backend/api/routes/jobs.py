@@ -12,8 +12,9 @@ from backend.api.deps import CurrentUser, DbSession, SettingsDep
 from backend.db import session_factory
 from backend.models import Application, DiscoveryRun, Job, JobSourceLink, User, UserJob, utcnow
 from backend.schemas.jobs import DiscoverRequest, DiscoveryRunOut, ImportJobRequest, ImportResult, JobAnalysis, JobDetail, JobList, SearchLinkOut
+from backend.schemas.profile import JobMatchIntelligenceOut
 from backend.services import discovery_service, resume_service
-from backend.services.matching_service import UserMatcher
+from backend.services.matching_service import UserMatcher, compute_career_intelligence
 from core import timeutil
 from core.models import MatchResult
 from intelligence.jd_analyzer import JDAnalyzer
@@ -222,6 +223,9 @@ def list_jobs(
 @router.get("/{user_job_id}", response_model=JobDetail)
 def get_job(user_job_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep) -> JobDetail:
     uj = _owned(db, user, user_job_id)
+    from backend.services import tracker_service
+
+    tracker_service.record_view(db, user, uj.job_id)  # "jobs viewed" metric and recently-viewed list
     return serializers.job_detail(db, uj, JDAnalyzer(resume_service.taxonomy(settings)))
 
 
@@ -242,6 +246,8 @@ def analysis(user_job_id: int, user: CurrentUser, db: DbSession) -> JobAnalysis:
         explanation=m.explanation() if m else "Not scored yet.", eligibility_status=uj.eligibility_status,
         eligibility_reasons=uj.eligibility_reasons or [], scoring_method=uj.scoring_method,
         confidence=m.confidence if m else None, notes=m.notes if m else [],
+        score_version=uj.score_version, dimensions=uj.match_components or [], eligibility=uj.eligibility,
+        unknown_dimensions=(uj.match or {}).get("unknown_dimensions", []), disclaimer=(uj.match or {}).get("disclaimer"),
     )
 
 
@@ -315,3 +321,43 @@ def restore(user_job_id: int, user: CurrentUser, db: DbSession, settings: Settin
             pass
     db.commit()
     return serializers.job_detail(db, uj, JDAnalyzer(resume_service.taxonomy(settings)))
+
+
+# --- Phase 10: Career Intelligence 4-Factor Matching Endpoint ---
+
+@router.get("/{job_id}/intelligence", response_model=JobMatchIntelligenceOut)
+def get_job_intelligence(job_id: int, user: CurrentUser, db: DbSession) -> JobMatchIntelligenceOut:
+    """Calculates explainable 4-factor career match score and learning roadmap for a job."""
+    from backend.services.jd_intelligence_service import JDIntelligenceService
+    from backend.services.profile_master_service import ProfileMasterService
+    from backend.services.skill_gap_service import SkillGapService
+
+    job = db.get(Job, job_id)
+    if not job:
+        uj = db.execute(select(UserJob).where(UserJob.id == job_id, UserJob.user_id == user.id)).unique().scalar_one_or_none()
+        if uj:
+            job = uj.job
+    if not job:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+
+    report = compute_career_intelligence(db, user, job)
+
+    profile = ProfileMasterService.get_or_create_profile(db, user.id)
+    candidate_skills = [s.name for s in profile.skills]
+    jd_analysis = JDIntelligenceService.analyze_jd(job.title or "", job.description or "", job.location or "")
+    gap_report = SkillGapService.analyze_skill_gaps(candidate_skills, jd_analysis.required_skills, jd_analysis.preferred_skills)
+
+    return JobMatchIntelligenceOut(
+        job_id=job.id,
+        composite_score=report.composite_score,
+        eligibility_score=report.eligibility_score,
+        skill_score=report.skill_score,
+        experience_score=report.experience_score,
+        preference_score=report.preference_score,
+        matched_skills=report.matched_skills,
+        missing_skills=report.missing_skills,
+        disqualifiers=report.disqualifiers,
+        explanation=report.explanation,
+        learning_roadmap=gap_report.learning_roadmap,
+    )
+

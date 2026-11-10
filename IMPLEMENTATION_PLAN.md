@@ -190,3 +190,45 @@ Original plan, for reference:
 
 ## Effort and order
 Phase 1 is a prerequisite for everything else. Phases 2 and 3 deliver the biggest user value. 4 → 5 → 6 → 7 → 8 follow. Each phase is shipped and verified on the live deployment before the next starts.
+
+---
+
+## Session Update (2026-11-06): Multi-Source Discovery & Phases 4–8 Delivered
+
+**Delivered in this session:**
+
+1. **Scrapling Framework & Multi-Source Engine (Stages A–J)**:
+   - `scrapling[fetchers]==0.5.1` integrated into `.venv` and `requirements.txt`.
+   - `services/source_policies.py`: Source Policy Registry pre-populated with 50+ compliant sources with rate limits, methods, and robots.txt caching. Zero scraping on LinkedIn, Indeed, Naukri maintained.
+   - `services/scrapling_client.py`: Async semaphore-bounded fetcher with SSRF defense (blocking private IPs, loopback, cloud metadata), 25 MB max response limit, and token bucket.
+   - `services/connectors/`: 12 discovery connectors implemented (JSON-LD, RSS/Atom, Sitemap, HTML Adaptor, Career URL ATS-detector, Remotive, Himalayas, RemoteOK, Arbeitnow, NCS India, Government portals, Academic institutions).
+   - Migration `0004_multi_source_discovery.py`: Additive migration for `source_connectors`, `user_career_urls`, and multi-source metadata fields.
+   - Frontend: `<CareerUrlForm />` and `<SourcesPanel />` wired into `SearchesPage.tsx`.
+
+2. **Phase 4: Tracking, Today Focus & Privacy**:
+   - `<TodayView />`: Tri-bucket agenda (Your Move, Coming Up, Waiting On Them) wired into `DashboardPage.tsx`.
+   - Interview tracker: Scheduling, round notes, meeting links, and iCal calendar feed (`/api/v1/interviews/calendar.ics`) wired into `AppliedPage.tsx`.
+   - Offer tracker & recruiter contacts directory wired into `AppliedPage.tsx`.
+   - User privacy: Full JSON data export (`/api/v1/account/export`) and password-verified account deletion wired into `SettingsPage.tsx`.
+   - Session activity: `useHeartbeat` hook mounted in `AppLayout.tsx`.
+
+3. **Phase 5: Admin Dashboard**:
+   - RBAC security: `require_admin` dependency and `role` column on users.
+   - `backend/services/admin_service.py` & `backend/api/routes/admin.py`: User activation toggle, role assignment, invite code generation, metrics, and audit log.
+   - Frontend: `<AdminPage />` lazy-loaded at `/admin` route with `RequireAdmin` guard and dynamic navbar link.
+
+4. **Phase 6: Visual System & Gamification**:
+   - Dark/Light mode theme system with persistent toggle (`<ThemeToggle />`) mounted in `AppLayout.tsx`.
+   - Maritime candidate nickname generator (`backend/services/nickname_service.py`).
+   - Milestone achievement badge system (`backend/services/achievement_service.py`).
+
+5. **Phase 7: Notifications & Transactional Email**:
+   - Production SMTP client (`backend/services/email_service.py`) supporting SSL/STARTTLS and test outbox hook.
+   - Secure password reset workflow (`/auth/forgot-password` and `/auth/reset-password`).
+
+6. **Phase 8: Deployment & Hardening**:
+   - Production backup script (`deploy/backup.sh`) with pg_dump, storage tarball, SHA256 checksums, and 7-day retention.
+   - Safe restore script (`deploy/restore.sh`) with dry-run support.
+   - Structured JSON logging (`JSONFormatter`) and `X-Request-ID` correlation middleware in `backend/main.py`.
+   - Verification: All 121+ backend tests passed (100% green), all 30 vitest tests passed, and frontend production build succeeds with zero errors.
+

@@ -87,3 +87,24 @@ Details: extension/SECURITY.md, SOURCE_CAPABILITY_MATRIX.md, tests in tests/api/
 
 ## Controls already in place (verified in code/tests)
 Argon2id hashing with rehash-on-login · uniform timing on unknown emails · password policy · 15-min HS256 access JWT · rotating refresh tokens stored as SHA-256, family revocation on reuse · every user-data query scoped by `user_id`, cross-user access returns 404 (tested for each resource) · resume uploads: size, `%PDF` magic, PyMuPDF open, encryption and page checks, server-generated filenames, ownership plus path check on download · Fernet-encrypted IMAP passwords · CORS allowlist · security headers · Postgres on an internal-only network, backend bound to 127.0.0.1 · secrets in `.env` (600, gitignored) · log redaction of emails, phones, keys and passwords · history scanned clean of secrets and personal data before the repo went public.
+
+---
+
+## Additions from this Session (2026-11-06)
+
+### S15: Scrapling & Multi-Source Crawler Hardening
+- **SSRF Defense (`ScraplingClient`)**: Outbound requests are subject to pre-flight DNS vetting. Any target resolving to loopback (`127.0.0.0/8`, `::1`), private ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`), link-local (`169.254.0.0/16`, `fe80::/10`), multicast, or cloud metadata endpoints (`169.254.169.254`) is immediately aborted before TCP socket creation.
+- **Headless Browser Isolation**: When Patchright (`StealthyFetcher`) is invoked, it runs in an ephemeral, unprivileged browser context with isolated cookies and memory.
+- **Payload & Response Caps**: Strict 25 MB max body size cap protects backend memory from compression bombs or excessive media streaming.
+- **Politeness & Rate Limits**: Token-bucket rate limiter per domain and automated `robots.txt` compliance parsing via `urllib.robotparser` and `protego`.
+- **Zero Scraping Policy**: LinkedIn, Indeed, and Naukri are permanently excluded from automated crawling, restricted exclusively to client-side clipper and email alert integrations.
+
+### S16: Admin RBAC & Audit Isolation (Phase 5)
+- **Role Enforcement**: `require_admin` dependency guarantees non-admin users receive 403 Forbidden on all `/api/v1/admin/*` routes.
+- **Audit Logging**: All administrative mutations (activating/deactivating users, elevating roles, generating or revoking invites) generate immutable records in `audit_logs` storing actor ID, action name, target type/ID, IP address, and timestamp.
+
+### S17: Account Privacy, Deletion & Transactional Email (Phase 4 & 7)
+- **Password-Gated Account Deletion**: `/api/v1/account/delete` strictly requires re-authenticating the user's password before initiating permanent database purge and file storage cleanup.
+- **Cryptographic Password Reset**: Password reset tokens are generated with high-entropy cryptographic tokens expiring in 1 hour, single-use enforced.
+- **Encrypted SMTP Dispatch**: Outbound transactional emails support TLS/STARTTLS with zero credentials committed.
+

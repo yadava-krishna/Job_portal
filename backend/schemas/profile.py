@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -258,3 +258,82 @@ class OnboardingStatus(BaseModel):
     preferences_saved: bool
     platforms_selected: bool
     completed: bool
+
+
+# --- Phase 10: Career Intelligence & Profile V2 Schemas ---
+
+class ProfileSkillIn(BaseModel):
+    name: str = Field(..., max_length=100)
+    category: str = Field(default="technical", max_length=50)
+    proficiency: str = Field(default="INTERMEDIATE", max_length=30)
+    years: float = Field(default=1.0, ge=0.0, le=50.0)
+    is_verified: bool = True
+
+
+class ProfileSkillOut(ProfileSkillIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class ProfileExperienceIn(BaseModel):
+    company: str = Field(..., max_length=200)
+    title: str = Field(..., max_length=200)
+    start_date: date | str | None = None
+    end_date: date | str | None = None
+    is_current: bool = False
+    description: str | None = None
+    technologies: list[str] = Field(default_factory=list)
+    verified_bullets: list[str] = Field(default_factory=list)
+
+
+class ProfileExperienceOut(ProfileExperienceIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+
+
+class MasterProfileV2Update(BaseModel):
+    headline: str | None = Field(default=None, max_length=255)
+    summary: str | None = Field(default=None, max_length=5000)
+    years_experience: float | None = Field(default=None, ge=0.0, le=50.0)
+    relevant_it_experience: float | None = Field(default=None, ge=0.0, le=50.0)
+    highest_education_level: str | None = Field(default=None, max_length=50)
+    preferred_locations: list[str] | None = None
+    work_modes: list[str] | None = None
+    work_authorization: str | None = Field(default=None, max_length=100)
+    expected_ctc_inr: int | None = Field(default=None, ge=0)
+    notice_period_days: int | None = Field(default=None, ge=0, le=365)
+    verified_facts: dict[str, Any] | None = None
+
+
+class MasterProfileV2Out(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    headline: str | None
+    summary: str | None
+    years_experience: float
+    relevant_it_experience: float
+    highest_education_level: str | None
+    preferred_locations: list[str]
+    work_modes: list[str]
+    work_authorization: str
+    expected_ctc_inr: int | None
+    notice_period_days: int
+    verified_facts: dict[str, Any]
+    experiences: list[ProfileExperienceOut] = Field(default_factory=list)
+    skills: list[ProfileSkillOut] = Field(default_factory=list)
+
+
+class JobMatchIntelligenceOut(BaseModel):
+    job_id: int
+    composite_score: float
+    eligibility_score: float
+    skill_score: float
+    experience_score: float
+    preference_score: float
+    matched_skills: list[str]
+    missing_skills: list[str]
+    disqualifiers: list[str]
+    explanation: str | None
+    learning_roadmap: list[dict[str, Any]] = Field(default_factory=list)
+

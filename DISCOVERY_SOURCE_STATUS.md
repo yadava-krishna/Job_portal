@@ -100,3 +100,27 @@ Titles from other professions are excluded (engineer, designer, sales, product, 
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | backend `.env` (never committed) | **Missing**: you will provide them |
 | Mailbox app password | per user, Settings → Job-alert email | Not configured for the existing user |
 | Companies | automatic (curated list); optional watchlist | Configured automatically through the starter search |
+
+---
+
+## Multi-Source Connectors Added in this Session (2026-11-06)
+
+In this session, JobPilot integrated the Scrapling framework (`scrapling[fetchers]==0.5.1`) and added 12 new modular discovery connectors:
+
+| Connector | Mechanism | Category | Status | Notes |
+|---|---|---|---|---|
+| **Remotive** | Official public API (`remotive.com/api/remote-jobs`) | Aggregator | **Live / Verified** | Software, customer support, data & QA remote roles. |
+| **Himalayas** | Public API (`himalayas.app/jobs/api`) | Aggregator | **Live / Verified** | Global and regional remote postings with salary metadata. |
+| **RemoteOK** | Public API feed (`remoteok.com/api`) | Aggregator | **Live / Verified** | Remote roles across engineering, finance, operations. |
+| **Arbeitnow** | Public API (`arbeitnow.com/api/job-board-api`) | Aggregator | **Live / Verified** | European and international opportunities with visa tags. |
+| **NCS India** | Public sector portal (`ncs.gov.in`) | Public Sector | **Live / Verified** | National Career Service (Ministry of Labour & Employment India). |
+| **Govt Portals** | UPSC, SSC, ISRO, DRDO notice feeds | Public Sector | **Live / Verified** | Official recruitment notifications from Indian public agencies. |
+| **Academic** | IIT Bombay, IIT Delhi, IIT Madras, IISc | Academic | **Live / Verified** | Faculty, postdoctoral, and technical staff openings. |
+| **JSON-LD** | Schema.org `JobPosting` extractor | Generic Engine | **Live / Verified** | Extracts structured microdata embedded in employer pages. |
+| **RSS / Atom** | XML feed parser (`backend/services/connectors/rss_connector.py`) | Feed | **Live / Verified** | Discovers opportunities published as standard web feeds. |
+| **XML Sitemap** | Sitemap crawler (`backend/services/connectors/sitemap_connector.py`) | Crawler | **Live / Verified** | Extracts job URLs from `/sitemap.xml` with pattern filters. |
+| **HTML Adaptor** | Scrapling `Adaptor` CSS/XPath selectors | Scrapling | **Live / Verified** | Adaptive selector engine with stealth mode fallback. |
+| **Career URL** | SSRF-vetted explorer (`CareerUrlConnector`) | Direct Employer | **Live / Verified** | Detects ATS embeds (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee), JSON-LD, RSS, and sitemaps. |
+
+*Compliance Guard*: LinkedIn, Indeed, and Naukri continue to be excluded from automated web crawling/scraping in accordance with source policies.
+

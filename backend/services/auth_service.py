@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -12,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
-from backend.models import RefreshToken, User, utcnow
+from backend.models import AuditLog, RefreshToken, User, utcnow
 from backend.schemas.auth import AuthResponse, LoginRequest, RegisterRequest, UserOut
 from backend.security import (
     create_access_token,
@@ -104,3 +105,48 @@ def logout(db: Session, token: str | None, user: User) -> None:
     row = db.execute(select(RefreshToken).where(RefreshToken.token_hash == hash_token(token), RefreshToken.user_id == user.id)).scalar_one_or_none()
     if row is not None:
         revoke_family(db, row.family_id)
+
+
+def _password_fingerprint(password_hash: str) -> str:
+    return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+
+def create_reset_token(settings: BackendSettings, user: User) -> str:
+    """One-hour reset token bound to the current password hash: it stops working once the password changes,
+    so each link can be used only once."""
+    import jwt
+    payload = {"sub": user.email, "type": "reset", "pwd": _password_fingerprint(user.password_hash),
+               "exp": datetime.now(timezone.utc) + timedelta(hours=1)}
+    return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
+
+def verify_reset_token(settings: BackendSettings, token: str) -> tuple[str, str] | None:
+    import jwt
+    try:
+        data = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    except Exception:
+        return None
+    if data.get("type") != "reset" or not data.get("sub") or not data.get("pwd"):
+        return None
+    return data["sub"], data["pwd"]
+
+
+def reset_password(db: Session, settings: BackendSettings, token: str, new_password: str) -> bool:
+    claims = verify_reset_token(settings, token)
+    invalid = HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired password reset link.")
+    if not claims:
+        raise invalid
+    user = db.execute(select(User).where(User.email == claims[0])).scalar_one_or_none()
+    if not user or not user.is_active or _password_fingerprint(user.password_hash) != claims[1]:
+        raise invalid
+    problems = password_problems(new_password, user.email)
+    if problems:
+        raise HTTPException(422, {"message": "Password does not meet the policy.", "requirements": problems})
+    user.password_hash = hash_password(new_password)
+    # Sign out every existing session: whoever had the old password must not stay logged in.
+    for rt in db.execute(select(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))).scalars():
+        rt.revoked_at = utcnow()
+    db.add(AuditLog(actor_id=user.id, action="PASSWORD_RESET", target_type="user", target_id=str(user.id)))
+    db.commit()
+    return True
+

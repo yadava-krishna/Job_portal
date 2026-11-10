@@ -1,0 +1,220 @@
+req_id,priority,area,title,acceptance,status,code_evidence,tests,notes,updated
+ID-01,P0,Identity,"Register, login, logout, refresh, session expiry","password hashing, JWT expiry, logout revokes refresh token, tests",DONE_VERIFIED,auth_service.issue_tokens/rotate_refresh/logout; Argon2; hashed refresh tokens,test_register_login_me; test_refresh_rotation_and_reuse_detection; test_logout_revokes_refresh,,2026-11-10
+ID-02,P0,Identity,Roles candidate / mentor / admin with least privilege,"role column supports candidate(user), mentor, admin; role-gated deps; 403 tests per role",PARTIAL,deps.require_admin; role user|admin,test_admin_rbac_and_endpoints,no mentor role,2026-11-10
+ID-03,P0,Identity,Per-object ownership on every resource (BOLA/IDOR),every owned ID scoped by current user server-side; never trust client userId; cross-user tests,PARTIAL,deps.scoped/get_owned on user resources,test_user_isolation_across_every_resource,POST /discovery/reap-expired and /discovery/connectors/{id}/test have global effect but any user may call them,2026-11-10
+ID-04,P0,Identity,Password reset / account access recovery,reset flow works when SMTP configured; disabled honestly otherwise,BROKEN,auth_service.reset_password,test_password_reset_flow,says dispatched without SMTP; reset links kept in process memory; token reusable; no UI,2026-11-10
+ID-05,P0,Privacy,Data export (self-service),"JSON export of all user data, no secrets",PARTIAL,tracker_service.export,test_export_contains_your_data_and_no_secrets,v2 profile/tailored/match tables missing from export,2026-11-10
+ID-06,P0,Privacy,Account deletion with confirmation,password + typed confirmation; cascades rows and files; audit row,DONE_VERIFIED,"tracker_service.delete_account (password + DELETE, cascade, files, audit)",test_account_deletion_requires_password_and_removes_everything,,2026-11-10
+ID-07,P0,Privacy,"Explicit consent records (AI processing, mentor sharing, extension, learning tracking)",consent table; toggles in settings; features check consent,MISSING,,,no consent records,2026-11-10
+ID-08,P0,Privacy,Retention rules and cleanup,documented retention; cleanup job deletes expired tokens/logs/exports,MISSING,,,no retention job; refresh tokens never purged,2026-11-10
+ID-09,P0,Privacy,Audited cross-role access,admin/mentor reads of candidate data write AuditEvent,MISSING,,,admin reads not audited,2026-11-10
+ID-10,P0,Identity,Brute-force / rate limiting on auth,per-IP and per-account throttling tested,DONE_VERIFIED,"deps.auth_rate_limit, check_account_lock",test_auth_rate_limit; test_account_lock_across_rotating_real_addresses,forgot/reset not rate-limited,2026-11-10
+ID-11,P1,Identity,Invite-only beta registration,invite codes create/revoke/usage,PARTIAL,admin_service invites; registration checks only env code,test_invite_code_required_when_configured,Invite rows never consumed at registration,2026-11-10
+PRF-01,P0,Profile,Canonical master candidate profile separate from resume,"typed profile: identity/contact, education, experience, projects, certifications, publications, skills",PARTIAL,CandidateProfileV2 + /profile/master,test_master_profile_and_matching_flow,frontend does not use it; legacy profile is the one matching reads,2026-11-10
+PRF-02,P0,Profile,Provenance + verification flag on every extracted fact,"source (resume_parse/manual/import), confidence, verified_at; unverified never shown as verified",PARTIAL,provenance JSON,,ProfileSkill.is_verified defaults True,2026-11-10
+PRF-03,P0,Profile,"Resume PDF upload with progress, parse status, error/retry","upload progress, parse state, retry on failure",PARTIAL,resume_service upload checks; parse warnings,test_resume_upload_validation,no progress/parse state/retry,2026-11-10
+PRF-04,P0,Profile,Manual profile creation without a resume (students),"onboarding path ""no resume"" builds profile manually",MISSING,,,onboarding requires a resume,2026-11-10
+PRF-05,P0,Profile,Review/correct/confirm all critical extracted fields,confirmation step blocks treating guesses as verified,PARTIAL,ProfileForm confirm step,test_profile_edit_and_experience,,2026-11-10
+PRF-06,P0,Profile,"Career goals: titles, seniority, industry, locations, salary, work mode, relocation, notice period",persisted CareerGoal; used by discovery and scoring,PARTIAL,JobPreference titles/industries/locations/salary/work modes/notice,test_preferences_validation,no seniority/relocation,2026-11-10
+PRF-07,P0,Profile,Search mode India / International / Both + work authorization & sponsorship,"persisted; changes discovery regions, eligibility and country fit",MISSING,,,no search mode / authorisation in API or UI,2026-11-10
+PRF-08,P0,Onboarding,Under-10-minute first run flow,"account→profile→review→goals→preferences→snapshot→3 jobs→first gap→one CTA; skippable, resumable",PARTIAL,"OnboardingPage 5 steps, resumable",test_onboarding_status,no snapshot / 3 jobs / gap / CTA,2026-11-10
+PRF-09,P0,Onboarding,"Career snapshot: profile completeness, top match, top gap",snapshot endpoint + card on dashboard,MISSING,,,,2026-11-10
+PRF-10,P0,Onboarding,One clear next-step CTA (Apply/Build resume/Learn/Interview prep/Explore international),"computed from state, shown on dashboard",MISSING,,,,2026-11-10
+PRF-11,P1,UX,Progressive disclosure by activity stage,"dashboard sections appear as user progresses (tracker after applications, reflection after interviews, international on intent)",MISSING,,,,2026-11-10
+PRF-12,P1,Profile,"Skills with proficiency, years and evidence links","CandidateSkill with level, years, evidence refs",PARTIAL,ProfileSkill proficiency/years,,no evidence links,2026-11-10
+DSC-01,P0,Discovery,"JobSource registry with type, URL, compliance notes, status, health, last run, failure reason",table + admin view + enable/disable,PARTIAL,JobSource/SourceConnector + admin read-only list,test_admin_rbac_and_endpoints,no enable/disable; no compliance notes,2026-11-10
+DSC-02,P0,Discovery,Scheduled daily discovery + manual Run now,"scheduler, run-now button, no duplicate concurrent runs",DONE_VERIFIED,scheduler_service daily + run-now guard,test_scheduler_runs_only_due_enabled_searches; test_run_now_does_not_start_a_second_concurrent_run,,2026-11-10
+DSC-03,P0,Discovery,"Run status, progress, errors, timestamps visible",DiscoveryRun status/progress polled in UI,DONE_VERIFIED,DiscoveryRun.source_results; UI polls run,test_run_records_per_source_outcomes_and_summary,,2026-11-10
+DSC-04,P0,Discovery,Traceable pipeline DiscoveryRun→policy→fetch→normalize→extract→canonicalize→dedupe→persist→filter→score→gaps→notify→health,each stage recorded on run,PARTIAL,discovery_service per-source progress,test_run_records_per_source_outcomes_and_summary,per-stage record missing,2026-11-10
+DSC-05,P0,Discovery,"Official ATS/job-board APIs via adapter interface with pagination, rate limits, retries, circuit breaker",adapters + tests,PARTIAL,services/ats adapters (httpx),test_http_errors_are_classified,no retry/backoff/circuit breaker,2026-11-10
+DSC-06,P0,Discovery,Normalization + canonical title/company/location,canonical fields stored,DONE_VERIFIED,normalization.py canonical_url/dedup_key,test_canonical_url; test_dedup_keys_fold_legal_suffixes_and_seniority,,2026-11-10
+DSC-07,P0,Discovery,Stable-hash dedupe (+ optional semantic),"fingerprint unique, no duplicate jobs across sources",DONE_VERIFIED,discovery_service.find_existing by dedup_key,test_repeat_runs_add_no_duplicate_jobs_or_notifications; test_clipped_linkedin_job_and_board_job_merge_into_one,no semantic dedupe,2026-11-10
+DSC-08,P0,Discovery,"Provenance: source, raw reference, canonical URL, checked date","JobSourceLink rows, shown in job details",DONE_VERIFIED,JobSourceLink; JobDetailSheet sources,test_clipped_linkedin_job_and_board_job_merge_into_one,,2026-11-10
+DSC-09,P0,Discovery,Stale / closed posting handling,last_seen tracking; closed postings marked and hidden,PARTIAL,company_service._close_missing; feed hides closed,test_jobs_removed_from_a_board_are_marked_closed,expiry not scheduled,2026-11-10
+DSC-10,P0,Discovery,"Search/filter: title, company, location, work mode, seniority, salary, posted date, country",filters on /jobs; Postgres FTS index,PARTIAL,jobs.list_jobs LIKE filters,test_job_filters,no FTS; no seniority/country filter,2026-11-10
+DSC-11,P0,Discovery,Persistent Save / Dismiss,save/dismiss/restore persisted,DONE_VERIFIED,save/dismiss/restore,test_save_dismiss_restore,,2026-11-10
+DSC-12,P0,Discovery,"Job details: original description, company, provenance, posted/checked date, apply link, source label",detail sheet shows all,DONE_VERIFIED,JobDetailSheet,test_import_scores_and_dedups,,2026-11-10
+DSC-13,P0,Discovery,"Compliance: robots/ToS respected, no login scraping, no anti-bot bypass, no fake results",policy registry; StealthyFetcher/anti-bot paths disabled,BROKEN,source_policies + robots check,test_ssrf_blocks_private_and_loopback_ips,scrapling_client impersonates Chrome (curl_cffi chrome124) and contains StealthyFetcher; user-submitted URLs fetched without policy gate,2026-11-10
+DSC-14,P0,Discovery,Manual job import (URL/file) and assisted links for restricted boards,import endpoints + search links,DONE_VERIFIED,jobs import/import-file/search-links,test_import_scores_and_dedups; test_search_links_cover_titles_and_locations,,2026-11-10
+DSC-15,P1,Discovery,"Structured requirement extraction (JobRequirement: skill, importance, hard/soft, years)",per-job requirements stored,PARTIAL,Job.required/preferred skills; JDAnalyzer,test_jd_analyzer_required_vs_preferred,no JobRequirement rows,2026-11-10
+MAT-01,P0,Matching,Separate suitability match from hard eligibility,two outputs; eligibility pass/fail/unknown,PARTIAL,eligibility separate in feed,,/jobs/{id}/intelligence mixes eligibility into score,2026-11-10
+MAT-02,P0,Matching,Eight weighted dimensions 30/20/15/10/10/5/5/5 summing to 100,config + unit test of weight sum,MISSING,,,weights were 35/25/20/10/10 (5 dimensions),2026-11-10
+MAT-03,P0,Matching,score_version + component breakdown stored per match,JobMatch row with version + components,MISSING,,,,2026-11-10
+MAT-04,P0,Matching,Unknown salary/authorization stays unknown,unknown never coerced to pass/fail; test,PARTIAL,,,,2026-11-10
+MAT-05,P0,Matching,Explainable breakdown with source facts in UI,job detail shows per-dimension reason,PARTIAL,/jobs/{id}/analysis v1 components,test_rule_based_scoring_is_explained,,2026-11-10
+MAT-06,P0,Matching,Skill normalization and aliases,alias table/map + unit test,DONE_VERIFIED,core/skills.py taxonomy aliases,test_jd_analyzer_required_vs_preferred,,2026-11-10
+MAT-07,P0,Gaps,"Specific gaps with severity, explanation, job/goal link, next action","Gap rows per job; GET /gaps, /jobs/:id/gaps",PARTIAL,skill_gap_service on demand,test_skill_gap_analysis_exact_and_transferable,"no Gap rows, no UI",2026-11-10
+MAT-08,P0,Gaps,Single best next gap plus alternatives,ranking + UI card,MISSING,,,,2026-11-10
+MAT-09,P0,Evidence,Six-state skill progression Aware→Learning→Practising→Project Evidence→Professional Experience→Interview Ready,state enum; transitions; courses/projects never shown as employment,MISSING,,,,2026-11-10
+MAT-10,P0,Evidence,"SkillEvidence with type, link, verification, timestamps, provenance",table + UI to add evidence,MISSING,,,,2026-11-10
+MAT-11,P1,Matching,Recompute matches on profile/goal change,POST /matches/recompute,PARTIAL,profile change triggers rescore_user,,no recompute endpoint,2026-11-10
+MAT-12,P1,Matching,Calibration from measured outcomes (no predictive claims),outcome-by-score report; no hiring-probability wording,MISSING,,,,2026-11-10
+MAT-13,P1,Gaps,Closing a gap updates match explanation with before/after reasoning,evidence change triggers rescore with diff,MISSING,,,,2026-11-10
+RES-01,P0,Resume,Structured browser editor backed by master profile,"sections, headings, summary, bullets, education, projects, work, dates, skills, certs, publications editable",MISSING,,,no browser resume editor,2026-11-10
+RES-02,P0,Resume,Reorder / hide sections,position + visibility persisted,MISSING,,,,2026-11-10
+RES-03,P0,Resume,Autosave with pending/saved/error feedback,debounced save + status indicator,MISSING,,,,2026-11-10
+RES-04,P0,Resume,"Live preview: side-by-side desktop, tabs on mobile, page-break visualisation",preview renders same HTML as PDF,MISSING,,,,2026-11-10
+RES-05,P0,Resume,"Five-plus templates: ATS Simple, Modern Professional, Technical, Finance, Graduate, International","six templates, one content model, switching preserves content",MISSING,pdf_generator single layout,,,2026-11-10
+RES-06,P0,Resume,"Typography size, spacing density, columns, section visibility with layout constraints",options validated,MISSING,,,,2026-11-10
+RES-07,P0,Resume,"ATS-safe mode: one column, standard headings, no info in images, density/overflow warnings",checker returns warnings; not presented as guarantee,PARTIAL,ats_diagnostic_service,test_resume_studio_api_flow,not in UI,2026-11-10
+RES-08,P0,Resume,"Named versions, job-specific copy with target job, version history and restore",clone/restore endpoints,PARTIAL,uploaded resume versions; TailoredResume,test_resume_versions_default_rename_preview_delete,no clone/restore,2026-11-10
+RES-09,P0,Resume,Submitted versions immutable; edits create new version,locked on application submit; test,MISSING,,,,2026-11-10
+RES-10,P0,Resume,PDF export with selectable text via secure download,text-extractable PDF test,PARTIAL,reportlab export,test_pdf_generator_output,unescaped markup can break export; no text-extraction test,2026-11-10
+RES-11,P0,Resume,Export cache per content checksum (no regenerate per download),ResumeExport with checksum reuse,MISSING,,,regenerated every download,2026-11-10
+RES-12,P1,Resume,DOCX export with truthful fallback,docx generated for supported templates,PARTIAL,docx_generator,test_docx_generator_output,not in UI,2026-11-10
+RES-13,P0,Resume,Suggest-only AI rewriting grounded in verified evidence; accept/reject each bullet,suggestions with evidence markers; never auto-applied,MISSING,,,,2026-11-10
+RES-14,P0,Resume,"Warnings: unsupported claims, repeated keywords, weak bullets, length, parsing risk",feedback endpoint returns issues,PARTIAL,ats diagnostic findings,test_resume_studio_api_flow,,2026-11-10
+RES-15,P0,Resume,Never fabricate metrics/skills/titles/credentials,fabrication guard tests,BROKEN,resume_tailor_service,,hard-coded 'Software Engineer… proven track record' summary; audit flag set without checks,2026-11-10
+RES-16,P0,Resume,Data model ResumeTemplate/Version/Section/Block/Bullet/Export/Feedback,tables exist and used,MISSING,,,,2026-11-10
+RES-17,P0,Resume,Resume-to-job feedback without altering document,ResumeFeedback per job,PARTIAL,ats-compatibility endpoint,test_resume_studio_api_flow,not in UI,2026-11-10
+RES-18,P0,Resume,Warnings before destructive changes,confirm on delete/template overwrite,PARTIAL,,,,2026-11-10
+RES-19,P1,Resume,Visual regression / preview-PDF consistency across templates,automated test renders every template,MISSING,,,,2026-11-10
+APP-01,P0,Apply,"Prepared application package: checklist, job link, resume version, verified answers, unknown flags, cover material",package endpoint + dialog,DONE_VERIFIED,applications.prepare checklist + answers,test_apply_flow_open_is_not_applied,,2026-11-10
+APP-02,P0,Apply,Exact resume_version_id + export checksum linked to application,FK + checksum on application,MISSING,,,,2026-11-10
+APP-03,P0,Apply,State machine Saved→Prepared→Opened→Pending→Applied→Screening→Assessment→Interview→Offer + Rejected/Withdrawn/Archived with legal transitions,transition table + tests,PARTIAL,application_service.ALLOWED + STAGES,test_stage_requires_submission,stage changes not validated,2026-11-10
+APP-04,P0,Apply,Opened is not Applied; Applied only on explicit user confirmation,tests,DONE_VERIFIED,open_listing vs confirm,test_apply_flow_open_is_not_applied; test_opening_job_is_not_applying,,2026-11-10
+APP-05,P0,Apply,Event history with timestamps,ApplicationEvent per transition,DONE_VERIFIED,ApplicationEvent,test_apply_flow_open_is_not_applied,,2026-11-10
+APP-06,P0,Tracker,"Tracker list/kanban with company, role, status, date, search/filter",Applied page,PARTIAL,AppliedPage list + filter,,,2026-11-10
+APP-07,P0,Tracker,"Notes, next follow-up, reminders, recruiter/ref number",tracking fields + reminders,DONE_VERIFIED,tracking notes/follow-up/reference,test_tracking_fields_stages_and_submission_method,,2026-11-10
+APP-08,P0,Tracker,"Structured + free-text rejection reasons, outcomes, follow-up actions",rejection reason fields (known vs guessed),PARTIAL,free-text withdraw/fail reason,,no structured rejection,2026-11-10
+APP-09,P0,Extension,"MV3 extension: explicit trigger, least-privilege, one-time pairing code, origin checks",extension + tests,DONE_VERIFIED,"extension pairing, activeTab",test_pairing_*; extension unit tests,,2026-11-10
+APP-10,P0,Extension,Field detection/mapping/preview; never overwrite user values; no demographic/legal autofill; never submit; no CAPTCHA bypass,e2e tests,DONE_VERIFIED,extension fieldmap/core,fill.test.js; e2e 37/37,,2026-11-10
+APP-11,P0,Extension,Graceful fallback on unsupported sites (copy/download assistance),popup fallback,DONE_VERIFIED,popup unsupported fallback,e2e run_e2e.py,,2026-11-10
+APP-12,P1,Apply,"Interviews, offers, contacts on applications; calendar export",tracker endpoints + UI,DONE_VERIFIED,tracker interviews/offers/contacts/.ics,test_interviews_offers_contacts_and_calendar,,2026-11-10
+APP-13,P1,Apply,Today view (your move / coming up / waiting),dashboard,DONE_VERIFIED,today_view + TodayView,test_today_view_buckets,,2026-11-10
+INT-01,P1,Interview,Job/role-specific question sets with competencies (behavioural/technical),"generated from job requirements, not generic dumps",MISSING,,,,2026-11-10
+INT-02,P1,Interview,"Mock practice sessions: answers, notes, feedback, improvement actions",practice session model + UI,MISSING,,,,2026-11-10
+INT-03,P1,Interview,"Reference insight links (Glassdoor, Reddit, AmbitionBox, Indeed) with attribution, no scraping",public search links + curated manual entries with timestamps,MISSING,,,,2026-11-10
+INT-04,P1,Interview,"Interview record: type, time, status, outcome, feedback, topics, strengths, weaknesses",InterviewFeedback,PARTIAL,Interview model,test_interviews_offers_contacts_and_calendar,,2026-11-10
+INT-05,P1,Rejection,Rejection capture: known vs guessed reasons; no invented employer rationale,fields + UI,MISSING,,,,2026-11-10
+INT-06,P1,Rejection,"Funnel app→screening→interview→offer, stage losses, patterns, resume-version differences",analytics endpoint + chart,PARTIAL,dashboard funnel,,,2026-11-10
+INT-07,P1,Rejection,Confirmed findings feed gap priority / mentor actions,repeated-gap boost,MISSING,,,,2026-11-10
+LRN-01,P1,Learning,≥3 credible resources per supported gap with title/URL/provider/type/duration/level/checked date/relevance,LearningResource catalogue,MISSING,,,,2026-11-10
+LRN-02,P1,Learning,"Resource ranking (relevance, credibility, level, recency, feedback)",ranking + feedback,MISSING,,,,2026-11-10
+LRN-03,P1,Learning,"Opt-in learning sessions start/stop, idle vs active time, transparent state",LearningSession + consent,MISSING,,,,2026-11-10
+LRN-04,P1,Learning,"Notes, completion, knowledge checks/exercises, evidence project link",session completion + evidence,MISSING,,,,2026-11-10
+LRN-05,P1,Learning,Candidate affirms progression state; no surveillance scoring,manual state change,MISSING,,,,2026-11-10
+LRN-06,P1,Learning,Official/authorized sources only (no dubious scraping),curated catalogue with source column,MISSING,,,,2026-11-10
+MEN-01,P1,AI Mentor,Contextual action planner grounded in career graph,GET /mentor/plan from funnel + gaps,MISSING,,,,2026-11-10
+MEN-02,P1,AI Mentor,"Weekly reflection: outcome, obstacle, next action",POST /mentor/reflection,MISSING,,,,2026-11-10
+MEN-03,P1,AI Mentor,Bottleneck diagnosis with confidence and limitations,diagnosis rules with explicit observations,MISSING,,,,2026-11-10
+MEN-04,P1,AI Mentor,"Action checklist with due dates, priority, completion, reason",MentorAction CRUD,MISSING,,,,2026-11-10
+MEN-05,P1,AI Mentor,Five documented cases (many apps few interviews; interviews no offers; repeated gap; learning but no applying; better after resume change),unit tests per case,MISSING,,,,2026-11-10
+MEN-06,P2,Human mentor,"Consent-based invite/assignment, revocation",MentorAssignment with consent,MISSING,,,,2026-11-10
+MEN-07,P2,Human mentor,"1-on-1 virtual session views, privacy-controlled notes",MentorSession + notes visibility,MISSING,,,,2026-11-10
+MEN-08,P2,Human mentor,"Profile/funnel/gap/action summaries, recommendations/overrides",mentor workspace,MISSING,,,,2026-11-10
+MEN-09,P2,Human mentor,"Auditable access, no leakage across mentor relationships",audit + isolation tests,MISSING,,,,2026-11-10
+INTL-01,P2,International,Country catalogue,Country rows with source and checked date,MISSING,,,,2026-11-10
+INTL-02,P2,International,"Visa route catalogue + sourced rules (dates, requirements, salary thresholds, confidence)",VisaRoute/VisaRule,MISSING,,,,2026-11-10
+INTL-03,P2,International,"Country-specific profile fit: strengths, gaps, pathways, source-linked",GET /country-fit,MISSING,,,,2026-11-10
+INTL-04,P2,International,Sponsorship signals verified / inferred / unknown,job-level signal with evidence,MISSING,,,,2026-11-10
+INTL-05,P2,International,Sponsorship-aware search/apply and relocation strategy,filters + guidance,MISSING,,,,2026-11-10
+INTL-06,P2,International,Source change monitoring + notifications on material change,"visa_source_check, visa_change_detection",MISSING,,,,2026-11-10
+INTL-07,P2,International,Not legal advice notices; stale rules flagged,notice + staleness check,MISSING,,,,2026-11-10
+INTL-08,P2,International,"One product: India/International/Both share profile, jobs, gaps, applications",no separate app,MISSING,,,,2026-11-10
+NOT-01,P0,Notifications,New relevant job alerts,in-app notifications on new matches,DONE_VERIFIED,notification_service.notify_new_match,test_notification_threshold_uses_the_search_score; test_notifications_read_flow,,2026-11-10
+NOT-02,P0,Notifications,"Follow-up due, interview/upcoming schedule, action due reminders",reminder notifications,MISSING,,,,2026-11-10
+NOT-03,P1,Notifications,Learning milestone and source-change alerts,notifications,MISSING,,,,2026-11-10
+NOT-04,P0,Notifications,"Preferences, channel opt-in, throttling, dedupe, retry/error state",prefs + dedupe keys,PARTIAL,"NotificationPref, dedupe_key",test_notification_preferences_filter_and_digest,,2026-11-10
+NOT-05,P1,Notifications,Email delivery when SMTP configured,"email channel, disabled honestly without credentials",MISSING,,,,2026-11-10
+ANA-01,P0,Analytics,"Candidate dashboard: action, snapshot, matches, active applications, reminders, latest gap",dashboard,PARTIAL,DashboardPage stats/chart/TodayView,test_today_view_buckets,,2026-11-10
+ANA-02,P0,Analytics,Funnel counts distinguish Opened / Pending / Applied,reports,PARTIAL,dashboard pending/applied,test_apply_flow_open_is_not_applied,Opened not separated from Pending,2026-11-10
+ANA-03,P0,Analytics,Sixteen PRD events instrumented with documented properties,AnalyticsEvent rows for each,MISSING,,,,2026-11-10
+ANA-04,P1,Analytics,"North-star metrics: outcomes, conversions, gap closure, resume reuse, WAU, reflection completion",admin metrics endpoint,MISSING,,,,2026-11-10
+ANA-05,P1,Analytics,"Onboarding activation/fall-off, job relevance, learning usefulness, extension success",metrics,MISSING,,,,2026-11-10
+ANA-06,P1,Analytics,Reports/export (Excel weekly/monthly),report generation,PARTIAL,report_service daily/history,test_reports_are_per_user,,2026-11-10
+ANA-07,P1,Research,In-app feedback prompts on the eleven research topics,feedback widget + storage,MISSING,,,,2026-11-10
+ANA-08,P1,Analytics,"Failed/aborted actions recorded as operational events, not conversions",event types,PARTIAL,RunError rows,test_all_boards_failing_is_a_failed_run,,2026-11-10
+ADM-01,P0,Admin,"Source health view: runs, compliance, parse/dedup errors",admin page,PARTIAL,admin sources list,test_admin_rbac_and_endpoints,,2026-11-10
+ADM-02,P1,Admin,"Service health, analytics, model/AI cost view",admin metrics,PARTIAL,system_metrics counts,test_admin_rbac_and_endpoints,,2026-11-10
+ADM-03,P1,Admin,Audit/security incident view,audit log,PARTIAL,/admin/audit-log,test_admin_rbac_and_endpoints,,2026-11-10
+ADM-04,P1,Admin,Controlled replay/retry of runs,admin re-run endpoint,MISSING,,,,2026-11-10
+ADM-05,P0,Admin,Admin role-gated and logged,require_admin + audit,PARTIAL,require_admin + audit on mutations,test_admin_rbac_and_endpoints,,2026-11-10
+ADM-06,P1,Admin,User management and invites,users/invites admin,PARTIAL,users/invites admin,test_admin_rbac_and_endpoints,,2026-11-10
+ARC-01,P0,Architecture,Linked career graph entities and relationships,CAREER_GRAPH.md + FKs,PARTIAL,models/__init__.py,,no career graph doc,2026-11-10
+ARC-02,P0,Architecture,API surface equivalents of spec routes,mapping table + routes,PARTIAL,/api/v1 routers,,,2026-11-10
+ARC-03,P0,Architecture,Storage abstraction LocalStorage / S3Storage,interface + local impl,MISSING,,,,2026-11-10
+ARC-04,P1,Architecture,"Provider-agnostic AI gateway: prompt/schema versioning, validation, retries, grounding, token budget, cost per workflow",gateway + AICall logging,PARTIAL,core/llm.py,,AICall never written; no cost/prompt versioning,2026-11-10
+ARC-05,P0,Architecture,Background worker / queue for long tasks,in-process worker with task table,PARTIAL,APScheduler in-process,test_scheduler_runs_only_due_enabled_searches,TaskQueueItem unused,2026-11-10
+ARC-06,P0,Architecture,Transactions and indexes in Postgres,indexes on hot queries,PARTIAL,indexes; alembic,test_migrated_schema_matches_models,,2026-11-10
+ARC-07,P0,Architecture,Data provenance rules documented,doc,PARTIAL,,,,2026-11-10
+JOB-01,P0,Jobs,daily_discovery,"scheduled, idempotent, tested",DONE_VERIFIED,scheduler daily_discovery + catch-up,test_missed_daily_run_is_scheduled_once_after_start,,2026-11-10
+JOB-02,P0,Jobs,source_refresh,source health refresh,MISSING,,,,2026-11-10
+JOB-03,P0,Jobs,job_normalisation,in pipeline,DONE_VERIFIED,normalization inline,test_greenhouse_parses_full_description_and_verified_date,,2026-11-10
+JOB-04,P0,Jobs,job_deduplication,in pipeline,DONE_VERIFIED,find_existing inline,test_repeat_runs_add_no_duplicate_jobs_or_notifications,,2026-11-10
+JOB-05,P0,Jobs,job_matching,in pipeline,DONE_VERIFIED,UserMatcher inline,test_saved_search_discovers_scores_and_filters_board_jobs,,2026-11-10
+JOB-06,P0,Jobs,gap_generation,job,PARTIAL,,,,2026-11-10
+JOB-07,P1,Jobs,resume_feedback_generation,job,MISSING,,,,2026-11-10
+JOB-08,P1,Jobs,resource_refresh,job (link checks),MISSING,,,,2026-11-10
+JOB-09,P0,Jobs,notification_dispatch,job,PARTIAL,,,,2026-11-10
+JOB-10,P1,Jobs,alert_email_ingestion,job (IMAP when configured),PARTIAL,IMAP inside daily run,test_email_alert_discovery_and_confirmation,,2026-11-10
+JOB-11,P1,Jobs,report_generation,job,PARTIAL,daily report,test_reports_are_per_user,,2026-11-10
+JOB-12,P2,Jobs,visa_source_check,job,MISSING,,,,2026-11-10
+JOB-13,P2,Jobs,visa_change_detection,job,MISSING,,,,2026-11-10
+JOB-14,P1,Jobs,analytics_rollup,job,MISSING,,,,2026-11-10
+JOB-15,P0,Jobs,cleanup_and_retention,job,MISSING,,,,2026-11-10
+JOB-16,P0,Jobs,"Job registry: schedule, owner, idempotency, retry/backoff, observability, concurrency",registry + admin view + tests,PARTIAL,3 APScheduler jobs,,,2026-11-10
+SEC-01,P0,Security,"Input validation, upload type/size checks, path traversal prevention",tests,DONE_VERIFIED,"upload checks, SSRF guard",test_resume_upload_validation; test_careers_page_fetch_refuses_unsafe_addresses,,2026-11-10
+SEC-02,P0,Security,Private file downloads with ownership checks and limited lifetime,signed/short-lived download,PARTIAL,owner-scoped downloads,test_resume_stored_per_user_and_downloadable,no short-lived links,2026-11-10
+SEC-03,P0,Security,"Security headers, CORS, CSRF posture",headers + CORS allow-list,PARTIAL,"security_headers, CORS allow-list",test_cors_allows_configured_origin_only,no CSP,2026-11-10
+SEC-04,P0,Security,No third-party passwords stored; no auto-submit; no CAPTCHA/OTP workaround,review + tests,PARTIAL,extension never submits,fill.test.js,IMAP password stored encrypted (user's own mailbox),2026-11-10
+SEC-05,P0,Security,"AI outputs schema-validated, cite facts, return unknown, minimise PII",validation layer,PARTIAL,,,,2026-11-10
+SEC-06,P0,Security,Secrets never logged; tokens hashed,log scrub test,PARTIAL,redaction; hashed tokens,tests/test_workflow.py,reset tokens kept in memory,2026-11-10
+SEC-07,P0,Security,"Every external claim shows source, date, confidence",UI labels,PARTIAL,posting-date provenance,test_unknown_posting_dates_are_never_presented_as_recent,,2026-11-10
+TST-01,P0,Testing,"Unit tests: aliases, weights/version, eligibility, evidence progression, version immutability, state transitions, permissions, notification dedupe, AI validation",tests exist and pass,PARTIAL,,,,2026-11-10
+TST-02,P0,Testing,"Integration: adapters, authz, exports/checksum/cache, jobs→matches→gaps, extension, workers, storage, migrations/restore",tests,PARTIAL,,,,2026-11-10
+TST-03,P0,Testing,End-to-end candidate path with two users + mentor + admin,e2e script,PARTIAL,extension e2e only,,,2026-11-10
+TST-04,P1,Testing,"Visual regression of templates, PDF text extraction, mobile workflow, a11y states",tests,MISSING,,,,2026-11-10
+TST-05,P0,Testing,"Security tests IDOR/BOLA, role escalation, leakage",tests,PARTIAL,test_user_isolation_across_every_resource,,,2026-11-10
+TST-06,P1,Testing,"Tests for unavailable external data, stale visa info, bad jobs, fabricated AI claims, tunnel URL change",tests,PARTIAL,,,,2026-11-10
+GATE-01,P0,Launch gate,Zero critical data loss,backups + restore verified,MISSING,,,backups skip uploads; restore script broken,2026-11-10
+GATE-02,P0,Launch gate,All shipped PDFs clean and selectable,test,MISSING,,,,2026-11-10
+GATE-03,P0,Launch gate,Previous resume version restorable,test,MISSING,,,,2026-11-10
+GATE-04,P0,Launch gate,No Applied without confirmation,test,DONE_VERIFIED,,test_apply_flow_open_is_not_applied,,2026-11-10
+GATE-05,P0,Launch gate,Admin source health visible,admin page,PARTIAL,,,,2026-11-10
+GATE-06,P0,Launch gate,Defensible scoring,documented weights + breakdown,PARTIAL,,,,2026-11-10
+GATE-07,P0,Launch gate,No fabricated AI candidate facts in evaluated tests,test,MISSING,,,,2026-11-10
+GATE-08,P0,Launch gate,Self-service onboarding,e2e,PARTIAL,,,,2026-11-10
+GATE-09,P0,Launch gate,20 real beta candidates complete main loop,real-world; cannot be a test,BLOCKED_EXTERNAL,,,needs 20 real beta candidates; cannot be replaced by a test,2026-11-10
+GATE-10,P0,Launch gate,Ten sprint exit conditions mapped to evidence,matrix section,MISSING,,,,2026-11-10
+DEP-01,P0,Beta deploy,"Single Linux host, Docker Compose, no AWS/domain/public IP/K8s",compose stack,DONE_VERIFIED,docker-compose.yml single host,docker compose ps healthy,,2026-11-10
+DEP-02,P0,Beta deploy,Nginx serves frontend and same-origin /api reverse proxy without path rewrite bugs,nginx conf + test,PARTIAL,frontend/nginx.conf proxies /api same-origin,,public UI is GitHub Pages calling the tunnel cross-origin,2026-11-10
+DEP-03,P0,Beta deploy,Only Nginx/tunnel public; no exposed 5432/API/Redis/Docker/admin ports,port audit,PARTIAL,postgres unexposed; backend 127.0.0.1,,tunnel points at backend not nginx; frontend bound 0.0.0.0,2026-11-10
+DEP-04,P0,Beta deploy,".env.example committed, .env ignored, secure random secrets",files,DONE_VERIFIED,.env.example; init_env.sh random secrets,,,2026-11-10
+DEP-05,P0,Beta deploy,GET /api/health checks app/config/DB without secrets,endpoint + test,PARTIAL,/api/v1/health + /ready,test_portal_workflow health tests,no /api/health alias; no storage check,2026-11-10
+DEP-06,P0,Beta deploy,"Reproducible migrations on deploy (no dev reset), optional seed",alembic upgrade on start,DONE_VERIFIED,Dockerfile alembic upgrade head,test_migrations.py,,2026-11-10
+DEP-07,P0,Beta deploy,Persistent Postgres volume and upload/export storage,named volumes,DONE_VERIFIED,named volumes pgdata/storage,,,2026-11-10
+DEP-08,P0,Beta deploy,Cloudflare Quick Tunnel (or equivalent) exposing only Nginx; URL rotation handled,tunnel profile + URL republish,PARTIAL,ngrok tunnel + url_watch republish,,ngrok not Cloudflare; url_watch cron not installed,2026-11-10
+DEP-09,P0,Beta deploy,"Quick Tunnel limits: no SSE dependency, URL changes on restart, protected access option",polling only; documented,PARTIAL,"polling only, no SSE",,limits not documented in one place,2026-11-10
+DEP-10,P0,Beta deploy,Dev vs beta compose profiles,docker-compose.dev.yml / beta profile,MISSING,,,,2026-11-10
+DEP-11,P0,Beta deploy,Host requirements and uptime expectations documented,PRIVATE_BETA_LINUX.md,MISSING,,,,2026-11-10
+DEP-12,P0,Beta deploy,Startup on reboot,restart policies + docker enabled,PARTIAL,restart unless-stopped; docker enabled,,reboot test not run,2026-11-10
+DEP-13,P0,Beta deploy,Deployment update procedure,documented + script,PARTIAL,DEPLOYMENT.md manual,,,2026-11-10
+DEP-14,P0,Beta deploy,Rollback to previous working image/git,documented + tagged images,PARTIAL,,,"images only :latest, no tags",2026-11-10
+DEP-15,P0,Beta deploy,In-process scheduler / cron option for discovery,scheduler service,DONE_VERIFIED,in-process scheduler,test_scheduler_runs_only_due_enabled_searches,,2026-11-10
+OPS-01,P0,Operations,Daily PostgreSQL backup with rotation,scheduled backup service + retention,BROKEN,deploy/backup.sh,,not scheduled; prunes manual backups; wrong cwd,2026-11-10
+OPS-02,P0,Operations,Backup includes uploads/exports and config; encrypted off-host copy,script + encryption,BROKEN,,,storage volume silently skipped; no encryption/off-host,2026-11-10
+OPS-03,P0,Operations,"Verified restore, restore to second machine, RPO/RTO documented",restore script tested,BROKEN,deploy/restore.sh,,pg_restore reads host path inside container; file names mismatch; reports success anyway,2026-11-10
+OPS-04,P0,Operations,"Structured logs with request ID, safe user ID, no secrets/resume text",middleware + test,PARTIAL,X-Request-ID header; JSON formatter,,request id not in log records,2026-11-10
+OPS-05,P0,Operations,Log rotation,docker logging limits,PARTIAL,docker log limits,,app log files never pruned,2026-11-10
+OPS-06,P0,Operations,Health-check script and diagnostics for Docker/DB/Nginx/tunnel,deploy/healthcheck.sh,MISSING,,,,2026-11-10
+OPS-07,P0,Operations,Disk warnings at 70/80/90%,check script + admin view,MISSING,,,disk already 74% used,2026-11-10
+OPS-08,P0,Operations,Host failure strategy documented,doc,MISSING,,,,2026-11-10
+OPS-09,P1,Operations,Test access from a different network,manual check documented,PARTIAL,,,,2026-11-10
+AWS-01,P3,AWS future,"Portable design: S3, RDS, ECS/EC2, EventBridge, SES, CloudWatch, Secrets Manager",AWS_FUTURE_MIGRATION.md + storage/email abstractions,MISSING,,,,2026-11-10
+AWS-02,P3,AWS future,"Terraform IaC, env separation, CI/CD, cost tags, budget alerts 50/80/100%","plan documented, not provisioned",MISSING,,,,2026-11-10
+AWS-03,P3,AWS future,Cost ranges are illustrative; recalculate before rollout,doc,MISSING,,,,2026-11-10
+AWS-04,P3,AWS future,"Cost per active candidate, per interview/offer, AI spend per workflow, export CPU",metrics hooks (AICall cost),PARTIAL,AICall model unused,,,2026-11-10
+AWS-05,P3,AWS future,"Upgrade triggers (reliability, worker contention, DB IO, export queues, search, traffic)",documented,MISSING,,,,2026-11-10
+AWS-06,P3,AWS future,Avoid EKS/OpenSearch/NAT/over-engineering until triggered,doc,PARTIAL,no Redis/Kafka/K8s in stack,,,2026-11-10
+FUT-01,P3,Future,Predictive career pathways only with validated outcome data,labelled experimental; no predictions shipped,PLANNED_FUTURE,,,no predictive claims shipped,2026-11-10
+FUT-02,P3,Future,Interview intelligence / long-term pathway research,tracked,PLANNED_FUTURE,,,,2026-11-10
+NEG-01,P0,Exclusion,"Not a job-application bot: no blind mass applying, no auto-submit",enforced,DONE_VERIFIED,explicit confirm flow; extension never submits,test_apply_flow_open_is_not_applied; fill.test.js,,2026-11-10
+NEG-02,P0,Exclusion,No scraping behind logins / ToS-violating scraping / anti-bot bypass,enforced,BROKEN,,,browser impersonation in scrapling_client,2026-11-10
+NEG-03,P0,Exclusion,"Score is not a hiring, immigration or parsability guarantee",wording checks,PARTIAL,,,no score disclaimer in UI,2026-11-10
+NEG-04,P0,Exclusion,"MVP avoids: mentor marketplace, Kafka, microservices, OpenSearch, Redis cluster, K8s, paid monitoring",not built,DONE_VERIFIED,compose: postgres+backend+nginx only,,,2026-11-10
+NEG-05,P0,Exclusion,Courses/projects never presented as employment; no fabricated experience,enforced,BROKEN,,,tailor summary invents title/claims,2026-11-10
+NEG-06,P0,Exclusion,Not legal advice; no visa approval claims,notices,MISSING,,,,2026-11-10
+GTM-01,P1,Launch,Early-user feedback themes and consentful interviews,feedback prompts + guide,MISSING,,,,2026-11-10
+GTM-02,P1,Launch,Launch strategy and beta success test,documented; tracked separately from 2–4 user pilot,PARTIAL,,,,2026-11-10
+INFO,-,Informational,"Context, narrative, marketing or reference text with no buildable requirement",INFORMATIONAL_ONLY,NOT_APPLICABLE_JUSTIFIED,,,,

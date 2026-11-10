@@ -302,10 +302,34 @@ reports/           excel_generator.py, summary_generator.py
 tests/             pytest suite (unit and end-to-end, no network)
 ```
 
-## Troubleshooting
-
-* `Configuration error: ...`: the message names the invalid setting.
-* `Resume not found` / `Resume error`: fix the path, or export a text-based (not scanned) PDF.
-* `Another run holds .../.run.lock`: a run is already in progress.
 * Every job scored `rule_based (LLM unavailable ...)`: set `ANTHROPIC_API_KEY` in `.env`.
 * Email source errors appear in the *Errors and Logs* sheet. Check the IMAP host, the app password, and that IMAP is enabled in the mailbox settings.
+
+---
+
+## What was added in this session (2026-11-06)
+
+* **Multi-Source Discovery Engine (Scrapling 0.5.1)**:
+  - Integrated `scrapling[fetchers]==0.5.1` with `Fetcher` (curl_cffi) and `StealthyFetcher` (Patchright).
+  - Central Source Policy Registry (`source_policies.py`) governing 50+ sources with rate limiting and robots.txt parsing.
+  - 12 active connectors: Remotive, Himalayas, RemoteOK, Arbeitnow, NCS India, Indian Government notices (UPSC, SSC, ISRO, DRDO), Academic institutes (IIT Bombay, IIT Delhi, IIT Madras, IISc), Schema.org JSON-LD parser, RSS/Atom feed parser, XML Sitemap crawler, and Career URL ATS auto-detection.
+  - Interactive **Career URL Form** and **Sources Panel** in the web UI.
+* **Phase 4: Tracking, Today Focus & Privacy**:
+  - **Today's Focus widget** (`<TodayView />`) displaying actionable application buckets.
+  - **Interview scheduling** with interviewer details, meeting links, and **iCal Calendar download** (`/api/v1/interviews/calendar.ics`).
+  - **Offer tracking** with compensation breakdowns (salary, bonus, equity), deadlines, and negotiation statuses.
+  - **Recruiter & contact directory** per application.
+  - **Full Data Export** (JSON) and **Password-Gated Account Deletion**.
+* **Phase 5: Web Admin Console (`/admin`)**:
+  - Dedicated admin panel with system metrics, user activation/deactivation, role promotion, invite code management, and audit trail.
+* **Phase 6: Visual System & Gamification**:
+  - Light/Dark mode switcher (`<ThemeToggle />`).
+  - Maritime candidate nickname generator.
+  - Milestone achievement badge system.
+* **Phase 7: Notifications & Transactional Email**:
+  - Production SMTP client supporting SSL/STARTTLS and self-service password reset.
+* **Phase 8: DevOps & Hardening**:
+  - Automated zero-downtime database and storage backup (`deploy/backup.sh`) with SHA256 checksums and 7-day retention.
+  - Safe restoration script (`deploy/restore.sh`).
+  - Structured JSON logging (`JSONFormatter`) and `X-Request-ID` correlation middleware.
+

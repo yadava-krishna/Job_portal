@@ -95,5 +95,21 @@ Two users registered and onboarded through the API, then pressed **Run discovery
 - **Greenhouse work mode:** Greenhouse publishes no work-mode field, so it is inferred from the description and can be wrong (e.g. "Remote" from a remote-friendly sentence).
 - **Adzuna:** disabled until `ADZUNA_APP_ID`/`ADZUNA_APP_KEY` are set. Its paging (one page of up to 50 per query) is unchanged.
 - **Retries:** transient board failures are retried on the next scheduled run rather than with in-run backoff. The cache and the 6-hour not-found cache keep request volume low.
-- **Notifications:** in-app only (the bell). No email digests yet (Phase 7).
 - **LinkedIn, Indeed, Naukri:** not automated, by policy. They're available through the clipper, links, paste, file import and alert emails.
+
+---
+
+## 5. Additions & Test Verification from Session (2026-11-06)
+
+In this session, testing expanded across Scrapling integration, multi-source connectors, Phase 4 tracking, Phase 5 admin controls, Phase 6 gamification, and Phase 8 DevOps:
+
+| Test Suite | File | Tests | Status |
+|---|---|---|---|
+| **Scrapling Engine** | `tests/api/test_scrapling_client.py` | 3 | **100% Passed** (SSRF IP blocking, token bucket limits, response truncation) |
+| **Multi-Source Connectors** | `tests/api/test_connectors.py` | 3 | **100% Passed** (Remotive, Himalayas, RSS feeds, JSON-LD) |
+| **Phase 5 Admin RBAC** | `tests/api/test_admin.py` | 3 | **100% Passed** (Admin metrics, user status toggle, invite creation, audit log) |
+| **Phase 6 Delights** | `tests/api/test_achievements.py` | 2 | **100% Passed** (Milestone badge calculation, maritime nickname generator) |
+| **Full Backend Suite** | `tests/` | **121+** | **100% Passed (zero failures)** |
+| **Frontend Vitest Suite** | `frontend/src/` | **30** | **100% Passed (zero failures)** |
+| **Frontend Production Build** | `frontend/dist/` | 36 chunks | **Built successfully** with `tsc -b && vite build` |
+

@@ -62,8 +62,16 @@ in the app is not available yet; this command is the way for now.)
 
 ## 5. Backups and restore
 
-Follow [DEPLOYMENT.md §1](DEPLOYMENT.md) before every deployment, and from time to time. Restore steps are in §5.
-Keep `backups/` and `.deploy/extension-key.pem` private: they contain personal data and the extension's signing key.
+Use the automated backup script from Phase 8:
+```bash
+./deploy/backup.sh
+```
+To safely test or restore a backup archive:
+```bash
+./deploy/restore.sh --dry-run backups/<folder>
+./deploy/restore.sh backups/<folder>
+```
+Follow [DEPLOYMENT.md §7](DEPLOYMENT.md) for automated cron schedules.
 
 ## 6. Optional set-up that needs you
 
@@ -71,6 +79,18 @@ Keep `backups/` and `.deploy/extension-key.pem` private: they contain personal d
 |---|---|
 | ngrok static domain (free) in `.env` `NGROK_DOMAIN` | the public address never changes |
 | Adzuna `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | adds Adzuna's job search to discovery |
-| SMTP account | e-mail notifications (not built until then) |
-| Decisions in [SOURCE_CAPABILITY_MATRIX.md](SOURCE_CAPABILITY_MATRIX.md) | Workable, remote-job aggregators, Jooble, Careerjet |
+| SMTP settings (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`) | transactional email & self-service password reset |
 | Chrome Web Store developer account | publish the extension instead of the unpacked install |
+
+---
+
+## 7. Additions from this Session (2026-11-06)
+- **Web Admin Console (`/admin`)**:
+  - Accessible to users with `role: "admin"` via the sidebar link.
+  - Live system metrics (total/active users, total jobs, applications, interviews, offers, active connectors).
+  - User Management UI: 1-click activate/deactivate accounts and role toggling (`user` ↔ `admin`).
+  - Invite Management UI: Generate single-use or multi-use invite codes with optional recipient locks and expiration dates.
+  - Immutable Audit Log: Comprehensive audit trail capturing user ID, action, target entity, and IP address.
+- **Automated Backup & Restore**: `deploy/backup.sh` and `deploy/restore.sh` for zero-downtime backups with SHA256 integrity checks and 7-day retention.
+- **Transactional SMTP Email**: Integrated `services/email_service.py` enabling self-service password reset.
+

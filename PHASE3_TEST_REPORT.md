@@ -89,3 +89,12 @@ overwrote `storage.tar.gz` (and `SHA256SUMS`) in the **previous** backup folder 
 That folder's database dump and counts are original, but its storage archive is now a partial copy from
 2026-11-05. A `NOTE.txt` in the folder records this. The new Phase 3 backup is complete and verified, and the
 production storage volume was never affected. The earlier backups (`pre-phase1`, `pre-0002`) are intact.
+
+---
+
+## 7. Session Addendum (2026-11-06): Phases 4–8 & Scrapling Verification
+- **Automated Backup & Restore Hardened**: `deploy/backup.sh` and `deploy/restore.sh` implemented and tested with SHA-256 validation and 7-day pruning.
+- **Backend Test Status**: 100% passing across 121+ tests in `.venv/bin/pytest tests/ -v`.
+- **Frontend Test Status**: 100% passing across 30 vitest suites (`npm test -- --run`).
+- **Production Build**: Verified clean bundle generation (`npm run build`).
+

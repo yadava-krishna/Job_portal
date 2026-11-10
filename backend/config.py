@@ -44,6 +44,13 @@ class BackendSettings(BaseModel):
     adzuna_country: str = "in"
     scheduler_enabled: bool = True
     scheduler_run_time: str = "09:00"
+    smtp_host: str | None = None
+    smtp_port: int = 465
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "JobPilot <no-reply@jobpilot.local>"
+    # Where people open JobPilot (used for links in e-mails), e.g. https://<user>.github.io/Job_portal
+    public_app_url: str | None = None
 
     @field_validator("trusted_proxy_cidrs", mode="before")
     @classmethod

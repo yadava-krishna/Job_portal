@@ -1,0 +1,121 @@
+source_item_id,requirement_ids,mapping_note
+JP01-0001,INFO,document title fragment
+JP01-0002,INFO,document title
+JP01-0003,INFO,founder story heading/intro
+JP01-0004,INFO,one-sentence product tagline
+JP01-0005,INFO,document date
+JP01-0006,INFO,table of contents heading
+JP01-0007,INFO,table of contents row
+JP01-0008,INFO,table of contents row
+JP01-0009,INFO,vision section heading
+JP01-0010,NEG-01,states JobPilot is not an auto-apply bot
+JP01-0011,INFO,"narrative vision restating full loop, no single buildable item"
+JP01-0012,INFO,"loop overview heading, stages detailed below"
+JP01-0013,INFO,table header row
+JP01-0014,DSC-04;DSC-10,discovery stage finds/organises opportunities
+JP01-0015,MAT-01;MAT-05;MAT-07,"diagnose stage: match, eligibility, gaps"
+JP01-0016,MAT-07;LRN-01;MAT-10,build stage: learning/projects/evidence to close gaps
+JP01-0017,RES-01;RES-08,present stage: dynamic resume + job-specific material
+JP01-0018,APP-01;APP-10,apply stage: prepare application and assist supported forms
+JP01-0019,INT-01;INT-02,interview stage: job-specific prep and mock practice
+JP01-0020,INT-06;MEN-03,reflect stage: funnel analysis and bottleneck diagnosis
+JP01-0021,MEN-01;MEN-04,"improve stage: update plan, action checklist"
+JP01-0022,INFO,product promise section heading
+JP01-0023,MAT-01,find better-fit jobs rather than flooding with listings
+JP01-0024,MAT-01,explain good match vs eligible to apply
+JP01-0025,MAT-07;LRN-01;MAT-10,turn missing skills into learning/evidence plan
+JP01-0026,RES-01,build and tailor resumes in browser
+JP01-0027,RES-08;RES-10,choose resume version per job and download
+JP01-0028,APP-04;NEG-01,"assist applications, candidate controls final submission"
+JP01-0029,INT-06;MEN-03;MAT-12,use outcomes as feedback not just records
+JP01-0030,MEN-01;MEN-03;MEN-04,mentor-like system identifying what's next
+JP01-0031,INTL-08;INTL-01;INTL-02,extend journey to international/visa/sponsorship
+JP01-0032,RES-01,profile/resume/application readiness section heading
+JP01-0033,RES-01;RES-05;RES-08;RES-07;RES-04;RES-10;PRF-01,"master profile to job-ready resumes: templates, tailor, preview, export"
+JP01-0034,INFO,table header row
+JP01-0035,RES-05,template gallery of resume formats
+JP01-0036,RES-01;RES-02,browser editor for resume sections/content
+JP01-0037,PRF-01;RES-08,master profile with differing per-version emphasis
+JP01-0038,RES-08,job-specific resume copy without overwriting master
+JP01-0039,RES-13,AI rewriting using only confirmed experience/evidence
+JP01-0040,RES-07,switch to ATS-safe one-column format
+JP01-0041,RES-04,preview page breaks/spacing/layout before download
+JP01-0042,RES-10;RES-12,PDF export; DOCX export where practical
+JP01-0043,RES-08,resume version history for applications
+JP01-0044,APP-02,record exact resume version used per application
+JP01-0045,RES-14;RES-15;RES-13,discourage keyword-stuffing; explain evidence-backed vs unsupported bullets
+JP01-0046,PRF-08,first 10 minutes onboarding flow heading
+JP01-0047,ID-01,create an account
+JP01-0048,PRF-03;PRF-04,upload resume or build profile manually (no resume)
+JP01-0049,PRF-05,review and confirm extracted facts
+JP01-0050,PRF-06,"choose target role, seniority, location, search mode"
+JP01-0051,PRF-07,choose India/International/Both search mode
+JP01-0052,PRF-06;PRF-07,"set work mode, salary, relocation, notice, work authorisation"
+JP01-0053,PRF-09,"career snapshot: strength, gaps, first matches"
+JP01-0054,MAT-05;PRF-08,open recommended jobs and see why matched
+JP01-0055,MAT-08,see first recommended gap to close
+JP01-0056,PRF-10,choose one first action CTA
+JP01-0057,PRF-11,progressive disclosure section heading
+JP01-0058,INFO,table header row
+JP01-0059,PRF-11,"first session shows matches/gaps/resume/next step, not full dashboard"
+JP01-0060,PRF-11;APP-06;APP-07;ANA-02,"post-first-application: tracker, reminders, analytics"
+JP01-0061,INT-01;INT-02;MEN-03,"after interview: prep, reflection, bottleneck analysis"
+JP01-0062,MAT-07;LRN-01;MAT-10,repeated gaps get focused learning/evidence plan
+JP01-0063,INTL-03;INTL-02;NEG-06,international intent: verified-source country/visa fit
+JP01-0064,MEN-01;MEN-06;MEN-03,"AI + optional human mentor, not opaque judgement"
+JP01-0065,INTL-08,one product section heading
+JP01-0066,INTL-08,"single core engine, international as added mobility layer"
+JP01-0067,INFO,table header row
+JP01-0068,PRF-07,profile carries work authorisation/relocation context
+JP01-0069,INTL-04;DSC-01,discovery includes visa sponsorship signals + intl sources
+JP01-0070,INTL-03;MAT-04,matching includes country/work-permit eligibility
+JP01-0071,INTL-03;MAT-07,country-specific qualification/language/experience gaps
+JP01-0072,INTL-05,sponsorship-aware application strategy
+JP01-0073,INTL-03;MEN-01,mentor supports relocation/country decisions
+JP01-0074,INFO,persona section heading
+JP01-0075,INFO,table header row
+JP01-0076,INFO,student persona narrative
+JP01-0077,INFO,early-career persona narrative
+JP01-0078,INFO,experienced professional persona narrative
+JP01-0079,INFO,international candidate persona narrative
+JP01-0080,INFO,human mentor persona narrative
+JP01-0081,INFO,differentiation section heading
+JP01-0082,INFO,market context narrative
+JP01-0083,INFO,table header row
+JP01-0084,MAT-01;MAT-07,add diagnosis and feedback beyond plain discovery
+JP01-0085,RES-13;RES-17,tie resume recommendations to evidence and target jobs
+JP01-0086,APP-01;APP-10;APP-04,"automate prep/form-filling, not final submission"
+JP01-0087,LRN-01;MAT-07,learning recommendations from actual gaps
+JP01-0088,INT-01;INT-02;INT-07,interview practice tied to job and past failures
+JP01-0089,MEN-01;MEN-04,career coaching as continuous action plan
+JP01-0090,INTL-08;INTL-03,international relocation in same job-search loop
+JP01-0091,INFO,competitive landscape section heading
+JP01-0092,INFO,competitor stats narrative
+JP01-0093,INFO,strategic positioning narrative
+JP01-0094,INFO,founder philosophy section heading
+JP01-0095,INFO,philosophy narrative paragraph
+JP01-0096,NEG-05,no fake experience
+JP01-0097,NEG-01,no blind mass applying
+JP01-0098,RES-14;RES-15,no keyword stuffing without evidence
+JP01-0099,NEG-05,no pretending a course is work experience
+JP01-0100,MEN-03;SEC-07,no black-box career judgement
+JP01-0101,NEG-01,no pressure to maximise activity over quality
+JP01-0102,MEN-01,mentoring moat section heading
+JP01-0103,INFO,table header row
+JP01-0104,MEN-05,"case: many applications, almost no interviews"
+JP01-0105,MEN-05,"case: many interviews, no offers"
+JP01-0106,MEN-05;INT-07,case: repeated rejection for same skill becomes priority gap
+JP01-0107,MEN-05,"case: many learning hours, few applications"
+JP01-0108,MEN-05,case: applications improve after resume change
+JP01-0109,ANA-07;GTM-01,early-user feedback section heading
+JP01-0110,ANA-07;GTM-01,feedback topic: job relevance
+JP01-0111,ANA-07;GTM-01;MAT-05,feedback topic: match explanation truthfulness
+JP01-0112,ANA-07;GTM-01;MAT-07,feedback topic: gap analysis accuracy
+JP01-0113,ANA-07;GTM-01,feedback topic: resume builder ease vs Word/Docs
+JP01-0114,ANA-07;GTM-01;RES-07,feedback topic: trust in ATS-safe format
+JP01-0115,ANA-07;GTM-01,feedback topic: actual resume download/upload usage
+JP01-0116,ANA-07;GTM-01;LRN-02,feedback topic: learning resources closed real gap
+JP01-0117,ANA-07;GTM-01,feedback topic: application helper time savings
+JP01-0118,ANA-07;GTM-01;ANA-02,feedback topic: understanding Opened/Pending/Applied
+JP01-0119,ANA-07;GTM-01;MEN-01,feedback topic: mentor recommendation impact
+JP01-0120,ANA-05;GTM-01,feedback topic: onboarding drop-off step

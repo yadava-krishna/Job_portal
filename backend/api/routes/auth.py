@@ -3,7 +3,19 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from backend.api.deps import CurrentUser, DbSession, SettingsDep, auth_rate_limit, check_account_lock, login_failure_key
-from backend.schemas.auth import AuthConfig, AuthResponse, LoginRequest, RefreshRequest, RegisterRequest, UserOut
+from backend.schemas.auth import (
+    AuthConfig,
+    AuthResponse,
+    ForgotPasswordRequest,
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserOut,
+)
+from sqlalchemy import select
+
+from backend.models import User
 from backend.security import rate_limiter
 from backend.services import auth_service
 
@@ -48,3 +60,31 @@ def logout(user: CurrentUser, db: DbSession, req: RefreshRequest | None = None) 
 @router.get("/me", response_model=UserOut)
 def me(user: CurrentUser) -> UserOut:
     return UserOut.model_validate(user)
+
+
+@router.post("/forgot-password", dependencies=[Depends(auth_rate_limit)])
+def forgot_password(body: ForgotPasswordRequest, db: DbSession, settings: SettingsDep) -> dict:
+    """E-mail a single-use reset link. Says honestly when e-mail is not set up on this server."""
+    from backend.services import email_service
+
+    if not email_service.is_smtp_configured() and email_service.test_outbox is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Password reset by e-mail is not set up on this server. Ask the JobPilot owner to reset your password.")
+    user = db.execute(select(User).where(User.email == body.email.strip().lower())).scalar_one_or_none()
+    if user is not None and user.is_active:  # same response either way, so this can't be used to find accounts
+        token = auth_service.create_reset_token(settings, user)
+        base = (settings.public_app_url or "").rstrip("/")
+        reset_link = f"{base}/#/reset-password?token={token}"
+        html = f"""<p>You asked to reset your JobPilot password.</p>
+<p><a href="{reset_link}">Set a new password</a>. The link works once and expires in 1 hour.</p>
+<p>If you did not ask for this, ignore this e-mail; your password has not changed.</p>"""
+        email_service.send_email(user.email, "JobPilot: reset your password", html, f"Reset link (valid 1 hour, single use): {reset_link}")
+    return {"message": "If an account exists for that e-mail address, a reset link has been sent."}
+
+
+@router.post("/reset-password", dependencies=[Depends(auth_rate_limit)])
+def reset_password(body: ResetPasswordRequest, db: DbSession, settings: SettingsDep) -> dict:
+    """Apply a new password using a verified reset token."""
+    auth_service.reset_password(db, settings, body.token, body.new_password)
+    return {"message": "Password updated successfully. You may now log in."}
+

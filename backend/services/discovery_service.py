@@ -118,15 +118,57 @@ def _fit_columns(obj) -> None:
                 setattr(obj, col.key, value[: length - 1].rstrip() + "…")
 
 
+def calculate_freshness(posted_at: date | None, reference_date: date | None = None) -> float:
+    """Calculate freshness decay factor from 0.0 to 1.0 based on posting age."""
+    if posted_at is None:
+        return 0.70  # Baseline moderate freshness for undated postings
+    ref = reference_date or date.today()
+    delta_days = (ref - posted_at).days
+    if delta_days <= 1:
+        return 1.0
+    elif delta_days <= 7:
+        return 0.85
+    elif delta_days <= 14:
+        return 0.70
+    elif delta_days <= 30:
+        return 0.50
+    elif delta_days <= 60:
+        return 0.30
+    return 0.15
+
+
+def reap_expired_jobs(db: Session, max_age_days: int = 45) -> int:
+    """Flag active jobs older than max_age_days as expired."""
+    from datetime import timedelta
+    cutoff = date.today() - timedelta(days=max_age_days)
+    now = utcnow()
+    stmt = (
+        select(Job)
+        .where(Job.is_expired == False, Job.posted_at != None, Job.posted_at < cutoff)
+    )
+    stale_jobs = db.execute(stmt).scalars().all()
+    count = 0
+    for j in stale_jobs:
+        j.is_expired = True
+        j.closed_at = now
+        j.freshness_score = 0.05
+        count += 1
+    if count > 0:
+        db.commit()
+    return count
+
+
 def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
     """Insert a public listing, or merge it into the job it duplicates. Returns (job, created)."""
     now = utcnow()
     job, _how = find_existing(db, nj)
     created = False
     if job is None:
+        freshness = calculate_freshness(nj.posted_at)
         job = Job(job_key=nj.key, posted_at=nj.posted_at, posted_at_source=nj.posted_at_source if nj.posted_at else None,
                   posted_at_confidence=posted_confidence(nj.posted_at, nj.posted_at_source), discovered_at=now,
-                  description_is_snippet=nj.description_is_snippet, **nj.job_columns())
+                  description_is_snippet=nj.description_is_snippet, freshness_score=freshness, is_expired=False,
+                  last_scraped_at=now, **nj.job_columns())
         _fit_columns(job)
         db.add(job)
         try:
@@ -139,6 +181,9 @@ def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
                 raise
     if not created:
         _enrich_existing(job, nj)
+        job.freshness_score = calculate_freshness(job.posted_at)
+        job.last_scraped_at = now
+        job.is_expired = False
         _fit_columns(job)
     if nj.source in ATS_SOURCES:
         job.last_verified_at, job.closed_at = now, None  # listed on the employer's board right now
@@ -428,6 +473,9 @@ def run_discovery(db: Session, settings: BackendSettings, user: User, sources: l
     try:
         matcher = _matcher_or_none(db, settings, user, run)
         legacy_sources(db, settings, user, run, wanted, matcher, email_factory=email_factory, adzuna_client=adzuna_client)
+        active_connectors = [s for s in wanted if s not in ("alert_email", "adzuna_api")]
+        if active_connectors:
+            run_scrapling_sources(db, user, run, matcher, settings, wanted_connectors=active_connectors)
         return finish_run(db, run)
     except Exception as exc:
         log.exception("Discovery run %s failed", run_id)
@@ -508,6 +556,32 @@ def legacy_sources(db: Session, settings: BackendSettings, user: User, run: Disc
                 source_result(run, "adzuna_api", status="partial" if api_errors else "ok", failed_requests=len(api_errors))
                 source_registry.record(db, "adzuna_api", ok=True)
                 ingest_postings(db, user, run, items, matcher, "adzuna_api")
+
+
+def run_scrapling_sources(db: Session, user: User, run: DiscoveryRun, matcher, settings: BackendSettings, wanted_connectors: list[str] | None = None) -> None:
+    """Execute multi-source discovery using Scrapling connectors for permitted sources."""
+    from backend.services.connectors import registry
+
+    prefs = preference_service.get_preferences(db, user)
+    titles = ((prefs.job_titles if prefs else []) + (prefs.title_keywords if prefs else [])) or []
+
+    connectors_to_run = wanted_connectors or ["remotive", "himalayas", "remoteok", "arbeitnow", "ncs_india", "government", "academic"]
+
+    for src_id in connectors_to_run:
+        source_result(run, src_id)
+        try:
+            query_str = titles[0] if titles else None
+            criteria = {"query": query_str, "limit": 25} if query_str else {"limit": 25}
+            jobs = registry.run_connector(src_id, criteria=criteria)
+            if jobs:
+                source_result(run, src_id, status="ok", jobs_found=len(jobs))
+                ingest_normalized(db, user, run, jobs, matcher, src_id)
+            else:
+                source_result(run, src_id, status="ok", jobs_found=0)
+        except Exception as exc:
+            log.warning("Scrapling connector %s execution error: %s", src_id, exc)
+            source_result(run, src_id, status="failed", message=str(exc))
+
 
 
 def _adzuna_items(db: Session, user: User, run: DiscoveryRun, client: AdzunaClient, settings: BackendSettings):

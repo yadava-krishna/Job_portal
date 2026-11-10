@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, Field, NativeSelect, PageHeader, PlatformBadge, TagInput } from "@/components/app/common";
 import { RunSummary, SourceHealthList } from "@/components/app/discovery";
+import { CareerUrlForm } from "@/components/app/CareerUrlForm";
+import { SourcesPanel } from "@/components/app/SourcesPanel";
 import { errorMessage } from "@/lib/api";
 import { formatDate, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -300,6 +302,7 @@ function CompaniesTab() {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
+        <CareerUrlForm onSuccess={() => void watchlist.refetch()} />
         <Card className="gap-3 p-4">
           <h3 className="font-semibold">Add a company by its careers page or job-board link</h3>
           <form onSubmit={addUrl} className="flex gap-2">
@@ -348,18 +351,19 @@ function SourcesTab() {
   if (health.isError || !health.data) return <p className="text-sm text-destructive">{errorMessage(health.error)}</p>;
   const d = health.data;
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Card className="gap-3 p-4">
         <h3 className="font-semibold">Latest discovery run</h3>
         {d.last_run ? <RunSummary run={d.last_run} /> : <p className="text-sm text-muted-foreground">Discovery hasn't run yet. Use “Run discovery now” on Discover.</p>}
       </Card>
       <Card className="gap-3 p-4">
         <div>
-          <h3 className="font-semibold">Sources</h3>
+          <h3 className="font-semibold">Discovery health</h3>
           <p className="text-sm text-muted-foreground">{d.enabled_searches} of {d.saved_searches} saved searches enabled. LinkedIn, Indeed and Naukri are never scraped: use the clipper, job links or their alert emails.</p>
         </div>
         <SourceHealthList sources={d.sources} />
       </Card>
+      <SourcesPanel />
     </div>
   );
 }

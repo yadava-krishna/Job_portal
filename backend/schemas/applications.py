@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from backend.schemas.jobs import JobListing
 
 ApplicationStatusName = Literal["PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"]
-StageName = Literal["applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "archived"]
+StageName = Literal["applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "ghosted", "archived"]
 
 
 class PrepareRequest(BaseModel):
@@ -62,6 +62,9 @@ class ApplicationOut(BaseModel):
     submitted_at: datetime | None
     submission_method: str | None = None
     follow_up_at: datetime | None = None
+    application_route: str = "ROUTE_D_EXTERNAL_MANUAL"
+    tailored_resume_id: int | None = None
+    route_metadata: dict[str, Any] = Field(default_factory=dict)
     job: JobListing
 
 
@@ -95,3 +98,16 @@ class ReportOut(BaseModel):
     file_name: str
     size_bytes: int
     created_at: datetime
+
+
+class EmailDraftRequest(BaseModel):
+    target_email: str | None = None
+
+
+class EmailDraftResponse(BaseModel):
+    recipient_email: str
+    subject: str
+    body_text: str
+    attachment_name: str
+    candidate_consent_required: bool = True
+

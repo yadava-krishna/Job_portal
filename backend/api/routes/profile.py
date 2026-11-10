@@ -21,8 +21,15 @@ from backend.schemas.profile import (
     ResumeOut,
     ResumeRename,
     VerifiedFacts,
+    MasterProfileV2Out,
+    MasterProfileV2Update,
+    ProfileExperienceIn,
+    ProfileExperienceOut,
+    ProfileSkillIn,
+    ProfileSkillOut,
 )
 from backend.services import matching_service, preference_service, resume_service
+from backend.services.profile_master_service import ProfileMasterService
 from backend.db import session_factory
 
 router = APIRouter(tags=["profile"])
@@ -171,3 +178,91 @@ def get_email(user: CurrentUser, db: DbSession) -> EmailIntegrationOut:
 @router.put("/integrations/email", response_model=EmailIntegrationOut)
 def put_email(body: EmailIntegrationIn, user: CurrentUser, db: DbSession, settings: SettingsDep) -> EmailIntegrationOut:
     return preference_service.email_out(preference_service.save_email_integration(db, settings, user, body))
+
+
+@router.get("/profile/achievements")
+def get_achievements(user: CurrentUser, db: DbSession) -> list[dict]:
+    """List achievements and voyage milestone badges for the candidate."""
+    from backend.services.achievement_service import list_user_achievements
+
+    achievements = list_user_achievements(db, user)
+    return [
+        {
+            "code": a.code,
+            "title": a.title,
+            "description": a.description,
+            "icon": a.icon,
+            "category": a.category,
+            "earned": a.earned,
+            "earned_at": a.earned_at.isoformat() if a.earned_at else None,
+        }
+        for a in achievements
+    ]
+
+
+@router.post("/profile/nickname/regenerate")
+def regenerate_nickname(user: CurrentUser, db: DbSession) -> dict:
+    """Regenerate candidate's procedural nickname."""
+    from backend.services.nickname_service import generate_nickname
+
+    nick = generate_nickname()
+    user.nickname = nick
+    db.commit()
+    return {"nickname": nick}
+
+
+# --- Phase 10: Master Candidate Profile V2 Endpoints ---
+
+@router.get("/profile/master", response_model=MasterProfileV2Out)
+def get_master_profile(user: CurrentUser, db: DbSession) -> MasterProfileV2Out:
+    """Retrieve structured Master Candidate Profile V2."""
+    profile = ProfileMasterService.get_or_create_profile(db, user.id)
+    return MasterProfileV2Out.model_validate(profile)
+
+
+@router.put("/profile/master", response_model=MasterProfileV2Out)
+def update_master_profile(body: MasterProfileV2Update, user: CurrentUser, db: DbSession) -> MasterProfileV2Out:
+    """Update Master Candidate Profile V2 details."""
+    profile = ProfileMasterService.update_profile(db, user.id, body.model_dump(exclude_unset=True))
+    return MasterProfileV2Out.model_validate(profile)
+
+
+@router.post("/profile/experiences", response_model=ProfileExperienceOut)
+def add_experience(body: ProfileExperienceIn, user: CurrentUser, db: DbSession) -> ProfileExperienceOut:
+    """Add a work experience item to the candidate profile."""
+    exp = ProfileMasterService.add_work_experience(db, user.id, body.model_dump())
+    return ProfileExperienceOut.model_validate(exp)
+
+
+@router.put("/profile/experiences/{exp_id}", response_model=ProfileExperienceOut)
+def update_experience(exp_id: int, body: ProfileExperienceIn, user: CurrentUser, db: DbSession) -> ProfileExperienceOut:
+    """Update a work experience item in the candidate profile."""
+    exp = ProfileMasterService.update_work_experience(db, user.id, exp_id, body.model_dump())
+    return ProfileExperienceOut.model_validate(exp)
+
+
+@router.delete("/profile/experiences/{exp_id}")
+def delete_experience(exp_id: int, user: CurrentUser, db: DbSession) -> dict:
+    """Delete a work experience item."""
+    success = ProfileMasterService.delete_work_experience(db, user.id, exp_id)
+    if not success:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Experience not found")
+    return {"ok": True}
+
+
+@router.post("/profile/skills", response_model=ProfileSkillOut)
+def add_or_update_skill(body: ProfileSkillIn, user: CurrentUser, db: DbSession) -> ProfileSkillOut:
+    """Add or update a skill with proficiency in candidate profile."""
+    skill = ProfileMasterService.add_or_update_skill(db, user.id, body.model_dump())
+    return ProfileSkillOut.model_validate(skill)
+
+
+@router.delete("/profile/skills/{skill_id}")
+def delete_skill(skill_id: int, user: CurrentUser, db: DbSession) -> dict:
+    """Delete a skill from the candidate profile."""
+    success = ProfileMasterService.delete_skill(db, user.id, skill_id)
+    if not success:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Skill not found")
+    return {"ok": True}
+
+
