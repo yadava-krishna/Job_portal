@@ -1,0 +1,1 @@
+import{S as e,U as t}from"./format-1fQjLNou.js";var n=t();function r({className:t,...r}){return(0,n.jsx)(`div`,{"data-slot":`skeleton`,className:e(`animate-pulse rounded-md bg-muted`,t),...r})}export{r as t};
