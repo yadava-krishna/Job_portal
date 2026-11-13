@@ -32,7 +32,10 @@ export function JobCard({ item, active, actions, disabled }: { item: UserJob; ac
             {platforms.map((p) => <PlatformBadge key={p} platform={p} />)}
             {j.closed_at && <span className="flex items-center gap-1 rounded bg-zinc-200 px-1.5 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" title="The employer's job board no longer lists this job"><Archive className="size-3" /> No longer listed</span>}
             {item.application_status && <StatusBadge status={item.application_status} />}
-            {(item.eligibility_status === "INELIGIBLE" || item.eligibility === "fail") && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-xs text-rose-800 dark:bg-rose-950 dark:text-rose-200">Not eligible</span>}
+            {(item.eligibility_status === "INELIGIBLE" || item.eligibility === "fail") && (
+              <span data-testid="not-eligible-badge" className="cursor-help rounded bg-rose-100 px-1.5 py-0.5 text-xs text-rose-800 dark:bg-rose-950 dark:text-rose-200"
+                    title={item.eligibility_reasons?.length ? `Why: ${item.eligibility_reasons.join("; ")}` : "Open the job to see why"}>Not eligible</span>
+            )}
             {j.sponsorship_signal === "verified" && <span data-testid="sponsorship-badge" className="rounded bg-sky-100 px-1.5 py-0.5 text-xs text-sky-800 dark:bg-sky-950 dark:text-sky-200" title="The posting says visa sponsorship is offered">Visa sponsorship</span>}
             {j.sponsorship_signal === "inferred" && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-xs text-sky-700 dark:bg-sky-950/50 dark:text-sky-300" title="Relocation is mentioned; sponsorship isn't stated">Relocation mentioned</span>}
             {j.sponsorship_signal === "none" && <span className="rounded bg-zinc-200 px-1.5 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" title="The posting says sponsorship isn't offered">No sponsorship</span>}

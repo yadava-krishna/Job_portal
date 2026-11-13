@@ -95,7 +95,13 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):
         log.error("Unhandled error on %s %s: %s", request.method, request.url.path, redact(repr(exc)), exc_info=exc)
-        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+        # This handler runs outside the CORS middleware; without these headers the browser reports a misleading
+        # "blocked by CORS" network error instead of letting the app show the server error.
+        headers = {}
+        origin = request.headers.get("origin")
+        if origin and origin in settings.cors_origins:
+            headers = {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"}, headers=headers)
 
     for r in (health.router, auth.router, profile.router, jobs.router, applications.router, reports.router,
               discovery.companies, discovery.searches, discovery.notifications, discovery.health, extension.router, tracker.router,

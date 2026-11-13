@@ -46,6 +46,7 @@ class PortalScheduler:
         self._close_interrupted_runs()
         self.scheduler.start()
         self._catch_up_missed_daily_run(hour, minute)
+        self._catch_up_registry_jobs()
         log.info("Portal scheduler started: daily discovery at %s %s", self.settings.scheduler_run_time, self.settings.timezone)
 
     def shutdown(self) -> None:
@@ -70,6 +71,16 @@ class PortalScheduler:
             n = saved_search_service.mark_interrupted(db)
             if n:
                 log.warning("Marked %d discovery run(s) interrupted by the last restart.", n)
+            from backend.models import JobRun, utcnow
+
+            # This process has only just started, so any background job still marked "running" was cut off by the restart.
+            stuck = db.execute(select(JobRun).where(JobRun.status == "running")).scalars().all()
+            for r in stuck:
+                r.status, r.finished_at = "interrupted", utcnow()
+                r.error = "The server restarted before this run finished. It runs again at the next schedule or catch-up."
+            db.commit()
+            if stuck:
+                log.warning("Marked %d background job run(s) interrupted by the last restart.", len(stuck))
         except Exception:
             log.exception("Could not close interrupted discovery runs")
         finally:
@@ -109,6 +120,46 @@ class PortalScheduler:
         log.warning("Today's %s discovery run was missed (JobPilot was offline); catching up in 2 minutes.", self.settings.scheduler_run_time)
         self.scheduler.add_job(self.run_all, DateTrigger(run_date=local + timedelta(minutes=2)), kwargs={"trigger": "catch_up"},
                                id="daily_catch_up", replace_existing=True, max_instances=1)
+
+    # Jobs that are not caught up: notification_dispatch runs every 30 minutes anyway, and the daily discovery
+    # (caught up above) already writes each user's daily report.
+    NO_CATCH_UP = ("notification_dispatch", "report_generation")
+
+    def _catch_up_registry_jobs(self) -> None:
+        """Run once, shortly after start-up, each scheduled background job whose last due time passed while JobPilot was off.
+
+        A home machine is often off at night, when most of these jobs are scheduled, so without this they would never run.
+        Runs are staggered two minutes apart (one at a time) and recorded with trigger "catch_up". A job that already ran
+        since its last due time is skipped, so restarts never repeat work.
+        """
+        from datetime import timedelta, timezone as tz
+
+        from apscheduler.triggers.date import DateTrigger
+
+        from backend.models import JobRun
+        from backend.services import jobs_registry
+
+        now = datetime.now(tz.utc)
+        delay = 4  # minutes; the daily-discovery catch-up starts at 2
+        for name, cron in jobs_registry.SCHEDULES.items():
+            if name in self.NO_CATCH_UP:
+                continue
+            due = previous_fire_time(CronTrigger(timezone=self.settings.timezone, **cron), now)
+            if due is None:
+                continue
+            try:
+                with session_factory()() as db:
+                    ran = db.execute(select(JobRun.id).where(JobRun.name == name, JobRun.started_at >= due,
+                                                             JobRun.status.not_in(("interrupted", "skipped"))).limit(1)).first()
+            except Exception:
+                log.exception("Could not check whether %s ran", name)
+                continue
+            if ran:
+                continue
+            log.warning("Background job %s missed its run at %s (JobPilot was offline); catching up in %d minutes.", name, due, delay)
+            self.scheduler.add_job(jobs_registry.run, DateTrigger(run_date=now + timedelta(minutes=delay)), args=[name, self.settings, "catch_up"],
+                                   id=f"catch_up:{name}", replace_existing=True, max_instances=1, misfire_grace_time=3600)
+            delay += 2
 
     def run_due_searches(self) -> None:
         """Saved searches whose schedule is due (daily/weekly), one at a time."""
@@ -178,3 +229,15 @@ def get_scheduler(settings: BackendSettings) -> PortalScheduler:
     if _scheduler is None:
         _scheduler = PortalScheduler(settings)
     return _scheduler
+
+
+def previous_fire_time(trigger: CronTrigger, now: datetime) -> datetime | None:
+    """The trigger's most recent fire time at or before `now`, looking back at most eight days (covers weekly jobs)."""
+    from datetime import timedelta
+
+    prev = None
+    t = trigger.get_next_fire_time(None, now - timedelta(days=8))
+    while t is not None and t <= now:
+        prev = t
+        t = trigger.get_next_fire_time(t, t + timedelta(seconds=1))
+    return prev

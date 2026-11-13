@@ -23,6 +23,8 @@ from backend.services.source_policies import AccessMethod, SourceCategory
 log = logging.getLogger(__name__)
 
 HIMALAYAS_API_URL = "https://himalayas.app/jobs/api"
+PAGE_SIZE = 20
+MAX_PAGES = 10
 
 
 class HimalayasConnector(BaseConnector):
@@ -40,18 +42,26 @@ class HimalayasConnector(BaseConnector):
 
     def discover(self, criteria: dict[str, Any] | None = None) -> list[NormalizedJob]:
         crit = criteria or {}
-        limit = crit.get("limit", 100)
-        url = f"{HIMALAYAS_API_URL}?limit={limit}"
-
-        try:
-            resp = self.client.fetch_page(url, source_id=self.source_id)
-            data = json.loads(resp.text)
-        except Exception as exc:
-            log.warning("Himalayas API fetch failed: %s", exc)
-            self.record_failure(str(exc))
-            return []
-
-        raw_jobs = data.get("jobs", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+        limit = int(crit.get("limit", 100))
+        # The API serves 20 jobs per page; follow its cursor (newest first) until `limit` jobs or MAX_PAGES pages.
+        raw_jobs: list[dict[str, Any]] = []
+        cursor: str | None = None
+        for _page in range(MAX_PAGES):
+            url = f"{HIMALAYAS_API_URL}?limit={PAGE_SIZE}" + (f"&cursor={cursor}" if cursor else "")
+            try:
+                resp = self.client.fetch_page(url, source_id=self.source_id)
+                data = json.loads(resp.text)
+            except Exception as exc:
+                log.warning("Himalayas API fetch failed: %s", exc)
+                if not raw_jobs:
+                    self.record_failure(str(exc))
+                    return []
+                break  # keep the pages already read
+            page = data.get("jobs", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            raw_jobs += page
+            cursor = data.get("nextCursor") if isinstance(data, dict) else None
+            if not page or not cursor or len(raw_jobs) >= limit:
+                break
         discovered: list[NormalizedJob] = []
 
         for r in raw_jobs:

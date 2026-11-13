@@ -154,11 +154,14 @@ def get_admin_sources(admin: CurrentAdmin) -> list[SourceConnectorOut]:
 # ---------------- operations: background jobs, product analytics, backups, disk ----------------
 
 @router.get("/jobs")
-def admin_jobs(admin: CurrentAdmin, db: DbSession) -> list[dict[str, Any]]:
+def admin_jobs(admin: CurrentAdmin, db: DbSession, settings: SettingsDep) -> list[dict[str, Any]]:
     """Every named background job with its schedule, last status and last error."""
     from backend.services import jobs_registry
 
-    return jobs_registry.overview(db)
+    rows = jobs_registry.overview(db)
+    for r in rows:
+        r["schedule"] = r["schedule"].replace("SCHEDULER_RUN_TIME", f"{settings.scheduler_run_time} ({settings.timezone})")
+    return rows
 
 
 @router.post("/jobs/{name}/run")
@@ -225,10 +228,13 @@ def admin_system(admin: CurrentAdmin, settings: SettingsDep) -> dict[str, Any]:
     level = "critical" if used >= 90 else "high" if used >= 80 else "warning" if used >= 70 else "ok"
     backup = None
     p = Path("/backups/last_backup.json")
-    if p.is_file():
-        try:
+    try:
+        if p.is_file():
             backup = json.loads(p.read_text())
-        except ValueError:
-            backup = {"status": "unreadable"}
+    except ValueError:
+        backup = {"status": "unreadable"}
+    except OSError:  # e.g. the host backups folder is private (mode 700) and the backend runs as another uid
+        backup = {"status": "unknown", "note": "The backend cannot read the backup status file (folder permissions). "
+                                               "Backups still run; check them with deploy/backup.sh or the backup container logs."}
     return {"disk": {"used_percent": used, "free_gb": round(u.free / 1e9, 1), "level": level},
             "backup": backup or {"status": "unknown", "note": "No backup status file. Start the backup service (docker compose up -d backup)."}}

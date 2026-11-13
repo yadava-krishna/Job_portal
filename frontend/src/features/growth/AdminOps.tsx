@@ -5,7 +5,7 @@ import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAdminJobs, useProductMetrics, useRunJob, useSystemStatus } from "./queries";
-import type { JobRunResult } from "./types";
+import type { BackgroundJob as AdminJob, JobRunResult } from "./types";
 
 const panel = "rounded-xl border border-border bg-card overflow-hidden";
 const head = "p-4 border-b border-border flex items-center justify-between gap-2";
@@ -15,17 +15,42 @@ const thead = "bg-muted/50 border-b border-border text-muted-foreground uppercas
 const statusTone: Record<string, string> = {
   ok: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
   running: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  partial: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
   failed: "bg-destructive/15 text-destructive",
   error: "bg-destructive/15 text-destructive",
   blocked: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
   skipped: "bg-muted text-muted-foreground",
+  interrupted: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
 };
 
 export function JobStatusBadge({ status }: { status: string | null }) {
   return (
-    <span className={cn("rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase", status ? statusTone[status] ?? "bg-muted text-muted-foreground" : "bg-muted text-muted-foreground")}>
+    <span className={cn("inline-block whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase", status ? statusTone[status] ?? "bg-muted text-muted-foreground" : "bg-muted text-muted-foreground")}>
       {status ?? "never run"}
     </span>
+  );
+}
+
+const TRIGGER_LABEL: Record<string, string> = { schedule: "on schedule", scheduled: "on schedule", catch_up: "catch-up after downtime", manual: "run by an admin", replay: "run by an admin" };
+const humanize = (name: string) => name.charAt(0).toUpperCase() + name.slice(1).replaceAll("_", " ");
+
+function LastRun({ j }: { j: AdminJob }) {
+  return (
+    <div className="space-y-1">
+      <JobStatusBadge status={j.last_status} />
+      {j.last_started_at && <div className="text-[11px] text-muted-foreground">{formatDate(j.last_started_at, true)}</div>}
+      {j.last_trigger && <div className="text-[11px] text-muted-foreground">{TRIGGER_LABEL[j.last_trigger] ?? j.last_trigger}</div>}
+      {j.runs_with && j.last_trigger && <div className="text-[11px] text-muted-foreground">as part of {humanize(j.runs_with)}</div>}
+    </div>
+  );
+}
+
+function RunButton({ j, running, onRun }: { j: AdminJob; running: string | null; onRun: (name: string) => void }) {
+  return (
+    <button onClick={() => onRun(j.name)} disabled={running != null}
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:bg-muted disabled:opacity-50">
+      {running === j.name ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} Run now
+    </button>
   );
 }
 
@@ -36,61 +61,118 @@ export function BackgroundJobsPanel() {
   const [result, setResult] = useState<JobRunResult | null>(null);
 
   const runNow = (name: string) => {
-    if (!confirm(`Run "${name}" now? It runs once, in addition to its normal schedule.`)) return;
+    if (!confirm(`Run "${humanize(name)}" now? It runs once, in addition to its normal schedule.`)) return;
     setRunning(name);
     setResult(null);
     run.mutate(name, {
-      onSuccess: (r) => { setResult(r); toast[r.status === "ok" ? "success" : "error"](`${r.name}: ${r.status}`); },
+      onSuccess: (r) => { setResult(r); toast[r.status === "ok" ? "success" : "error"](`${humanize(r.name)}: ${r.status}`); void jobs.refetch(); },
       onError: (e) => toast.error(errorMessage(e)),
       onSettled: () => setRunning(null),
     });
   };
+  const list = jobs.data ?? [];
+  const problems = list.filter((j) => j.last_status && ["failed", "error", "blocked", "partial", "interrupted"].includes(j.last_status)).length;
+  const never = list.filter((j) => !j.last_status).length;
 
   return (
     <div className="space-y-4">
       {result && (
         <div className={cn("rounded-lg border p-3 text-xs", result.status === "ok" ? "border-emerald-500/30 bg-emerald-500/10" : "border-destructive/30 bg-destructive/10")}>
-          <div className="font-semibold">Run #{result.id} of {result.name}: {result.status} after {result.attempts} attempt(s)</div>
-          {result.error && <div className="mt-1 font-mono text-destructive">{result.error}</div>}
-          {result.details != null && <pre className="mt-1 max-h-40 overflow-auto font-mono text-[11px] text-muted-foreground">{JSON.stringify(result.details, null, 2)}</pre>}
+          <div className="font-semibold">{humanize(result.name)}: {result.status} after {result.attempts} attempt(s)</div>
+          {result.error && <div className="mt-1 whitespace-pre-wrap break-words font-mono text-destructive">{result.error}</div>}
+          {result.details != null && <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">{JSON.stringify(result.details, null, 2)}</pre>}
         </div>
       )}
       <div className={panel}>
         <div className={head}>
-          <h3 className="text-sm font-semibold text-foreground">Background jobs ({jobs.data?.length ?? 0})</h3>
-          <button onClick={() => void jobs.refetch()} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Background jobs ({list.length})</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {problems ? `${problems} need attention. ` : "No problems. "}
+              {never ? `${never} haven't run yet. ` : ""}
+              Jobs missed while this machine was off run once, a few minutes after it starts.
+            </p>
+          </div>
+          <button onClick={() => void jobs.refetch()} className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
             <RefreshCw className={cn("h-3.5 w-3.5", jobs.isFetching && "animate-spin")} /> Refresh
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className={thead}>
-              <tr><th className={th}>Job</th><th className={th}>Schedule</th><th className={th}>Owner</th><th className={th}>Last status</th><th className={th}>Last success</th><th className={th}>Last error</th><th className={`${th} text-right`}>Actions</th></tr>
-            </thead>
-            <tbody className="divide-y divide-border text-foreground">
-              {jobs.isLoading && <tr><td colSpan={7} className="px-4 py-6"><Loader2 className="animate-spin" /></td></tr>}
-              {jobs.error && <tr><td colSpan={7} className="px-4 py-6 text-destructive">{errorMessage(jobs.error)}</td></tr>}
-              {jobs.data?.map((j) => (
-                <tr key={j.name} className="hover:bg-muted/20 align-top">
-                  <td className="px-4 py-3"><div className="font-mono font-medium">{j.name}</div><div className="text-muted-foreground">{j.description}</div></td>
-                  <td className="px-4 py-3 font-mono whitespace-nowrap">{j.schedule}</td>
-                  <td className="px-4 py-3">{j.owner}</td>
-                  <td className="px-4 py-3"><JobStatusBadge status={j.last_status} />{j.last_started_at && <div className="mt-1 text-[11px] text-muted-foreground">{formatDate(j.last_started_at, true)}</div>}</td>
-                  <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{j.last_ok_at ? formatDate(j.last_ok_at, true) : "—"}</td>
-                  <td className="px-4 py-3 max-w-xs"><span className="line-clamp-3 font-mono text-[11px] text-destructive" title={j.last_error ?? ""}>{j.last_error ?? ""}</span></td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => runNow(j.name)} disabled={running != null}
-                            className="inline-flex items-center gap-1 rounded px-2 py-1 border border-border text-[11px] hover:bg-muted font-medium disabled:opacity-50">
-                      {running === j.name ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} Run now
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {jobs.isLoading && <div className="p-6"><Loader2 className="animate-spin" /></div>}
+        {jobs.error && <div className="p-6 text-sm text-destructive">{errorMessage(jobs.error)}</div>}
+
+        {/* Wide screens: a table whose columns all fit; errors get a full-width line under their job. */}
+        <table className="hidden w-full table-fixed text-left text-xs md:table">
+          <colgroup><col className="w-[38%]" /><col className="w-[20%]" /><col className="w-[17%]" /><col className="w-[15%]" /><col className="w-[10%]" /></colgroup>
+          <thead className={thead}>
+            <tr><th className={th}>Job</th><th className={th}>When it runs</th><th className={th}>Last run</th><th className={th}>Last success</th><th className={`${th} text-right`}>Action</th></tr>
+          </thead>
+          <tbody className="text-foreground">
+            {list.map((j) => (
+              <JobRows key={j.name} j={j} running={running} onRun={runNow} />
+            ))}
+          </tbody>
+        </table>
+
+        {/* Phones: one card per job. */}
+        <ul className="divide-y divide-border md:hidden">
+          {list.map((j) => (
+            <li key={j.name} className="space-y-2 p-4 text-xs">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold">{humanize(j.name)}</div>
+                  <div className="text-muted-foreground">{j.description}</div>
+                </div>
+                <RunButton j={j} running={running} onRun={runNow} />
+              </div>
+              <div className="text-muted-foreground">Runs: {j.schedule}</div>
+              <LastRun j={j} />
+              {j.last_ok_at && <div className="text-muted-foreground">Last success: {formatDate(j.last_ok_at, true)}</div>}
+              {j.last_error && <ErrorNote text={j.last_error} />}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
+  );
+}
+
+/** A job's last error: the first line or so, with the full text (often a long database message) one click away. */
+function ErrorNote({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const short = text.length > 220 ? `${text.slice(0, 220).trimEnd()}…` : text;
+  return (
+    <div className="rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+      <span className="font-semibold">Last error: </span>
+      <span className="whitespace-pre-wrap break-words font-mono">{open ? text : short}</span>
+      {text.length > 220 && (
+        <button type="button" onClick={() => setOpen(!open)} className="ml-2 font-medium underline underline-offset-2">
+          {open ? "Show less" : "Show full error"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function JobRows({ j, running, onRun }: { j: AdminJob; running: string | null; onRun: (name: string) => void }) {
+  return (
+    <>
+      <tr className={cn("align-top hover:bg-muted/20", !j.last_error && "border-b border-border")}>
+        <td className="px-4 py-3">
+          <div className="font-medium">{humanize(j.name)}</div>
+          <div className="text-muted-foreground">{j.description}</div>
+          <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{j.name} · {j.owner}</div>
+        </td>
+        <td className="break-words px-4 py-3 text-muted-foreground">{j.schedule}</td>
+        <td className="px-4 py-3"><LastRun j={j} /></td>
+        <td className="px-4 py-3 text-muted-foreground">{j.last_ok_at ? formatDate(j.last_ok_at, true) : "—"}</td>
+        <td className="px-4 py-3 text-right"><RunButton j={j} running={running} onRun={onRun} /></td>
+      </tr>
+      {j.last_error && (
+        <tr className="border-b border-border">
+          <td colSpan={5} className="px-4 pb-3 pt-0"><ErrorNote text={j.last_error} /></td>
+        </tr>
+      )}
+    </>
   );
 }
 

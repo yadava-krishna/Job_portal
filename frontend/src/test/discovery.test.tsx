@@ -80,6 +80,9 @@ describe("discovery outcomes are explained", () => {
     expect(within(box).getByText(/5 matching jobs/)).toBeInTheDocument();
     expect(within(box).getByText("Partly failed")).toBeInTheDocument();
     expect(within(box).getByText(/Gone Ltd \(board not found\)/)).toBeInTheDocument();
+    // Problems are always listed; the sources that worked (or were skipped) are one click away.
+    expect(within(box).queryByText("Not configured")).not.toBeInTheDocument();
+    fireEvent.click(within(box).getByRole("button", { name: "Show all 3 sources" }));
     expect(within(box).getByText("Not configured")).toBeInTheDocument();
     expect(within(box).getByText(/ADZUNA_APP_ID/)).toBeInTheDocument();
     expect(within(box).getByText(/10 boards read · 800 listings checked · 5 matched · 5 new/)).toBeInTheDocument();

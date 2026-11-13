@@ -86,7 +86,8 @@ export function AnswerBank({ facts, onChange }: { facts: VerifiedFacts; onChange
 }
 
 const SOURCES = [["greenhouse", "Greenhouse"], ["lever", "Lever"], ["ashby", "Ashby"], ["smartrecruiters", "SmartRecruiters"], ["recruitee", "Recruitee"],
-                 ["adzuna_api", "Adzuna"], ["alert_email", "Alert e-mails"]] as const;
+                 ["adzuna_api", "Adzuna"], ["alert_email", "Alert e-mails"], ["remotive", "Remotive"], ["himalayas", "Himalayas"],
+                 ["remoteok", "RemoteOK"], ["arbeitnow", "Arbeitnow"]] as const;
 
 export function NotificationSettings() {
   const { data } = useNotificationPrefs();

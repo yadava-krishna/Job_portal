@@ -19,7 +19,8 @@ import { pollRun, useDiscover, useInvalidateWork, useJobAction, useJobs, useSave
 import { FeedEmptyState, RunSummary } from "@/components/app/discovery";
 import type { UserJob } from "@/types/api";
 
-const PLATFORMS = ["LinkedIn", "Indeed", "Naukri", "Greenhouse", "Lever", "Ashby", "SmartRecruiters", "Recruitee", "Adzuna"];
+const PLATFORMS = ["LinkedIn", "Indeed", "Naukri", "Greenhouse", "Lever", "Ashby", "SmartRecruiters", "Recruitee", "Adzuna",
+                   "Remotive", "Himalayas", "RemoteOK", "Arbeitnow"];
 const POSTED: [NonNullable<JobQuery["posted"]>, string][] = [
   ["any", "Any date"], ["today", "Posted today"], ["24h", "24 hours"], ["3d", "3 days"], ["7d", "7 days"], ["30d", "30 days"], ["range", "Date range"],
 ];

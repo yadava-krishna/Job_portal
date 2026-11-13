@@ -133,7 +133,7 @@ def test_board_cache_shares_fetches_and_remembers_missing_boards(boards):
     for _ in range(2):
         with pytest.raises(AtsError):
             board_cache.get("ashby", "gammaco")
-    assert len(boards.calls) == 4  # transient errors are retried
+    assert len(boards.calls) == 2 + 2 * 3  # transient errors are not cached: each lookup tries again (first try + 2 retries)
 
 
 @pytest.mark.parametrize("url, expected", [

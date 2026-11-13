@@ -154,6 +154,8 @@ export interface BackgroundJob {
   last_error: string | null;
   last_ok_at: string | null;
   last_details: unknown;
+  last_trigger?: string | null;
+  runs_with?: string | null;
 }
 export interface JobRunResult { id: number; name: string; status: string; attempts: number; details: unknown; error: string | null }
 export interface ProductMetrics {

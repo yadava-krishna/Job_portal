@@ -54,6 +54,10 @@ def app_env(tmp_path, monkeypatch):
     board_cache.clear()
     # No test may reach a real job board: unmocked requests fail loudly.
     monkeypatch.setattr(ats_base, "transport_override", httpx.MockTransport(lambda r: httpx.Response(599, text="network disabled in tests")))
+    monkeypatch.setattr(ats_base, "RETRY_DELAYS", (0.0, 0.0))  # retries still happen in tests, without the waits
+    # The public remote-job feeds would also go to the internet: off unless a test supplies fake feeds.
+    from backend.services import saved_search_service
+    monkeypatch.setattr(saved_search_service, "FEED_SOURCES", ())
     yield tmp_path
     get_settings.cache_clear()
     board_cache.clear()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import replace
 from datetime import timedelta
 from typing import Iterable
 
@@ -323,6 +324,50 @@ def _adzuna_items(db: Session, settings: BackendSettings, user: User, run: Disco
     return items
 
 
+# Public remote-job feeds (official JSON APIs, no login). Each is fetched once per run and filtered with the search's
+# own title, location and detail rules, so only relevant postings reach the feed.
+FEED_SOURCES = ("remotive", "himalayas", "remoteok", "arbeitnow")
+FEED_LIMIT = 300
+
+
+def _fetch_feed(source_id: str) -> tuple[list[NormalizedJob], str | None]:
+    from backend.services.connectors import registry
+
+    conn = registry.get(source_id)
+    if conn is None:
+        return [], "connector not available"
+    before = conn.health.last_run_at
+    jobs = registry.run_connector(source_id, criteria={"limit": FEED_LIMIT})
+    failed = conn.health.status == "failing" and conn.health.last_run_at != before
+    return jobs, (conn.health.last_error or "the feed could not be read") if failed and not jobs else None
+
+
+def _feed_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, analyzer: JDAnalyzer,
+                cache: dict[str, list[NormalizedJob]]) -> list[NormalizedJob]:
+    today = timeutil.today()
+    items: list[NormalizedJob] = []
+    for sid in FEED_SOURCES:
+        if sid not in cache:
+            discovery_service.progress(db, run, f"Reading the {discovery_service.SOURCE_LABELS.get(sid, sid)} remote-jobs feed…")
+            discovery_service.source_result(run, sid)
+            try:
+                jobs, err = _fetch_feed(sid)
+            except Exception as exc:  # one feed failing must not stop the others
+                jobs, err = [], f"{type(exc).__name__}: {exc}"
+            cache[sid] = jobs
+            if err:
+                discovery_service._error(db, user, run, "FEED_FETCH_FAILED", f"{discovery_service.SOURCE_LABELS.get(sid, sid)}: {err}",
+                                         platform=discovery_service.SOURCE_LABELS.get(sid, sid), recovery="RETRY_NEXT_RUN")
+                discovery_service.source_result(run, sid, status="failed", failed_requests=1, message=str(err)[:300])
+            else:
+                discovery_service.source_result(run, sid, status="ok", listings_checked=len(jobs))
+        for nj in cache[sid]:
+            if crit.title_ok(nj.title) and crit.location_ok(nj) and crit.details_ok(nj, today):
+                items.append(enrich(replace(nj, locations=list(nj.locations), required_skills=list(nj.required_skills),
+                                            preferred_skills=list(nj.preferred_skills)), analyzer))
+    return items
+
+
 def start(db: Session, user: User, row: SavedSearch, trigger: str = "manual") -> tuple[DiscoveryRun, bool]:
     """(run, created). A run of this search already in progress is returned instead of starting another."""
     running = db.execute(select(DiscoveryRun).where(DiscoveryRun.saved_search_id == row.id, DiscoveryRun.status == "running",
@@ -334,8 +379,10 @@ def start(db: Session, user: User, row: SavedSearch, trigger: str = "manual") ->
 
 
 def collect(db: Session, settings: BackendSettings, user: User, row: SavedSearch, run: DiscoveryRun, analyzer: JDAnalyzer,
-            *, adzuna_client: AdzunaClient | None = None, seen_boards: set[int] | None = None) -> list[NormalizedJob]:
+            *, adzuna_client: AdzunaClient | None = None, seen_boards: set[int] | None = None,
+            feed_cache: dict[str, list[NormalizedJob]] | None = None) -> list[NormalizedJob]:
     crit = criteria_for(db, user, row)
+    feed_cache = {} if feed_cache is None else feed_cache
     if not crit.title_sets:
         discovery_service._error(db, user, run, "NO_KEYWORDS", f"'{row.name}': add job titles or keywords to this search (or to your preferences).",
                                  recovery="UPDATE_SEARCH")
@@ -347,6 +394,8 @@ def collect(db: Session, settings: BackendSettings, user: User, row: SavedSearch
         items += _board_items(db, user, run, crit, analyzer, seen_boards)
     if "adzuna_api" in crit.c.sources:
         items += _adzuna_items(db, settings, user, run, crit, adzuna_client)
+    if "remote_feeds" in crit.c.sources:
+        items += _feed_items(db, user, run, crit, analyzer, feed_cache)
     row.last_run_at = utcnow()
     _schedule_next(row)
     return items
@@ -410,7 +459,7 @@ def ensure_starter(db: Session, settings: BackendSettings, user: User) -> SavedS
         return None  # nothing to search for yet; retried after onboarding
     prof = db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id)).scalar_one_or_none()
     years = round(prof.experience_months / 12, 1) if prof and prof.experience_months else None
-    sources = ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"] + (["adzuna_api"] if settings.adzuna_enabled else [])
+    sources = ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "remote_feeds"] + (["adzuna_api"] if settings.adzuna_enabled else [])
     criteria = SearchCriteria(include_suggested=True, use_watchlist=True, related_titles=True, remote_ok=True,
                               experience_years=years, sources=sources)
     row = SavedSearch(user_id=user.id, name=STARTER_NAME, origin="starter", criteria=criteria.model_dump(mode="json"),
@@ -445,8 +494,9 @@ def run_all(db: Session, settings: BackendSettings, user: User, run: DiscoveryRu
                                             message="You have no saved searches. Add job titles to your preferences, or create a search.")
         items: list[NormalizedJob] = []
         seen: set[int] = set()
+        feeds: dict[str, list[NormalizedJob]] = {}
         for row in rows:
-            items += collect(db, settings, user, row, run, analyzer, adzuna_client=adzuna_client, seen_boards=seen)
+            items += collect(db, settings, user, row, run, analyzer, adzuna_client=adzuna_client, seen_boards=seen, feed_cache=feeds)
         thresholds = [_threshold(db, user, r) for r in rows] or [_threshold(db, user, None)]
         discovery_service.progress(db, run, f"Removing duplicates and matching {len(items)} listings against your resume…")
         discovery_service.ingest_normalized(db, user, run, _dedupe_batch(items), matcher, notify_min_score=min(thresholds),

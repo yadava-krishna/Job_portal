@@ -42,8 +42,13 @@ function resultCounts(r: SourceResult): string {
 }
 
 /** The outcome of one discovery run: never a bare "0 jobs". */
+const PROBLEM_STATUSES = ["failed", "partial"];
+
 export function RunSummary({ run, compact = false }: { run: DiscoveryRun; compact?: boolean }) {
-  const results = Object.entries(run.source_results ?? {});
+  const [showAll, setShowAll] = useState(false);
+  const all = Object.entries(run.source_results ?? {});
+  const problems = all.filter(([, r]) => PROBLEM_STATUSES.includes(r.status));
+  const results = showAll ? all : problems;
   return (
     <div className="space-y-2" data-testid="run-summary">
       <div className="flex items-start gap-2">
@@ -67,6 +72,11 @@ export function RunSummary({ run, compact = false }: { run: DiscoveryRun; compac
             </li>
           ))}
         </ul>
+      )}
+      {!compact && all.length > problems.length && (
+        <button type="button" onClick={() => setShowAll(!showAll)} className="text-xs font-medium text-primary underline-offset-2 hover:underline">
+          {showAll ? "Hide source details" : `Show all ${all.length} sources${problems.length ? "" : " (all fine)"}`}
+        </button>
       )}
     </div>
   );

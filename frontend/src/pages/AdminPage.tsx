@@ -148,7 +148,7 @@ export function AdminPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <ShieldAlert className="h-6 w-6 text-primary" /> Admin Operations Center
@@ -158,12 +158,14 @@ export function AdminPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap rounded-lg border border-border bg-card p-1">
+        <div role="tablist" className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">
           {TABS.map((t) => (
             <button
               key={t.key}
+              role="tab"
+              aria-selected={tab === t.key}
               onClick={() => setTab(t.key)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 tab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >

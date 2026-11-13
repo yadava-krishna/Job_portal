@@ -65,7 +65,7 @@ class AuditLogEntry(BaseModel):
     actor_id: int | None
     action: str
     target_type: str | None
-    target_id: int | None
+    target_id: str | None  # a user id, an invite id or a background job's name ("gap_generation")
     ip: str | None
     details: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime

@@ -25,7 +25,10 @@ function GapMeta({ gap }: { gap: Gap }) {
   );
 }
 
+const GAPS_SHOWN = 10;
+
 export function GapsTab({ onLearn }: { onLearn: (gapId: number) => void }) {
+  const [showAllGaps, setShowAllGaps] = useState(false);
   const gaps = useGaps();
   const refresh = useRefreshGaps();
   const d = gaps.data;
@@ -89,18 +92,22 @@ export function GapsTab({ onLearn }: { onLearn: (gapId: number) => void }) {
       <section className="space-y-2">
         <h3 className="text-sm font-medium">All gaps ({d.gaps.length})</h3>
         <ul className="divide-y rounded-xl border">
-          {d.gaps.map((g) => (
-            <li key={g.id} className={cn("space-y-1.5 p-4", g.status === "closed" && "opacity-70")}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
+          {(showAllGaps ? d.gaps : d.gaps.slice(0, GAPS_SHOWN)).map((g) => (
+            <li key={g.id} className={cn("flex items-start justify-between gap-3 px-4 py-3", g.status === "closed" && "opacity-70")}>
+              <div className="min-w-0 space-y-1">
                 <span className="font-medium">{g.skill}</span>
-                {g.status !== "closed" && <Button variant="ghost" size="sm" onClick={() => onLearn(g.id)}>Learn</Button>}
+                <GapMeta gap={g} />
+                <p className="text-xs text-muted-foreground">{g.explanation} <span className="text-foreground">Next: {g.next_action}</span></p>
               </div>
-              <GapMeta gap={g} />
-              <p className="text-sm text-muted-foreground">{g.explanation}</p>
-              <p className="text-sm"><span className="font-medium">Next action: </span>{g.next_action}</p>
+              {g.status !== "closed" && <Button variant="outline" size="sm" className="shrink-0" onClick={() => onLearn(g.id)}>Learn</Button>}
             </li>
           ))}
         </ul>
+        {d.gaps.length > GAPS_SHOWN && (
+          <Button variant="ghost" size="sm" onClick={() => setShowAllGaps(!showAllGaps)}>
+            {showAllGaps ? "Show the top gaps only" : `Show all ${d.gaps.length} gaps`}
+          </Button>
+        )}
       </section>
 
       <FeedbackPrompt topic="gap_usefulness" question="Is this list of gaps helpful?" />

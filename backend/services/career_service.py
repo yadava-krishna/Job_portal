@@ -43,6 +43,9 @@ def _canon(settings: BackendSettings, name: str) -> str:
 
 # ---------------- skills & evidence ----------------
 
+MAX_SKILL_NAME = 60
+
+
 def sync_skills_from_profile(db: Session, settings: BackendSettings, user: User) -> int:
     """Create candidate skills from the confirmed profile. A skill named in a job's bullets starts at
     professional_experience, in a project at project_evidence, otherwise at aware. Never downgrades."""
@@ -57,8 +60,11 @@ def sync_skills_from_profile(db: Session, settings: BackendSettings, user: User)
     existing = {s.canonical.lower(): s for s in db.execute(select(CandidateSkill).where(CandidateSkill.user_id == user.id)).scalars()}
     added = 0
     for name in names:
-        canonical = tax.canonical(name) or name.strip()
-        if not canonical:
+        name = " ".join((name or "").split())
+        canonical = tax.canonical(name) or name
+        # A resume line that was parsed as a "skill" (e.g. a certifications sentence) is not a skill: skip it rather
+        # than fail the whole sync on the column limit.
+        if not canonical or len(canonical) > MAX_SKILL_NAME or len(name) > MAX_SKILL_NAME:
             continue
         in_work = canonical in tax.skills_in(work_text) or name.lower() in work_text.lower()
         in_proj = canonical in tax.skills_in(proj_text) or name.lower() in proj_text.lower()

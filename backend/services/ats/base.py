@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 from urllib.parse import urlsplit
@@ -14,7 +15,7 @@ from backend.config import VERSION
 from backend.services.normalization import NormalizedJob
 
 USER_AGENT = f"JobPilot/{VERSION} (job-board API reader; +https://github.com/yadava-krishna/Job_portal)"
-MAX_BYTES = 25 * 1024 * 1024
+MAX_BYTES = 64 * 1024 * 1024  # some Ashby boards return every full job ad in one response (Bjak: ~34 MB)
 TIMEOUT = httpx.Timeout(25.0, connect=8.0)
 TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 
@@ -39,7 +40,23 @@ class BoardResult:
     skipped: int = 0  # unlisted or unusable postings
 
 
+# Pauses before retrying a board that timed out or answered 429/5xx. A busy board often answers on the next try.
+RETRY_DELAYS: tuple[float, ...] = (2.0, 6.0)
+
+
 def get_json(url: str, params: dict[str, Any] | None = None) -> Any:
+    """GET a job-board JSON document; transient failures are retried (RETRY_DELAYS) before giving up."""
+    for delay in (*RETRY_DELAYS, None):
+        try:
+            return _get_json_once(url, params)
+        except AtsError as exc:
+            if exc.kind != "transient" or delay is None:
+                raise
+            time.sleep(delay)
+    raise AssertionError("unreachable")
+
+
+def _get_json_once(url: str, params: dict[str, Any] | None = None) -> Any:
     try:
         with httpx.Client(timeout=TIMEOUT, transport=transport_override, follow_redirects=True,
                           headers={"User-Agent": USER_AGENT, "Accept": "application/json"}) as client:

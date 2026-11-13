@@ -57,6 +57,7 @@ class UserJobOut(BaseModel):
     missing_skills: list[str]
     eligibility_status: str | None
     eligibility: str | None = None  # pass | fail | unknown (v2, separate from the score)
+    eligibility_reasons: list[str] = []  # why a job is (in)eligible, shown on the card
     scoring_method: str | None
     discovered_at: datetime
     saved_at: datetime | None

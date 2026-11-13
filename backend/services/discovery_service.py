@@ -248,6 +248,7 @@ def _stat(run: DiscoveryRun, platform: str, key: str, n: int = 1) -> None:
 SOURCE_LABELS = {
     "greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby", "smartrecruiters": "SmartRecruiters", "recruitee": "Recruitee", "adzuna_api": "Adzuna", "alert_email": "Job-alert emails",
     "company_boards": "Company job boards", "search": "Search settings",
+    "remotive": "Remotive", "himalayas": "Himalayas", "remoteok": "RemoteOK", "arbeitnow": "Arbeitnow",
 }
 RAN = ("ok", "empty", "partial")          # the source was reached and answered
 PROBLEM = ("failed", "partial")           # something that should have worked didn't

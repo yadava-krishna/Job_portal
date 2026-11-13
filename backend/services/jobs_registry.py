@@ -309,13 +309,45 @@ SCHEDULES: dict[str, dict[str, Any]] = {
 }
 
 
+# Jobs that run as a step of another job. Until they have a run of their own, they show the parent's latest run.
+RUNS_WITH = {"job_normalisation": "daily_discovery", "job_deduplication": "daily_discovery", "visa_change_detection": "visa_source_check"}
+_DISCOVERY_STATUS = {"completed": "ok", "partial": "partial", "failed": "failed", "running": "running"}
+
+
+def _discovery_overview(db: Session) -> dict[str, Any]:
+    """The daily discovery is recorded as discovery runs (one per user), not job runs: report its latest scheduled run."""
+    from backend.models import DiscoveryRun
+
+    auto = DiscoveryRun.trigger.in_(("scheduled", "catch_up"))
+    last = db.execute(select(DiscoveryRun).where(auto).order_by(DiscoveryRun.started_at.desc())).scalars().first()
+    ok = db.execute(select(DiscoveryRun).where(auto, DiscoveryRun.status.in_(("completed", "partial")))
+                    .order_by(DiscoveryRun.started_at.desc())).scalars().first()
+    error = None
+    if last and last.error_details:
+        msgs = [e.get("message") for e in last.error_details if isinstance(e, dict) and e.get("message")]
+        error = "; ".join(msgs[:3]) or None
+    return {"last_status": _DISCOVERY_STATUS.get(last.status, last.status) if last else None,
+            "last_started_at": last.started_at if last else None, "last_error": error,
+            "last_ok_at": (ok.completed_at or ok.started_at) if ok else None,
+            "last_details": {"trigger": last.trigger, "jobs_found": last.jobs_found, "jobs_new": last.jobs_new} if last else None,
+            "last_trigger": last.trigger if last else None}
+
+
 def overview(db: Session) -> list[dict[str, Any]]:
-    out = []
+    out: dict[str, dict[str, Any]] = {}
     for name, spec in REGISTRY.items():
+        base = {"name": name, "schedule": spec.schedule, "owner": spec.owner, "description": spec.description, "retries": spec.retries,
+                "runs_with": RUNS_WITH.get(name)}
+        if name == "daily_discovery":
+            out[name] = {**base, **_discovery_overview(db)}
+            continue
         last = db.execute(select(JobRun).where(JobRun.name == name).order_by(JobRun.started_at.desc())).scalars().first()
         ok = db.execute(select(JobRun).where(JobRun.name == name, JobRun.status == "ok").order_by(JobRun.started_at.desc())).scalars().first()
-        out.append({"name": name, "schedule": spec.schedule, "owner": spec.owner, "description": spec.description, "retries": spec.retries,
-                    "last_status": last.status if last else None, "last_started_at": last.started_at if last else None,
-                    "last_error": last.error if last else None, "last_ok_at": ok.finished_at if ok else None,
-                    "last_details": last.details if last else None})
-    return out
+        out[name] = {**base, "last_status": last.status if last else None, "last_started_at": last.started_at if last else None,
+                     "last_error": last.error if last else None, "last_ok_at": ok.finished_at if ok else None,
+                     "last_details": last.details if last else None, "last_trigger": last.trigger if last else None}
+    for name, parent in RUNS_WITH.items():
+        if name in out and out[name]["last_status"] is None and parent in out:
+            p = out[parent]
+            out[name].update({k: p[k] for k in ("last_status", "last_started_at", "last_error", "last_ok_at", "last_trigger")})
+    return list(out.values())

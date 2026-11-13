@@ -27,6 +27,7 @@ const SOURCES: { id: SearchSource; label: string; hint: string }[] = [
   { id: "ashby", label: "Ashby", hint: "Employer job boards" },
   { id: "smartrecruiters", label: "SmartRecruiters", hint: "Employer job boards" },
   { id: "recruitee", label: "Recruitee", hint: "Employer careers sites" },
+  { id: "remote_feeds", label: "Remote job feeds", hint: "Remotive, Himalayas, RemoteOK, Arbeitnow (remote jobs open to India)" },
   { id: "adzuna_api", label: "Adzuna", hint: "Needs the server's Adzuna API key" },
 ];
 const ATS_LABEL: Record<string, string> = { greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby", smartrecruiters: "SmartRecruiters", recruitee: "Recruitee" };
@@ -36,7 +37,7 @@ const INDUSTRIES = ["Fintech", "SaaS", "AI", "E-commerce", "Data & Analytics", "
 
 const emptyCriteria: SearchCriteria = {
   keywords: [], exclude_keywords: [], locations: [], remote_ok: true, industries: [], experience_years: null, employment_types: [],
-  work_modes: [], company_ids: [], use_watchlist: true, include_suggested: true, related_titles: true, sources: ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"],
+  work_modes: [], company_ids: [], use_watchlist: true, include_suggested: true, related_titles: true, sources: ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "remote_feeds"],
   max_age_days: null,
 };
 
@@ -196,7 +197,7 @@ function SearchCard({ s, onEdit }: { s: SavedSearch; onEdit: () => void }) {
             {s.origin === "starter" && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-normal text-primary" title="Created automatically from your preferences; titles and locations follow your preferences.">From your profile</span>}
             {!s.enabled && <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">Paused</span>}</h3>
           <p className="text-sm text-muted-foreground">{criteriaSummary(s)}</p>
-          <div className="mt-1 flex flex-wrap gap-1">{s.criteria.sources.map((src) => <PlatformBadge key={src} platform={src === "adzuna_api" ? "Adzuna" : ATS_LABEL[src]} />)}</div>
+          <div className="mt-1 flex flex-wrap gap-1">{s.criteria.sources.map((src) => <PlatformBadge key={src} platform={src === "adzuna_api" ? "Adzuna" : src === "remote_feeds" ? "Remote feeds" : ATS_LABEL[src]} />)}</div>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" onClick={runNow} disabled={run.isPending || !!progress}>{progress ? <Loader2 className="animate-spin" /> : <Play />} Run now</Button>
@@ -374,9 +375,9 @@ export function SearchesPage() {
   return (
     <>
       <PageHeader title="Searches & companies"
-                  description="Saved searches scan employers' official job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee) and, optionally, Adzuna. Nothing is applied for you." />
+                  description="Saved searches scan employers' official job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee), public remote-job feeds (Remotive, Himalayas, RemoteOK, Arbeitnow) and, optionally, Adzuna. Nothing is applied for you." />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="searches"><Radar className="size-4" /> Saved searches</TabsTrigger>
           <TabsTrigger value="companies"><Building2 className="size-4" /> Companies</TabsTrigger>
           <TabsTrigger value="sources"><Activity className="size-4" /> Source health</TabsTrigger>

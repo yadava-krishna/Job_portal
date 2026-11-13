@@ -63,7 +63,7 @@ export function TodayView() {
         <span className="text-xs text-muted-foreground">{totalItems} active priorities</span>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 [&>*]:min-w-0">
         {/* 1. Your Move */}
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
           <div className="flex items-center justify-between">

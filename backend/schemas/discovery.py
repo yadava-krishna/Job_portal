@@ -11,7 +11,7 @@ from backend.schemas.jobs import DiscoveryRunOut
 
 LEGACY_ALL_BOARDS = {"greenhouse", "lever", "ashby"}
 AtsName = Literal["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"]
-SearchSource = Literal["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "adzuna_api"]
+SearchSource = Literal["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "adzuna_api", "remote_feeds"]
 WorkModeName = Literal["Remote", "Hybrid", "On-site"]
 EmploymentTypeName = Literal["Full-time", "Part-time", "Contract", "Internship", "Temporary"]
 
@@ -85,7 +85,7 @@ class SearchCriteria(BaseModel):
     use_watchlist: bool = True
     include_suggested: bool = Field(default=False, description="Also search JobPilot's curated, verified employer boards")
     related_titles: bool = Field(default=True, description="Also match related titles (e.g. Collections Analyst for AR roles)")
-    sources: list[SearchSource] = Field(default_factory=lambda: ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee"])
+    sources: list[SearchSource] = Field(default_factory=lambda: ["greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "remote_feeds"])
     max_age_days: int | None = Field(default=None, ge=1, le=365, description="Skip postings older than this (unknown dates are kept)")
 
     @field_validator("keywords", "exclude_keywords", "locations", "industries")
@@ -101,8 +101,9 @@ class SearchCriteria(BaseModel):
         out = list(dict.fromkeys(v))
         # Searches saved before SmartRecruiters and Recruitee were added stored the then-default "all job boards"
         # (exactly these three). They keep meaning "all job boards".
-        if set(out) - {"adzuna_api"} == LEGACY_ALL_BOARDS:
-            out = [s for s in out if s != "adzuna_api"] + ["smartrecruiters", "recruitee"] + [s for s in out if s == "adzuna_api"]
+        extras = ("adzuna_api", "remote_feeds")
+        if set(out) - set(extras) == LEGACY_ALL_BOARDS:
+            out = [s for s in out if s not in extras] + ["smartrecruiters", "recruitee"] + [s for s in out if s in extras]
         return out
 
 

@@ -35,7 +35,7 @@ export function SettingsPage() {
       <PageHeader title="Profile & settings" description="Everything here is private to your account." />
       <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
         <div className="overflow-x-auto pb-1">
-          <TabsList>
+          <TabsList className="h-auto max-w-full flex-wrap justify-start [&>*]:flex-none">
             <TabsTrigger value="profile">Resume & profile</TabsTrigger>
             <TabsTrigger value="preferences">Job preferences</TabsTrigger>
             <TabsTrigger value="career-goals">Career goals</TabsTrigger>

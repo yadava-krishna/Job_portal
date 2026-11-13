@@ -56,7 +56,7 @@ def user_job(uj: UserJob, app: Application | None, links: list[JobSourceLink] | 
     return UserJobOut(
         user_job_id=uj.id, status=uj.status, is_saved=uj.is_saved, match_score=uj.match_score, match_category=uj.match_category,
         matching_skills=uj.matching_skills or [], missing_skills=uj.missing_skills or [], eligibility_status=uj.eligibility_status, eligibility=uj.eligibility,
-        scoring_method=uj.scoring_method, discovered_at=uj.discovered_at, saved_at=uj.saved_at, dismissed_at=uj.dismissed_at,
+        eligibility_reasons=list(uj.eligibility_reasons or [])[:5], scoring_method=uj.scoring_method, discovered_at=uj.discovered_at, saved_at=uj.saved_at, dismissed_at=uj.dismissed_at,
         application_id=app.id if app else None, application_status=app.status if app else None, job=job_listing(uj.job, links),
     )
 

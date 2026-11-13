@@ -99,3 +99,25 @@ def test_admin_invites_work_at_registration_and_are_consumed(client, monkeypatch
     code2 = admin_inv.get("code") or admin_inv.get("invite_code") or admin_inv.get("raw_code")
     r2 = client.post(f"{API}/auth/register", json={**body, "email": "noadmin@example.com", "invite_code": code2})
     assert r2.status_code == 201 and client.get(f"{API}/auth/me", headers=auth(r2.json())).json()["role"] == "user"
+
+
+def test_audit_log_lists_job_runs_and_server_errors_keep_cors_headers(client, monkeypatch):
+    a = _admin(client, "audit-admin@example.com")
+    assert client.post(f"{API}/admin/jobs/analytics_rollup/run", headers=a).json()["status"] == "ok"
+    r = client.get(f"{API}/admin/audit-log", headers=a)  # an entry whose target is a job name, not a number
+    assert r.status_code == 200, r.text
+    assert any(e["target_id"] == "analytics_rollup" for e in r.json())
+
+    # An unexpected server error still carries CORS headers, so the browser shows the error instead of "blocked by CORS".
+    from backend.config import get_settings
+    from backend.services import jobs_registry
+
+    origin = get_settings().cors_origins[0]
+    monkeypatch.setattr(jobs_registry, "overview", lambda db: 1 / 0)
+    from fastapi.testclient import TestClient
+
+    from backend.main import create_app
+
+    with TestClient(create_app(start_scheduler=False), raise_server_exceptions=False) as c:
+        r = c.get(f"{API}/admin/jobs", headers={**a, "Origin": origin})
+    assert r.status_code == 500 and r.headers.get("access-control-allow-origin") == origin

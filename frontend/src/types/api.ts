@@ -221,6 +221,7 @@ export interface UserJob {
   missing_skills: string[];
   eligibility_status: string | null;
   eligibility?: "pass" | "fail" | "unknown" | null;
+  eligibility_reasons?: string[];
   scoring_method: string | null;
   discovered_at: string;
   saved_at: string | null;
@@ -442,7 +443,7 @@ export interface Analytics {
 }
 
 export type AtsName = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "recruitee";
-export type SearchSource = AtsName | "adzuna_api";
+export type SearchSource = AtsName | "adzuna_api" | "remote_feeds";
 export interface DirectoryCompany {
   name: string;
   ats: AtsName;
