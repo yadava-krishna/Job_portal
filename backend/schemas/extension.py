@@ -64,6 +64,10 @@ class MatchOut(BaseModel):
     application_id: int | None = None
     application_status: str | None = None
     submitted_at: datetime | None = None
+    location: str | None = None
+    job_url: str | None = None
+    apply_state: str | None = None
+    apply_state_label: str | None = None
 
 
 class AutofillOut(BaseModel):
@@ -107,3 +111,26 @@ class ExtApplicationOut(BaseModel):
     status: str
     submitted_at: datetime | None
     already_submitted: bool = False
+    apply_state: str | None = None
+    apply_state_label: str | None = None
+    apply_mode: str | None = None
+    apply_step: str | None = None
+    apply_counts: dict[str, int] = Field(default_factory=dict)
+    apply_resume: dict[str, Any] | None = None
+
+
+class ApplyStateRequest(BaseModel):
+    state: str = Field(max_length=30)
+    mode: str | None = Field(default=None, max_length=20)
+    session: dict[str, Any] = Field(default_factory=dict)
+    reference_id: str | None = Field(default=None, max_length=200)
+
+
+class ExtResumeOut(BaseModel):
+    kind: str  # upload | studio
+    id: int
+    name: str
+    formats: list[str]
+    active: bool = False
+    pages: int | None = None
+    updated_at: datetime | None = None

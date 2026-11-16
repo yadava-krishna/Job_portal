@@ -93,6 +93,52 @@ class Popup:
         self.page.locator("#app").get_by_text(needle, exact=False).first.wait_for(timeout=timeout)
 
 
+def _shadow_nodes(page: Page) -> tuple[object, list[dict]]:
+    """All DOM nodes including closed shadow roots, via Chrome DevTools (what a real user's screen shows)."""
+    cdp = page.context.new_cdp_session(page)
+    root = cdp.send("DOM.getDocument", {"depth": -1, "pierce": True})["root"]
+    out: list[dict] = []
+
+    def walk(n):
+        out.append(n)
+        for k in ("children", "shadowRoots"):
+            for c in n.get(k, []) or []:
+                walk(c)
+        if n.get("contentDocument"):
+            walk(n["contentDocument"])
+    walk(root)
+    return cdp, out
+
+
+def _text(n: dict) -> str:
+    if n.get("nodeType") == 3:
+        return n.get("nodeValue", "")
+    return "".join(_text(c) for c in n.get("children", []) or [])
+
+
+def panel_text(page: Page) -> str:
+    _, nodes = _shadow_nodes(page)
+    host = next((n for n in nodes if n.get("nodeName") == "JOBPILOT-REVIEW"), None)
+    return " ".join(_text(sr) for sr in (host or {}).get("shadowRoots", [])) if host else ""
+
+
+def panel_click(page: Page, prefix: str = "", *, aria: str | None = None, attr: tuple[str, str] | None = None) -> bool:
+    """A real (trusted) mouse click on a button or checkbox inside the review panel's closed shadow root."""
+    cdp, nodes = _shadow_nodes(page)
+    def attrs(n):
+        a = n.get("attributes") or []
+        return dict(zip(a[::2], a[1::2]))
+    hit = next((n for n in nodes if (aria and attrs(n).get("aria-label", "").startswith(aria) and (not attr or attrs(n).get(attr[0]) == attr[1])) or
+                (not aria and n.get("nodeName") == "BUTTON" and _text(n).strip().startswith(prefix))), None)
+    if hit is None:
+        return False
+    cdp.send("DOM.scrollIntoViewIfNeeded", {"nodeId": hit["nodeId"]})
+    q = cdp.send("DOM.getBoxModel", {"nodeId": hit["nodeId"]})["model"]["border"]
+    page.mouse.click((q[0] + q[4]) / 2, (q[1] + q[5]) / 2)
+    page.wait_for_timeout(300)
+    return True
+
+
 def tab_id_of(ctx: BrowserContext, sw, url_prefix: str) -> int:
     return sw.evaluate("(p) => chrome.tabs.query({}).then(ts => ts.find(t => (t.url||'').startsWith(p)).id)", url_prefix)
 
@@ -137,16 +183,26 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
         sw = ctx.service_workers[0] if ctx.service_workers else ctx.wait_for_event("serviceworker", timeout=15000)
         check("extension loads with the fixed ID (matches the backend CORS origin)", sw.url.startswith(f"chrome-extension://{ext_id}/"), sw.url)
 
-        # Serve the synthetic forms at the platforms' real addresses; block every submission attempt.
+        # Serve the synthetic forms at the platforms' real addresses; block every submission attempt, except the one
+        # submission the test user authorises in the review panel, which is answered locally with a thank-you page.
+        allow_post = {"lever": False}
+        assisted_posts: list[str] = []
+
         def serve(route, request):
             if request.method != "GET":
+                if allow_post["lever"] and request.url.startswith("https://jobs.lever.co/test/apply"):
+                    allow_post["lever"] = False
+                    assisted_posts.append(f"{request.method} {request.url}")
+                    return route.fulfill(status=200, content_type="text/html",
+                                         body="<html><body><main><h1>Thank you for applying!</h1><p>Your application was received.</p></main></body></html>")
                 submissions.append(f"{request.method} {request.url}")
                 return route.abort()
             url = request.url
             name = "greenhouse" if "greenhouse.io" in url else "lever" if "lever.co" in url else "ashby"
             route.fulfill(status=200, content_type="text/html", body=(FIXTURES / f"{name}.html").read_text())
 
-        for pattern in ("https://job-boards.greenhouse.io/jobpilote2e/**", "https://jobs.lever.co/jobpilot-e2e/**", "https://jobs.ashbyhq.com/jobpilot-e2e/**"):
+        for pattern in ("https://job-boards.greenhouse.io/jobpilote2e/**", "https://jobs.lever.co/jobpilot-e2e/**", "https://jobs.ashbyhq.com/jobpilot-e2e/**",
+                        "https://jobs.lever.co/test/**"):
             ctx.route(pattern, serve)
 
         # ---- connect -------------------------------------------------------------------------------
@@ -181,10 +237,10 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
             pop.wait_text("Fill with JobPilot")
             check(f"{ats}: platform detected and job recognised as yours", "In your JobPilot jobs" in pop.text(), pop.text()[:200])
             if ats == "lever":
-                pop.click("Attach my resume")
-                pop.wait_text("Attached")
+                pop.click("Attach")
+                pop.wait_text("Attached and checked")
                 name = page.evaluate("() => document.querySelector('input[type=file][name=resume]').files[0]?.name")
-                check("lever: resume attached from JobPilot after an explicit click", name == "Test_Candidate_Resume.pdf", str(name))
+                check("lever: resume attached from JobPilot after an explicit click, and read back", name == "Test_Candidate_Resume.pdf", str(name))
             pop.click("Fill with JobPilot")
             pop.wait_text("filled ·")
             values = page.evaluate("""() => Object.fromEntries([...document.querySelectorAll('input[type=text],input[type=email],input[type=tel],input:not([type])')]
@@ -193,6 +249,15 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
                       "greenhouse": {"first_name": "Test", "last_name": "Candidate", "email": "test.candidate@example.com", "question_1002": "30 days"},
                       "ashby": {"_systemfield_name": "Test Candidate", "_systemfield_email": "test.candidate@example.com"}}[ats]
             check(f"{ats}: fields filled from the JobPilot profile", all(values.get(k) == v for k, v in expect.items()), json.dumps(values)[:300])
+            shots = os.environ.get("E2E_SHOTS")
+            if shots:
+                page.set_viewport_size({"width": 1366, "height": 860})
+                page.wait_for_timeout(400)
+                page.screenshot(path=f"{shots}/{ats}-panel-fill.png")
+                panel_click(page, "Review")
+                page.screenshot(path=f"{shots}/{ats}-panel-review.png")
+                pop.page.set_viewport_size({"width": 380, "height": 760})
+                pop.page.screenshot(path=f"{shots}/{ats}-popup.png", full_page=True)
             panel = page.evaluate("() => !!document.querySelector('jobpilot-review')")
             check(f"{ats}: review panel shown on the page", panel)
             leaked = page.evaluate("""() => { const s = document.documentElement.outerHTML + JSON.stringify(localStorage) + JSON.stringify(sessionStorage)
@@ -217,9 +282,23 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
                 d2 = c.get(f"/applications/{app['id']}", headers=H).json()
                 check("greenhouse: a second confirmation changes nothing",
                       d2["submitted_at"] == d["submitted_at"] and [e["event_type"] for e in d2["events"]].count("SUBMISSION_CONFIRMED") == 1)
+            if ats == "lever":
+                assisted_submit(page, pop, c, H, app, allow_post, assisted_posts)
             pop.page.close()
             page.close()
-        check("offline: no submission request was ever sent", not submissions, "; ".join(submissions))
+        check("offline: no submission request was ever sent without the user's authorisation", not submissions, "; ".join(submissions))
+
+        # ---- duplicate prevention: the submitted Lever job cannot be filled or submitted again ---------------------
+        job = seed["jobs"]["lever"]
+        page = ctx.new_page()
+        page.goto(job["url"] + "/apply")
+        pop = Popup(ctx, ext_id, tab_id_of(ctx, sw, job["url"]))
+        pop.wait_text("Already applied")
+        check("lever: after submission the popup says it will not submit again", "will not submit it again" in pop.text(), pop.text()[:300])
+        pop.page.close(); page.close()
+
+        # (LinkedIn/Naukri/Indeed hand-off: a popup opened by the test cannot read a LinkedIn tab's address without the
+        #  toolbar click's activeTab grant, so that path is covered by the unit tests of platformForUrl and the popup.)
 
         # ---- revocation from JobPilot Settings ---------------------------------------------------
         dev = c.get("/extension/devices", headers=H).json()[0]
@@ -234,6 +313,41 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
         if args.live:
             run_live(ctx, sw, ext_id, c, H, submissions)
         ctx.close()
+
+
+def assisted_submit(page, pop, c, H, app, allow_post, assisted_posts) -> None:
+    """Mode B in real Chromium: review in the panel, tick committing answers, authorise, one click, confirmation."""
+    panel_click(page, "Review")
+    for _ in range(6):  # tick every "I checked this answer" box (salary, notice period, …)
+        if not panel_click(page, aria="I checked:", attr=("data-confirmed", "no")):
+            break
+    text = panel_text(page)
+    reviewed = panel_click(page, "I have reviewed this application")
+    page.wait_for_timeout(500)
+    st = c.get(f"/applications/{app['id']}", headers=H).json()
+    check("lever: review recorded before any submission (state reviewed)", reviewed and st.get("apply_state") == "reviewed",
+          f"{st.get('apply_state')} | panel: {text[:400]}")
+    # A change after the review makes it stale: the submit button is refused until reviewed again.
+    page.fill("textarea[name='cards[c1][field4]']", "Added after review") if page.locator("textarea[name='cards[c1][field4]']").count() else None
+    page.wait_for_timeout(600)
+    stale = "changed after your review" in panel_text(page)
+    if stale:
+        panel_click(page, "Reviewed") or panel_click(page, "I have reviewed this application")
+        page.wait_for_timeout(500)
+    allow_post["lever"] = True
+    clicked = panel_click(page, "Submit this application")
+    deadline = time.time() + 25
+    st = {}
+    while time.time() < deadline:
+        st = c.get(f"/applications/{app['id']}", headers=H).json()
+        if st.get("apply_state") in ("submitted_confirmed", "submission_uncertain"):
+            break
+        time.sleep(0.5)
+    check("lever: a change after review made the review stale", stale or not page.locator("textarea[name='cards[c1][field4]']").count())
+    check("lever: one authorised click sent exactly one submission", clicked and len(assisted_posts) == 1, str(assisted_posts))
+    check("lever: submission confirmed from the thank-you page and recorded as Smart Apply (assisted)",
+          st.get("status") == "SUBMITTED" and st.get("apply_state") == "submitted_confirmed" and st.get("confirmation_source") == "smart_apply_assisted",
+          json.dumps({k: st.get(k) for k in ("status", "apply_state", "confirmation_source")}))
 
 
 def run_live(ctx, sw, ext_id, c, H, submissions):
@@ -279,7 +393,7 @@ def run_live(ctx, sw, ext_id, c, H, submissions):
             check(f"live {ats}: form detected", False, pop.text()[:200]); pop.page.close(); page.close(); continue
         check(f"live {ats}: form detected", True)
         if ats == "lever":
-            pop.click("Attach my resume")
+            pop.click("Attach")
             pop.page.locator("#app").get_by_text("Attached").or_(pop.page.locator("#app").get_by_text("Download resume")).first.wait_for(timeout=30000)
             page.wait_for_timeout(5000)
             check("live lever: resume attachment handled", True, pop.text()[-200:])

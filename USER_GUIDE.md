@@ -55,7 +55,7 @@ Go to **Settings**. The more you fill in, the more JobPilot can help.
   how good a match must be before you are told.
 - **Alert emails (optional):** connect the e-mail inbox where you receive job alerts from LinkedIn, Indeed or
   Naukri, and JobPilot will collect those jobs for you.
-- **Browser extension:** connect the "Fill with JobPilot" helper (see section 7).
+- **Browser extension:** connect the Smart Apply helper (see section 7).
 
 ---
 
@@ -127,40 +127,56 @@ also add **notes** and a **follow-up date** to remind yourself when to chase it 
 
 ---
 
-## 7. The "Fill with JobPilot" browser helper (optional)
+## 7. The Smart Apply browser helper (optional)
 
-This free helper for Chrome or Edge fills in application forms for you on three common job-application systems:
-**Greenhouse, Lever and Ashby**. Many employers use them. It saves you typing the same details again and again.
+This free helper for Chrome or Edge fills in job application forms for you, shows you everything before you send
+it, and keeps your JobPilot list up to date.
+
+- **Greenhouse, Lever and Ashby:** it fills the form, and it can also send the application for you, but only after
+  you have checked it and clicked **Submit this application**.
+- **Workday, iCIMS, SuccessFactors, Taleo and other company career sites:** it fills the form, and you press the
+  site's own Submit button.
+- **LinkedIn, Naukri and Indeed:** these sites don't allow helpers like this. JobPilot shows your details to copy and
+  lets you download your resume instead.
 
 ### Set it up once
-1. Install it. Ask the person who invited you for the installation steps, or follow the "Installing Fill with
-   JobPilot" guide.
+1. Install it. Ask the person who invited you for the installation steps, or follow the extension's installation
+   guide.
 2. In JobPilot, go to **Settings → Browser extension** and click **Create connection code**.
 3. Click the JobPilot icon in your browser's toolbar and type in the code (it looks like `AB12-CD34`). The code works
    once and only for 5 minutes. **You never type your JobPilot password into the helper.**
 
 ### Use it on an application form
 1. Open the employer's application form (from JobPilot's **Apply** button).
-2. Click the JobPilot icon. It tells you whether this job is in your JobPilot list.
-3. Click **Attach my resume** to add your default resume to the form. On Lever forms, do this first.
-4. Click **Fill with JobPilot**. Your details and saved answers are filled in.
-5. A small panel on the page shows:
-   - what was **filled**,
-   - what you should **check** (for example years of experience calculated from your dates),
-   - what **needs your answer**,
-   - what was **kept** because you had already typed something,
-   - what was **skipped**, and why.
-6. Check everything, answer the remaining questions, complete any "I'm not a robot" check, and **press Submit
-   yourself**.
-7. In the helper, click **I submitted it** (or **I didn't submit**). JobPilot updates your application list.
+2. Click the JobPilot icon. On a company site you haven't used before, click **Allow Smart Apply on …** and confirm.
+3. Choose which resume to send: an uploaded one, or one you made in Resume Studio (PDF or Word). Then click
+   **Attach**. The helper checks that the form really received the file.
+4. Click **Fill with JobPilot**.
+5. A panel opens at the side of the page. You can move it to the other side or shrink it.
+   - The **Review** tab shows every answer as it is on the form now, and where it came from.
+   - The **What JobPilot did** tab lists what was filled, what you should check, what needs your answer, and what
+     JobPilot wasn't sure about. Nothing it isn't sure about is filled unless you click **Use JobPilot value**.
+6. Answers that commit you (salary, notice period, work permit, visa sponsorship, relocation, start date) have a tick
+   box. Tick each one once you have checked it.
+7. Click **I have reviewed this application**, then either:
+   - **Submit this application** (Greenhouse, Lever and Ashby): JobPilot presses the site's Submit button once, or
+   - press **Submit** on the page yourself.
+
+   If you change anything after reviewing, JobPilot asks you to review again.
+8. JobPilot waits for the employer's "thank you" message. If it sees it, your application is marked **Submitted**.
+   If it can't tell, it asks **"Did it go through?"**, and you answer.
 
 ### Good to know
-- The helper never presses Submit and never applies for you.
+- Nothing is ever sent without your click on that one application, and an application already sent is never sent
+  again.
 - It never answers personal questions such as gender, ethnicity, disability or veteran status, and never ticks
   "I agree" boxes. Those are always yours to answer.
 - It never changes something you have typed yourself, unless you ask it to.
-- It only works on Greenhouse, Lever and Ashby forms. On other sites (for example LinkedIn, Naukri, or a company's
-  own website) it shows "Not an application page", and you fill the form yourself.
+- "I'm not a robot" checks and one-time codes are always yours to complete.
+- On multi-page forms (for example Workday), fill each page, then move on with the site's own button. The panel
+  offers to fill the next page.
+- **Saved answers** (Settings → Screening answers): mark an answer as **One job only** if you wrote it for a
+  particular company. It is then only offered as a suggestion for you to check.
 - To stop using it on a computer, click **Disconnect** in Settings → Browser extension.
 
 ---

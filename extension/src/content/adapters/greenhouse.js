@@ -16,7 +16,20 @@
   JP.adapters.greenhouse = {
     name: "Greenhouse",
     hosts: ["job-boards.greenhouse.io", "boards.greenhouse.io", "job-boards.eu.greenhouse.io", "boards.eu.greenhouse.io"],
+    matchesHost: (h) => JP.adapters.greenhouse.hosts.includes(h),
     isApplicationPage: () => Boolean(form() && document.getElementById("first_name")),
+    assistedSubmit: true,
+    company: () => document.querySelector(".company-name, .job__header .logo img")?.getAttribute?.("alt") || null,
+    submitButton: () => {
+      const f = form();
+      const btns = f ? [...f.querySelectorAll("button[type=submit], input[type=submit], button:not([type])")].filter((b) => JP.dom.visible(b) && /submit/i.test(b.textContent || b.value)) : [];
+      return btns.length === 1 ? btns[0] : null;
+    },
+    confirmation: () => {
+      if (/\/confirmation(\/|$)/.test(location.pathname)) return { signal: "Greenhouse confirmation page" };
+      const t = JP.dom.textOf(document.querySelector("#application_confirmation, .application-confirmation, main, body")).slice(0, 5000);
+      return /thank you for applying|application has been (submitted|received)/i.test(t) && !form() ? { signal: "Greenhouse: thank-you message" } : null;
+    },
     root: form,
     jobTitle: () => document.querySelector(".job__title h1, h1.section-header, h1")?.textContent?.trim() || null,
     ignore: (el) => /^iti-/.test(el.id || "") || el.id === "resume_text" || el.id === "cover_letter_text",

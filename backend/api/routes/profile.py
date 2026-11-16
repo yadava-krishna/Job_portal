@@ -77,8 +77,10 @@ def put_profile(body: EditableProfile, user: CurrentUser, db: DbSession, setting
 @router.put("/profile/verified-facts", response_model=ProfileOut)
 def put_facts(body: VerifiedFacts, user: CurrentUser, db: DbSession) -> ProfileOut:
     prof = resume_service.get_or_create_profile(db, user)
-    source = (prof.verified_facts or {}).get("profile_source")
-    prof.verified_facts = {**body.model_dump(), **({"profile_source": source} if source else {})}
+    old = prof.verified_facts or {}
+    source = old.get("profile_source")
+    prof.verified_facts = {**resume_service.facts_with_provenance(old, body.model_dump(mode="json")),
+                           **({"profile_source": source} if source else {})}
     db.commit()
     return _profile_out(db, user)
 

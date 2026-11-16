@@ -160,7 +160,7 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
                 <div>
                   <p>{options.data.message}</p>
                   {(options.data.original_supported || hostedUrl) && (
-                    <p className="mt-1 text-xs opacity-80">With the Fill with JobPilot browser extension connected (Settings → Browser extension), open the form and click Fill. You review every field and submit yourself.</p>
+                    <p className="mt-1 text-xs opacity-80">With the Smart Apply browser extension connected (Settings → Browser extension), open the form and click Fill. You review every answer before anything is submitted.</p>
                   )}
                 </div>
               </section>

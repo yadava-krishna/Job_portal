@@ -37,7 +37,9 @@ ACTIVE = ("PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED")
 STAGES = ("applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "ghosted", "archived")
 # How the user applied, from the confirmation source (shown in the tracker).
 SUBMISSION_METHODS = {"user_confirmed": "Employer website, confirmed in JobPilot",
-                      "extension_user_confirmed": "Employer website, confirmed in the extension"}
+                      "extension_user_confirmed": "Employer website, confirmed in the extension",
+                      "smart_apply_assisted": "Smart Apply: submitted after your authorisation; the employer's confirmation was seen",
+                      "smart_apply_detected": "Employer website, submitted by you; Smart Apply saw the employer's confirmation"}
 
 
 def _event(db: Session, app: Application, user: User, event_type: str, frm: str | None, to: str | None, details: str | None = None) -> None:

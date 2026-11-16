@@ -115,6 +115,9 @@ class ScreeningAnswerer:
                 best, best_score = (i, item), score
         if best is None or best_score < 0.75 or (best_score < 1.0 and min(len(mine), len(_words(best[1]["question"]))) < 3):
             return None
+        if best[1].get("applies_to") == "one_job":
+            # Written for one application: offered as a suggestion to check, never reused as a confirmed answer.
+            return {"question": q, "answer": str(best[1]["answer"]), "source": f"saved_for_one_job.{best[0]}", "status": "ANSWERED"}
         return {"question": q, "answer": str(best[1]["answer"]), "source": f"answer_bank.{best[0]}", "status": "ANSWERED"}
 
     def _mentions_skill(self, q: str) -> str | None:

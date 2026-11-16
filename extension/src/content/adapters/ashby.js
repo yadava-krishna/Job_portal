@@ -15,7 +15,19 @@
   JP.adapters.ashby = {
     name: "Ashby",
     hosts: ["jobs.ashbyhq.com"],
+    matchesHost: (h) => JP.adapters.ashby.hosts.includes(h),
     isApplicationPage: () => Boolean(root() && document.getElementById("_systemfield_email")),
+    assistedSubmit: true,
+    submitButton: () => {
+      const r = root();
+      const btns = r ? [...r.querySelectorAll("button")].filter((b) => JP.dom.visible(b) && /^submit application$/i.test(clean(b.textContent))) : [];
+      return btns.length === 1 ? btns[0] : null;
+    },
+    confirmation: () => {
+      const t = JP.dom.textOf(document.querySelector("main, body")).slice(0, 5000);
+      return /application was successfully submitted|thank(s| you) for applying/i.test(t) && !document.getElementById("_systemfield_email")
+        ? { signal: "Ashby: application submitted message" } : null;
+    },
     root,
     jobTitle: () => document.querySelector("h1")?.textContent?.trim() || null,
     // The autofill drop zone (and anything else outside a question entry) is not part of the application.

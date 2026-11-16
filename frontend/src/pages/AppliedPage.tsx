@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Calendar, ExternalLink, Loader2, MessageSquareText, Plus, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -149,7 +150,8 @@ export function AppliedPage() {
                 <Card key={a.id} className="flex-row items-center justify-between gap-3 p-4">
                   <div className="min-w-0">
                     <div className="truncate font-medium">{a.job.title}</div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">{a.job.company} <StatusBadge status={a.status} /></div>
+                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{a.job.company} <StatusBadge status={a.status} />
+                      {a.apply_state_label && <Badge variant={a.apply_state === "submission_uncertain" ? "destructive" : "secondary"} title="Smart Apply progress from the browser extension">{a.apply_state_label}</Badge>}</div>
                   </div>
                   <Button size="sm" onClick={() => setResume(asUserJob(a))}>Continue</Button>
                 </Card>
@@ -197,6 +199,7 @@ function ApplicationDetailDialog({ id, onClose, onReject, rejection, reasonLabel
                   <dt className="text-muted-foreground">Submitted</dt><dd>{data.submitted_at ? formatDate(data.submitted_at, true) : "—"}</dd>
                   <dt className="text-muted-foreground">Reference</dt><dd>{data.reference_id ?? "—"}</dd>
                   <dt className="text-muted-foreground">How you applied</dt><dd>{data.submission_method ?? "—"}</dd>
+                  {data.apply_state_label && <><dt className="text-muted-foreground">Smart Apply</dt><dd>{data.apply_state_label}{data.apply_state_at ? ` · ${formatDate(data.apply_state_at, true)}` : ""}</dd></>}
                   <dt className="text-muted-foreground">Resume used</dt><dd>{data.resume_used ?? "—"}</dd>
                   {rej?.rejection_reason && <><dt className="text-muted-foreground">Rejection reason</dt><dd><RejectionLabel reason={rej.rejection_reason} known={rej.rejection_reason_known} labels={reasonLabels} /></dd></>}
                   {data.job.job_url && <><dt className="text-muted-foreground">Original listing</dt><dd><a className="underline" href={data.job.job_url} target="_blank" rel="noopener noreferrer">Open</a></dd></>}

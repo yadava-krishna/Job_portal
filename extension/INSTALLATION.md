@@ -1,4 +1,4 @@
-# Installing Fill with JobPilot
+# Installing JobPilot Smart Apply
 
 The extension is not on the Chrome Web Store (publishing there needs the owner's approval and developer account), so
 you install it unpacked. Works in Google Chrome, Microsoft Edge, Brave and other Chromium browsers (version 116+).
@@ -7,7 +7,7 @@ you install it unpacked. Works in Google Chrome, Microsoft Edge, Brave and other
 
 Either:
 - use the `extension/` folder of this repository, or
-- unzip `fill-with-jobpilot-1.0.0.zip` (from `npm run package` or the project owner) into a folder you will keep.
+- unzip `fill-with-jobpilot-2.0.0.zip` (from `npm run package` or the project owner) into a folder you will keep.
   Chrome loads it from that folder every time, so don't delete it.
 
 ## 2. Load it
@@ -15,7 +15,7 @@ Either:
 1. Open `chrome://extensions` (Edge: `edge://extensions`).
 2. Turn on **Developer mode** (top right).
 3. Click **Load unpacked** and choose the folder that contains `manifest.json`.
-4. Pin **Fill with JobPilot** from the puzzle-piece menu so the icon is always visible.
+4. Pin **JobPilot Smart Apply** from the puzzle-piece menu so the icon is always visible.
 
 The extension ID must be `ehpfmhhbnijflgagkpdbhiakldmgedgp`. The JobPilot server only accepts requests from that ID.
 

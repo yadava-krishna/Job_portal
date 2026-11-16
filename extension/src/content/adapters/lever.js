@@ -22,7 +22,18 @@
   JP.adapters.lever = {
     name: "Lever",
     hosts: ["jobs.lever.co", "jobs.eu.lever.co"],
+    matchesHost: (h) => JP.adapters.lever.hosts.includes(h),
     isApplicationPage: () => Boolean(form() && document.querySelector("input[name=email]")),
+    assistedSubmit: true,
+    company: () => document.querySelector(".main-header-logo img")?.getAttribute("alt") || null,
+    submitButton: () => document.querySelector("#btn-submit, button[data-qa=btn-submit]") ||
+      ([...(form()?.querySelectorAll("button[type=submit]") || [])].filter((b) => JP.dom.visible(b)).length === 1
+        ? [...form().querySelectorAll("button[type=submit]")].find((b) => JP.dom.visible(b)) : null),
+    confirmation: () => {
+      if (/\/thanks\/?$/.test(location.pathname)) return { signal: "Lever thank-you page" };
+      const t = JP.dom.textOf(document.querySelector(".application-confirmation, .thanks, main, body")).slice(0, 5000);
+      return /application (submitted|received)|thanks for applying/i.test(t) && !form() ? { signal: "Lever: application received" } : null;
+    },
     root: form,
     resumeFirst: true,
     jobTitle: () => document.querySelector(".posting-header h2, .posting-headline h2, h2")?.textContent?.trim() || null,

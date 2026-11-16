@@ -84,7 +84,7 @@ export function ProfileForm({ profile, onSaved, submitLabel = "Save profile", ma
 
       <div>
         <h3 className="mb-1 text-sm font-semibold">Links (optional)</h3>
-        <p className="mb-3 text-xs text-muted-foreground">Application forms often ask for these. They are filled only when you click Fill with JobPilot.</p>
+        <p className="mb-3 text-xs text-muted-foreground">Application forms often ask for these. They are filled only when you click Fill in the Smart Apply extension.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="LinkedIn URL" htmlFor="pf-li"><Input id="pf-li" inputMode="url" value={p.linkedin_url ?? ""} placeholder="https://www.linkedin.com/in/…" onChange={(e) => set("linkedin_url", e.target.value || null)} /></Field>
           <Field label="GitHub URL" htmlFor="pf-gh"><Input id="pf-gh" inputMode="url" value={p.github_url ?? ""} placeholder="https://github.com/…" onChange={(e) => set("github_url", e.target.value || null)} /></Field>

@@ -3,7 +3,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SCRIPTS = ["fieldmap.js", "core.js", "adapters/greenhouse.js", "adapters/lever.js", "adapters/ashby.js", "panel.js"];
+import { CONTENT_FILES } from "../../src/lib/config.js";
+
+// The same files, in the same order, that the service worker injects.
+const SCRIPTS = CONTENT_FILES.map((f) => f.replace(/^src\/content\//, ""));
 
 /** Load a form into the jsdom document and (re)inject the content scripts, as the service worker would. */
 export function load(html) {

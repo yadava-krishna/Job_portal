@@ -1,5 +1,8 @@
-// Field vocabulary shared by all adapters: which profile value a form field asks for, judged from its label.
-// Injected into application frames only after the user clicks Fill. No network access, no storage access.
+// Field vocabulary and the deterministic field classifier shared by all adapters (no AI, no network, no storage).
+//
+// A field is classified from several signals: its label, the HTML autocomplete token, its name/id, placeholder and
+// input type. Each signal proposes a profile key with a confidence; agreeing signals raise it, disagreeing ones lower
+// it. Only fields at or above FILL_THRESHOLD are filled; lower-confidence guesses are shown for review, never filled.
 (() => {
   const JP = (globalThis.__jobpilot ??= { adapters: {} });
   if (JP.fieldmap) return;
@@ -10,6 +13,7 @@
     ["last_name", [/^(legal )?last name\b/, /^surname\b/, /^family name\b/]],
     ["full_name", [/^(your )?(full |legal )?name\b(?! of)/, /^candidate name\b/]],
     ["email", [/^(your )?e-?mail( address)?\b/]],
+    ["phone_country_code", [/^(phone |mobile )?(country|dial(l)?ing|isd) code\b/]],
     ["phone", [/^(your )?(phone|mobile|contact|cell)( phone)?( number| no\.?)?\b/]],
     ["linkedin_url", [/linkedin( profile)?( url| link)?\b/]],
     ["github_url", [/^github( profile)?( url| link)?\b/]],
@@ -17,10 +21,43 @@
     ["website_url", [/^(personal )?(website|web site|blog)( url| link)?\b/, /^other (url|link|website)\b/]],
     ["current_company", [/^current (company|employer|organi[sz]ation)\b/, /^(present|current|most recent) employer\b/]],
     ["current_title", [/^current (job )?(title|designation|role|position)\b/]],
+    ["city", [/^(current )?(town|city)( \/ town)?( of residence)?$/]],
     ["location", [/^(current )?(location|city)\b/, /^where are you (currently )?(based|located)/]],
+    ["address_line1", [/^(street |postal |residential |home |current )?address( line 1| 1)?$/, /^street( address)?$/]],
+    ["state", [/^(state|province|region)( \/ province| \/ region| of residence)?$/]],
+    ["postal_code", [/^(postal|zip|post|pin) ?code$/, /^(pincode|zip|postcode)$/]],
+    ["country", [/^(current )?country( of residence| \/ region)?$/]],
+    ["graduation_year", [/^(graduation|passing|completion|passed out) year\b/, /^year of (graduation|passing|completion)\b/]],
     ["school", [/^(school|university|college|institution)( name)?\b/]],
     ["degree", [/^(degree|qualification)\b/]],
   ];
+
+  // HTML autocomplete tokens (https://html.spec.whatwg.org/#autofill) -> profile key. Very reliable when present.
+  const AUTOCOMPLETE = {
+    "given-name": "first_name", "family-name": "last_name", name: "full_name", email: "email", tel: "phone",
+    "tel-national": "phone_national", "tel-country-code": "phone_country_code", "address-line1": "address_line1",
+    "street-address": "address_line1", "address-level2": "city", "address-level1": "state", "postal-code": "postal_code",
+    "country-name": "country", country: "country", organization: "current_company", "organization-title": "current_title",
+  };
+
+  // name / id tokens -> profile key (after removing separators: "first_name", "firstName", "fname" -> "firstname").
+  const NAME_TOKENS = [
+    ["first_name", /^(first ?name|fname|given ?name|forename|legalname ?first ?name|name ?first)$/],
+    ["last_name", /^(last ?name|lname|surname|family ?name|legalname ?last ?name|name ?last)$/],
+    ["full_name", /^(full ?name|candidate ?name|your ?name)$/],
+    ["email", /^(e ?mail|email ?address|candidate ?email)$/],
+    ["phone", /^(phone|phone ?number|mobile|mobile ?number|cell|telephone|contact ?number)$/],
+    ["linkedin_url", /linked ?in/],
+    ["github_url", /^git ?hub/],
+    ["portfolio_url", /^portfolio/],
+    ["city", /^(city|town)$/],
+    ["postal_code", /^(zip|zip ?code|postal ?code|postcode|pin ?code|pincode)$/],
+    ["address_line1", /^(address|address ?line ?1|address1|street)$/],
+    ["state", /^(state|province|region)$/],
+    ["country", /^(country|country ?name)$/],
+  ];
+
+  const FILL_THRESHOLD = 0.75;
 
   // Never filled automatically, whatever the profile holds.
   const SENSITIVE = /\b(gender|pronoun|sex\b|sexual|orientation|race|racial|ethnic|hispanic|latin[oa]|veteran|disabilit|religio|caste|date of birth|birth ?date|\bage\b|marital|nationality|citizenship number|passport|aadhaar|pan (card|number)|ssn|social security|criminal|convict|salary history)\b/;
@@ -118,5 +155,61 @@
     return -1;
   }
 
-  JP.fieldmap = { norm, profileKeyFor, classify, classifyOptions, matchOption, quantity, rangeOf };
+  function tokenKey(raw) {
+    const t = String(raw || "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+      .replace(/\b(input|field|txt|text|fld|candidate|applicant|question)\b/g, " ").replace(/\s+/g, " ").trim();
+    if (!t) return null;
+    for (const [key, re] of NAME_TOKENS) if (re.test(t)) return key;
+    return null;
+  }
+
+  /**
+   * Classify one field from all its signals.
+   * signals = {label, autocomplete, name, id, placeholder, type}
+   * Returns {key, confidence (0..1), via: [signal names]} or null. Sensitive/consent/secret fields return
+   * {never: "sensitive"|"consent"|"secret"} and are never filled whatever the other signals say.
+   */
+  function classifyField(signals = {}) {
+    for (const text of [signals.label, signals.placeholder]) {
+      const never = classify(text);
+      if (never) return { never, key: null, confidence: 1, via: ["label"] };
+    }
+    const votes = [];
+    const ac = String(signals.autocomplete || "").toLowerCase().split(/\s+/).filter((t) => !/^(section-|shipping|billing|home|work|mobile|on|off)/.test(t)).pop();
+    if (ac && AUTOCOMPLETE[ac]) votes.push([AUTOCOMPLETE[ac], 0.95, "autocomplete"]);
+    const byLabel = profileKeyFor(signals.label);
+    if (byLabel) votes.push([byLabel, 0.9, "label"]);
+    for (const [sig, w] of [["name", 0.7], ["id", 0.65]]) {
+      const k = tokenKey(signals[sig]);
+      if (k) votes.push([k, w, sig]);
+    }
+    if (!signals.label) {
+      const k = profileKeyFor(signals.placeholder);
+      if (k) votes.push([k, 0.6, "placeholder"]);
+    }
+    const type = String(signals.type || "").toLowerCase();
+    if (type === "email") votes.push(["email", 0.8, "type"]);
+    if (type === "tel" && !votes.some(([k]) => k === "phone_country_code" || k === "phone_national")) votes.push(["phone", 0.7, "type"]);
+    if (!votes.length) return null;
+    const byKey = new Map();
+    for (const [k, w, via] of votes) {
+      const cur = byKey.get(k) || { key: k, confidence: 0, via: [] };
+      cur.confidence = cur.confidence ? Math.min(0.99, Math.max(cur.confidence, w) + 0.05) : w;
+      cur.via.push(via);
+      byKey.set(k, cur);
+    }
+    const ranked = [...byKey.values()].sort((a, b) => b.confidence - a.confidence);
+    const best = { ...ranked[0] };
+    // A first/last/full name disagreement is common ("name" attribute on a first-name box): not a real conflict
+    // when the label is explicit. Any other disagreement between strong signals lowers confidence below the bar.
+    const rival = ranked[1];
+    if (rival && rival.confidence >= 0.6 && !(best.via.includes("label") && /name$/.test(best.key) && /name$/.test(rival.key))) {
+      best.confidence = Math.min(best.confidence, 0.5);
+      best.conflict = rival.key;
+    }
+    return best;
+  }
+
+  JP.fieldmap = { norm, profileKeyFor, classify, classifyOptions, classifyField, tokenKey, matchOption, quantity, rangeOf,
+                  FILL_THRESHOLD };
 })();

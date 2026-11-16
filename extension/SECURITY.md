@@ -1,4 +1,4 @@
-# Fill with JobPilot: security and privacy
+# JobPilot Smart Apply: security and privacy
 
 ## Permissions
 
@@ -8,6 +8,7 @@
 | `scripting` | Insert the fill scripts into that tab's application form, only after a click |
 | `storage` | Declared for extension pages. The credential itself is kept in the extension's IndexedDB (below) |
 | Hosts: `job-boards.greenhouse.io`, `boards.greenhouse.io` (+ EU), `jobs.lever.co` (+ EU), `jobs.ashbyhq.com` | Fill those forms, including when an employer embeds a Greenhouse or Ashby form in an iframe on its own site |
+| Optional hosts: `https://*/*` (requested **one site at a time**) | Only when you click **Allow Smart Apply on <site>** in the popup and confirm Chrome's prompt. Covers Workday and other employer application sites. Never requested for LinkedIn, Naukri or Indeed, which are blocked in code. You can remove a site in Chrome's extension settings. |
 
 **Not requested:** `<all_urls>`, `cookies`, `tabs`, `history`, `webRequest`, `downloads`, `identity`, `externally_connectable`.
 There are no content scripts that run automatically and no background activity. Nothing runs on any page until you
@@ -52,12 +53,24 @@ console and no analytics are collected.
   verified answers, and nowhere else.
 - It writes values only into visible, enabled fields. A value already present is kept unless you choose overwrite,
   and a value you typed after filling is never replaced.
-- It never fills sensitive (demographic or EEO), consent, password, OTP or CAPTCHA fields. It never clicks Submit or
+- It never fills sensitive (demographic or EEO), consent, password, OTP or CAPTCHA fields. Filling never clicks Submit or
   any button that could submit, never calls `submit()` or `requestSubmit()`, and never dispatches submit events.
-  These rules are enforced in code (`safeClick`) and tested.
+  These rules are enforced in code (`safeClick`) and tested. The only submit click is the authorised one below.
 - The review panel lives in a closed Shadow DOM. Its buttons react only to genuine user clicks (`event.isTrusted`).
-- The service worker accepts messages only from the extension's own popup page. Content scripts and web pages cannot
-  ask it for anything, and external messages are refused.
+- **Who can ask the service worker for what:**
+  - The extension's own popup can ask for anything.
+  - The review panel (a content script) can ask only for the Smart Apply session that you started from the popup, in
+    the same tab and frame, on an allowed page. It can refill, attach the chosen resume, record a state, or report
+    the outcome.
+  - Web pages cannot message the extension at all. External messages are refused.
+- **Assisted submission:**
+  - Only on Greenhouse, Lever and Ashby.
+  - It needs a trusted click on "Submit this application" (`event.isTrusted`), a completed review, ticks on every
+    committing answer, and a form fingerprint equal to the reviewed one.
+  - One authorisation allows exactly one click on the site's own submit button, within 15 seconds.
+  - JobPilot never calls `submit()` or `requestSubmit()`, and never presses Submit anywhere else.
+- **Recording a submission:** the server records "submitted" only with a confirmation signal from the page, or your
+  own answer. It refuses to authorise an application that was already submitted.
 
 ## Residual risks
 

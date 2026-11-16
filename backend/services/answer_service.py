@@ -24,7 +24,8 @@ def classify(raw: dict[str, Any]) -> dict[str, Any]:
         return {"question": raw["question"], "answer": None, "source": None, "status": "NEEDS_INPUT", "reason": raw.get("source")}
     source = raw.get("source") or ""
     kind = "VERIFIED" if source.startswith(("verified_facts.", "answer_bank.")) else "SUGGESTED"
-    return {"question": raw["question"], "answer": raw["answer"], "source": source, "status": kind, "reason": None}
+    reason = "You saved this answer for one specific job: check that it fits this one." if source.startswith("saved_for_one_job.") else None
+    return {"question": raw["question"], "answer": raw["answer"], "source": source, "status": kind, "reason": reason}
 
 
 def answer_questions(db: Session, settings: BackendSettings, user: User, questions: list[str]) -> list[dict[str, Any]]:

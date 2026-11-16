@@ -208,6 +208,8 @@ def autofill_profile(db: Session, user: User) -> dict[str, Any]:
         "school": (edu.institution or edu.university) if edu else None, "degree": edu.degree if edu else None,
         "graduation_year": edu.year if edu else None,
         "total_experience_years": exp.years if exp.months else None,
+        "university": edu.university if edu and getattr(edu, "university", None) else None,
+        **_location_parts(ep.location), **_phone_parts(ep.phone),
     }
     labels = {"full_name": "Full name", "email": "Email", "phone": "Phone", "location": "Location",
               "current_company": "Current company (mark a role as current)", "current_title": "Current designation",
@@ -218,8 +220,92 @@ def autofill_profile(db: Session, user: User) -> dict[str, Any]:
     resume = resume_service.active_resume(db, user)
     if resume is None:
         missing.append({"key": "resume", "label": "Resume", "where": "settings/profile"})
-    return {"ready": True, "fields": {k: v for k, v in fields.items() if v not in (None, "")}, "facts": facts, "missing": missing,
+    present = {k: v for k, v in fields.items() if v not in (None, "")}
+    # Values JobPilot worked out from what you entered (e.g. the city from "Bengaluru, Karnataka"): filled as
+    # "please review", never as confirmed.
+    present["_derived"] = [k for k in DERIVED_FIELDS if k in present]
+    return {"ready": True, "fields": present, "facts": facts, "missing": missing,
             "has_resume": resume is not None, "resume_filename": resume.original_filename if resume else None}
+
+
+DERIVED_FIELDS = ("city", "state", "country", "phone_country_code", "phone_national", "total_experience_years")
+_COUNTRIES = {"india": "India", "united states": "United States", "usa": "United States", "us": "United States",
+              "united kingdom": "United Kingdom", "uk": "United Kingdom", "canada": "Canada", "germany": "Germany",
+              "australia": "Australia", "singapore": "Singapore", "netherlands": "Netherlands", "ireland": "Ireland",
+              "united arab emirates": "United Arab Emirates", "uae": "United Arab Emirates", "france": "France"}
+
+
+def _location_parts(location: str | None) -> dict[str, str]:
+    """City / state / country only when the location spells them out ("Bengaluru, Karnataka, India")."""
+    parts = [p.strip() for p in (location or "").split(",") if p.strip()]
+    if len(parts) < 2:
+        return {}
+    out: dict[str, str] = {"city": parts[0]}
+    country = _COUNTRIES.get(parts[-1].lower())
+    if country:
+        out["country"] = country
+        if len(parts) >= 3:
+            out["state"] = parts[1]
+    elif len(parts) == 2:
+        out["state"] = parts[1]
+    return out
+
+
+def _phone_parts(phone: str | None) -> dict[str, str]:
+    """Split "+91 90000 00000" into the country code and the national number; nothing when there is no "+code"."""
+    m = re.match(r"^\s*\+(\d{1,3})[\s-]*(\(?\d[\d\s().-]{5,}\d)\s*$", phone or "")
+    if not m:
+        digits = re.sub(r"\D", "", phone or "")
+        # No "+code": the number as written is the national number (10-digit mobiles), never a guessed country code.
+        return {"phone_national": digits} if re.fullmatch(r"[\d\s().-]+", (phone or "").strip() or "x") and 8 <= len(digits) <= 12 else {}
+    return {"phone_country_code": f"+{m.group(1)}", "phone_national": re.sub(r"\D", "", m.group(2))}
+
+
+# ---- resumes the extension may attach -------------------------------------------------------
+
+def resume_choices(db: Session, user: User) -> list[dict[str, Any]]:
+    from backend.models import Resume, ResumeVersion
+
+    out: list[dict[str, Any]] = []
+    for r in db.execute(select(Resume).where(Resume.user_id == user.id).order_by(Resume.is_active.desc(), Resume.id.desc())).scalars():
+        out.append({"kind": "upload", "id": r.id, "name": r.original_filename, "formats": ["pdf"], "active": r.is_active,
+                    "pages": r.page_count, "updated_at": r.uploaded_at})
+    for v in db.execute(select(ResumeVersion).where(ResumeVersion.user_id == user.id).order_by(ResumeVersion.id.desc())).scalars():
+        out.append({"kind": "studio", "id": v.id, "name": v.name, "formats": ["pdf", "docx"], "active": False,
+                    "pages": None, "updated_at": getattr(v, "updated_at", None)})
+    return out
+
+
+MEDIA = {"pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+
+
+def resume_file(db: Session, settings, user: User, kind: str, rid: int | None, fmt: str) -> tuple[bytes, str, str, dict[str, Any]]:
+    """(bytes, file name, media type, audit details) of the resume the user picked. Only their own files."""
+    import hashlib
+    from pathlib import Path
+
+    from backend.models import Resume
+    from backend.services import studio_service
+    from backend.services.storage import get_storage
+
+    if kind == "studio":
+        if rid is None or fmt not in MEDIA:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Choose a Resume Studio version and a format (pdf or docx).")
+        v = studio_service.owned_version(db, user, rid)
+        e = studio_service.export(db, settings, user, v, fmt)
+        data = get_storage().get(e.file_key)
+        return data, studio_service.download_name(v, fmt), MEDIA[fmt], {"resume_version_id": v.id, "format": fmt,
+                                                                        "sha256": e.file_sha256}
+    if kind != "upload":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown resume kind.")
+    r = db.get(Resume, rid) if rid is not None else resume_service.active_resume(db, user)
+    if r is None or r.user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No resume uploaded." if rid is None else "Resume not found.")
+    path = Path(r.stored_path).resolve()
+    if settings.user_dir(user.id).resolve() not in path.parents or not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume file is missing.")
+    data = path.read_bytes()
+    return data, r.original_filename, "application/pdf", {"resume_id": r.id, "sha256": hashlib.sha256(data).hexdigest()}
 
 
 # ---- which of my jobs is this page? ---------------------------------------------------------
@@ -257,10 +343,39 @@ def job_ref(url: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _url_key(url: str | None) -> str | None:
+    try:
+        p = urlsplit(url or "")
+    except ValueError:
+        return None
+    if p.scheme != "https" or not p.hostname:
+        return None
+    return (p.hostname.lower() + p.path.rstrip("/")).lower()
+
+
+def _match_by_url(db: Session, user: User, url: str) -> UserJob | None:
+    """An employer-hosted application page (Workday, iCIMS, …) whose address starts with one of my jobs' links."""
+    page = _url_key(url)
+    if not page:
+        return None
+    host = page.split("/", 1)[0]
+    hits: dict[int, UserJob] = {}
+    rows = db.execute(select(UserJob).join(Job, Job.id == UserJob.job_id).where(UserJob.user_id == user.id)).unique().scalars()
+    for uj in rows:
+        for link in (uj.job.application_url, uj.job.job_url):
+            key = _url_key(link)
+            if key and key.split("/", 1)[0] == host and len(key) > len(host) + 3 and (page == key or page.startswith(key + "/")):
+                hits[uj.id] = uj
+    return next(iter(hits.values())) if len(hits) == 1 else None
+
+
 def match(db: Session, user: User, url: str) -> dict[str, Any]:
     ref = job_ref(url)
     if ref is None:
-        return {"supported": False, "platform": None, "in_jobpilot": False}
+        uj = _match_by_url(db, user, url)
+        if uj is None:
+            return {"supported": False, "platform": None, "in_jobpilot": False}
+        return _matched(db, user, uj, uj.job.platform)
     ats, board, jid = ref
     platform = {"greenhouse": "Greenhouse", "lever": "Lever", "ashby": "Ashby"}[ats]
     link = db.execute(select(JobSourceLink).where(JobSourceLink.source_key == f"{ats}:{board}:{jid}")).scalar_one_or_none()
@@ -269,11 +384,18 @@ def match(db: Session, user: User, url: str) -> dict[str, Any]:
         uj = db.execute(select(UserJob).where(UserJob.user_id == user.id, UserJob.job_id == link.job_id)).unique().scalar_one_or_none()
     if uj is None:
         return {"supported": True, "platform": platform, "in_jobpilot": False}
+    return _matched(db, user, uj, platform)
+
+
+def _matched(db: Session, user: User, uj: UserJob, platform: str | None) -> dict[str, Any]:
+    from backend.services import apply_state_service
+
     job: Job = uj.job
     app = db.execute(select(Application).where(Application.user_id == user.id, Application.job_id == job.id)).unique().scalar_one_or_none()
     return {"supported": True, "platform": platform, "in_jobpilot": True, "user_job_id": uj.id, "title": job.title, "company": job.company,
             "application_id": app.id if app else None, "application_status": app.status if app else None,
-            "submitted_at": app.submitted_at if app else None}
+            "submitted_at": app.submitted_at if app else None, "location": job.location, "job_url": job.job_url,
+            **({k: v for k, v in apply_state_service.summary(app).items() if k in ("apply_state", "apply_state_label")} if app else {})}
 
 
 # ---- Greenhouse-hosted application page -----------------------------------------------------

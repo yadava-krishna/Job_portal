@@ -101,7 +101,17 @@ export interface VerifiedFacts {
   shift_flexibility?: string | null;
   requires_sponsorship?: boolean | null;
   relevant_experience?: string | null;
-  custom_answers?: { question: string; answer: string }[];
+  custom_answers?: SavedAnswer[];
+}
+
+/** An answer the user wrote once. "one_job" answers are only offered as suggestions to check. Timestamps are set by the server. */
+export interface SavedAnswer {
+  question: string;
+  answer: string;
+  applies_to?: "any" | "one_job";
+  note?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface ApplyOptions {
@@ -362,6 +372,11 @@ export interface Application {
   submitted_at: string | null;
   submission_method?: string | null;
   follow_up_at?: string | null;
+  /** Smart Apply (browser extension) progress, when the extension was used. */
+  apply_state?: string | null;
+  apply_state_label?: string | null;
+  apply_mode?: string | null;
+  apply_state_at?: string | null;
   job: JobListing;
 }
 export interface ScreeningAnswer {

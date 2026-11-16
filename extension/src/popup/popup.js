@@ -63,17 +63,54 @@ async function main() {
   if (!insp.ok) return show(note("bad", insp.error));
   const d = insp.data;
   const missing = st.data.status?.missing || [];
+  if (d.blocked) return handoffView(d.blocked);
   if (!d.supported) {
+    if (d.canRequest) return permissionView(d.canRequest);
     return show(
       h("h2", {}, "Not an application page"),
-      h("p", {}, "Fill with JobPilot works on Greenhouse, Lever and Ashby application forms."),
-      h("p", { class: "muted" }, "If the job is on an employer's own careers site, open it from JobPilot: for Greenhouse jobs JobPilot offers the Greenhouse application form when one exists."),
+      h("p", {}, "Smart Apply works on employer application forms: Greenhouse, Lever and Ashby out of the box, and Workday, iCIMS, SuccessFactors, Taleo and other employer sites once you allow them."),
       missingCard(missing));
   }
   if (!d.form) {
     return show(h("h2", {}, `${d.platform} page`), note("warn", "No application form is visible yet. Click Apply on the page, then open JobPilot again."));
   }
   formView(d, missing);
+}
+
+/** Sites whose terms forbid automation: never touched. Copy-ready details and the resume instead. */
+async function handoffView(blocked) {
+  const r = await send("handoff");
+  const rows = r.ok ? r.data.rows : [];
+  const copy = (v) => async (e) => {
+    try { await navigator.clipboard.writeText(v); e.currentTarget.textContent = "Copied"; } catch { e.currentTarget.textContent = "Copy failed"; }
+  };
+  show(
+    h("h2", {}, `${blocked.name}: apply yourself`),
+    note("warn", blocked.why, h("div", {}, "JobPilot does not fill or submit anything here. Use the details below, then record the application in JobPilot.")),
+    h("div", { class: "card" },
+      h("strong", {}, "Your details (click to copy)"),
+      rows.length ? h("ul", { class: "copy" }, rows.map(([k, v]) => h("li", {}, h("span", { class: "muted" }, `${k}: `), h("button", { type: "button", class: "link", onclick: copy(String(v)) }, String(v).slice(0, 60)))))
+        : h("p", { class: "muted" }, r.ok ? "Your profile has no details yet." : r.error)),
+    h("div", { class: "row" },
+      h("button", { type: "button", onclick: downloadResume(null, null) }, "Download my resume"),
+      linkTo("Record it in JobPilot", "applied")),
+    h("p", { class: "muted" }, "Tip: use the “Clip to JobPilot” bookmark on the job page to add the job to JobPilot first."));
+}
+
+/** Other employer sites: Chrome asks the user to allow Smart Apply on that one site. */
+function permissionView(req) {
+  const msg = h("div");
+  const host = req.origin.replace(/^https:\/\//, "").replace(/\/\*$/, "");
+  show(
+    h("h2", {}, req.known ? `${req.name} application` : "Employer application site"),
+    h("p", {}, `Smart Apply can fill this form after you allow it on ${host}. Chrome will ask you to confirm. JobPilot will only run here when you click Fill.`),
+    note("warn", "On this site JobPilot fills and checks the form; you submit it on the page yourself."),
+    h("button", { type: "button", class: "primary", onclick: async () => {
+      let ok = false;
+      try { ok = await chrome.permissions.request({ origins: [req.origin] }); } catch (e) { msg.replaceChildren(note("bad", e.message)); return; }
+      if (ok) main(); else msg.replaceChildren(note("warn", "Not allowed. Nothing was changed."));
+    } }, `Allow Smart Apply on ${host}`),
+    msg);
 }
 
 function missingCard(missing) {
@@ -88,66 +125,98 @@ function missingCard(missing) {
       answers.length ? linkTo("Add verified answers", "settings?tab=answers") : null));
 }
 
+function resumeOptions(resumes) {
+  const opts = [];
+  for (const r of resumes) {
+    if (r.kind === "upload") opts.push({ value: `upload:${r.id}:pdf`, label: `${r.name}${r.active ? " (default)" : ""} · uploaded PDF` });
+    else for (const f of r.formats) opts.push({ value: `studio:${r.id}:${f}`, label: `${r.name} · Resume Studio ${f.toUpperCase()}` });
+  }
+  return opts;
+}
+const parseChoice = (v) => { const [kind, id, format] = String(v || "").split(":"); return kind ? { kind, id: Number(id), format } : null; };
+
+function downloadResume(getChoice, out) {
+  return async (e) => {
+    const done = busy(e.currentTarget, "Downloading…");
+    const r = await send("downloadResume", { resume: getChoice ? getChoice() : null });
+    done();
+    if (!r.ok) return out?.replaceChildren(note("bad", r.error));
+    const bytes = Uint8Array.from(atob(r.data.b64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: r.data.type }));
+    const a = h("a", { href: url, download: r.data.name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    out?.replaceChildren(note("ok", `Saved ${r.data.name} to your Downloads. Attach it on the form yourself.`));
+  };
+}
+
 function formView(d, missing) {
-  const { form, match, tabId } = d;
+  const { form, match, tabId, resumes = [], session } = d;
   const target = { tabId, frameId: form.frameId };
-  let applicationId = match?.application_id ?? null;
+  let applicationId = match?.application_id ?? session?.applicationId ?? null;
   const submitted = match?.application_status === "SUBMITTED";
+  const applyState = match?.apply_state || session?.state || null;
 
   const header = h("div", { class: "card" },
     h("div", {}, h("span", { class: "badge" }, form.platform), " ", h("strong", {}, match?.title || form.title || "Application form")),
-    match?.company ? h("div", { class: "muted" }, match.company) : null,
+    match?.company ? h("div", { class: "muted" }, [match.company, match.location].filter(Boolean).join(" · ")) : null,
+    form.step?.title ? h("div", { class: "muted" }, `Step ${form.step.index ?? "?"}${form.step.total ? ` of ${form.step.total}` : ""}: ${form.step.title}`) : null,
     match?.error ? note("bad", match.error)
       : match?.in_jobpilot
-        ? h("div", { class: "muted" }, submitted ? `Applied ${new Date(match.submitted_at).toLocaleDateString()} (recorded in JobPilot)` : "In your JobPilot jobs. Your application will be tracked.")
-        : h("div", { class: "muted" }, "Not in your JobPilot jobs, so it will not be tracked. You can still fill the form."));
+        ? h("div", { class: "muted" }, submitted ? `Applied ${new Date(match.submitted_at).toLocaleDateString()} (recorded in JobPilot). JobPilot will not submit it again.`
+          : match.apply_state_label ? `In your JobPilot jobs · ${match.apply_state_label}` : "In your JobPilot jobs. Your application will be tracked.")
+        : h("div", { class: "muted" }, "Not in your JobPilot jobs, so it will not be tracked. You can still fill the form."),
+    h("div", { class: "muted" }, form.assistedSubmit ? "Smart Apply: fill, review, then submit from the review panel or on the page." : "Smart Apply: fill and review here; you submit on the page."));
+
+  // After a browser restart or a closed tab: the last submission was never confirmed.
+  const verify = !submitted && applicationId && ["submission_pending", "submission_uncertain"].includes(applyState)
+    ? note("warn", h("strong", {}, "Did your last submission go through?"),
+        h("div", {}, "JobPilot could not see a confirmation. Check the employer's page or your email."),
+        h("div", { class: "row" },
+          h("button", { type: "button", class: "primary", onclick: async () => { await send("confirm", { applicationId, submitted: true, tabId }); main(); } }, "Yes, submitted"),
+          h("button", { type: "button", onclick: async () => { await send("confirm", { applicationId, submitted: false, tabId }); main(); } }, "No")))
+    : null;
+
+  const opts = resumeOptions(resumes);
+  const chosen = session?.resume ? `${session.resume.kind}:${session.resume.id}:${session.resume.format}` : opts[0]?.value;
+  const select = h("select", { "aria-label": "Resume to attach" }, opts.map((o) => h("option", { value: o.value, selected: o.value === chosen }, o.label)));
+  const choice = () => parseChoice(select.value);
 
   const overwrite = h("input", { type: "checkbox" });
   const result = h("div");
   const resumeMsg = h("div");
-  const fillBtn = h("button", { type: "button", class: "primary", onclick: async () => {
+  const fillBtn = h("button", { type: "button", class: "primary", disabled: submitted, onclick: async () => {
     const done = busy(fillBtn, "Filling…");
-    const r = await send("fill", { ...target, overwrite: overwrite.checked, userJobId: match?.in_jobpilot && !submitted ? match.user_job_id : null });
+    const r = await send("fill", { ...target, overwrite: overwrite.checked, resume: choice(), userJobId: match?.in_jobpilot && !submitted ? match.user_job_id : null });
     done();
     if (!r.ok) return result.replaceChildren(note("bad", r.error));
     const rep = r.data.report || {};
     if (rep.error) return result.replaceChildren(note("bad", rep.error));
     if (r.data.tracking?.application_id) { applicationId = r.data.tracking.application_id; confirmBox.hidden = false; }
     result.replaceChildren(note(rep.needs?.length ? "warn" : "ok",
-      h("strong", {}, `${rep.filled.length} filled · ${rep.review.length} to review · ${rep.needs.length} need you · ${rep.kept.length} kept · ${rep.skipped.length} skipped`),
-      h("div", {}, "The full list is on the page. Check every answer before you submit.")));
-  } }, "Fill with JobPilot");
+      h("strong", {}, `${rep.filled.length} filled · ${rep.review.length + (rep.unsure?.length || 0)} to check · ${rep.needs.length} need you · ${rep.kept.length} kept · ${rep.skipped.length} skipped`),
+      h("div", {}, "The review panel is open on the page. Check every answer before you submit.")));
+  } }, submitted ? "Already applied" : "Fill with JobPilot");
 
   const attach = (replace) => async (e) => {
     const done = busy(e.currentTarget, "Attaching…");
-    const r = await send("attachResume", { ...target, replace });
+    const r = await send("attachResume", { ...target, replace, resume: choice() });
     done();
     if (!r.ok) return resumeMsg.replaceChildren(note("bad", r.error));
     const res = r.data || {};
-    if (res.ok) return resumeMsg.replaceChildren(note("ok", `Attached ${res.name}.`, res.note ? h("div", {}, res.note) : null));
+    if (res.ok) return resumeMsg.replaceChildren(note("ok", `Attached and checked: ${res.name} (${Math.round(res.size / 1024)} KB).`, res.note ? h("div", {}, res.note) : null));
     resumeMsg.replaceChildren(note("warn", res.reason || "Could not attach the file.",
       res.needsConfirm ? h("div", { class: "row" }, h("button", { type: "button", onclick: attach(true) }, "Replace")) : null));
-  };
-  const download = async (e) => {
-    const done = busy(e.currentTarget, "Downloading…");
-    const r = await send("downloadResume");
-    done();
-    if (!r.ok) return resumeMsg.replaceChildren(note("bad", r.error));
-    const bytes = Uint8Array.from(atob(r.data.b64), (c) => c.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: r.data.type }));
-    const a = h("a", { href: url, download: r.data.name });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-    resumeMsg.replaceChildren(note("ok", "Saved to your Downloads. Attach it on the form yourself."));
   };
 
   const resumeCard = h("div", { class: "card" },
     h("strong", {}, "Resume"),
+    opts.length ? select : h("p", { class: "muted" }, "No resume in JobPilot yet."),
     form.resumeFirst ? h("p", { class: "muted" }, "Lever: attach your resume first. Lever reads it and may fill some fields; then click Fill.") : null,
     form.resumeField
-      ? h("div", { class: "row" }, h("button", { type: "button", onclick: attach(false) }, form.resumeAttached ? "Replace with my resume" : "Attach my resume"),
-          h("button", { type: "button", onclick: download }, "Download"))
-      : h("div", {}, h("p", { class: "muted" }, "No resume field found on this page."), h("button", { type: "button", onclick: download }, "Download resume")),
+      ? h("div", { class: "row" }, h("button", { type: "button", disabled: !opts.length, onclick: attach(false) }, form.resumeAttached ? "Replace" : "Attach"),
+          h("button", { type: "button", disabled: !opts.length, onclick: downloadResume(choice, resumeMsg) }, "Download"))
+      : h("div", {}, h("p", { class: "muted" }, "No resume field found on this part of the form."), h("button", { type: "button", disabled: !opts.length, onclick: downloadResume(choice, resumeMsg) }, "Download resume")),
     resumeMsg);
 
   const ref = h("input", { type: "text", maxlength: "200", placeholder: "Reference ID (optional)", "aria-label": "Reference ID" });
@@ -155,7 +224,7 @@ function formView(d, missing) {
   const confirmBtn = (submittedFlag, text, cls) => h("button", { type: "button", class: cls, onclick: async (e) => {
     if (!applicationId) return;
     const done = busy(e.currentTarget, "Saving…");
-    const r = await send("confirm", { applicationId, submitted: submittedFlag, referenceId: ref.value.trim() });
+    const r = await send("confirm", { applicationId, submitted: submittedFlag, referenceId: ref.value.trim(), tabId });
     done();
     if (!r.ok) return confirmMsg.replaceChildren(note("bad", r.error));
     confirmMsg.replaceChildren(note("ok", submittedFlag
@@ -163,13 +232,13 @@ function formView(d, missing) {
       : "Recorded as not submitted. You can apply later."));
   } }, text);
   const confirmBox = h("div", { class: "card", hidden: !applicationId || submitted },
-    h("strong", {}, "After you submit on this page"),
-    h("p", { class: "muted" }, "Only you can say the application was sent. Filling the form does not count as applying."),
+    h("strong", {}, "Submitted on the page yourself?"),
+    h("p", { class: "muted" }, "JobPilot records a submission when it sees the employer's confirmation. If it could not, tell it here."),
     ref,
     h("div", { class: "row" }, confirmBtn(false, "I didn't submit"), confirmBtn(true, "I submitted it", "primary")),
     confirmMsg);
 
-  show(header, missingCard(missing), resumeCard,
+  show(header, verify, missingCard(missing), resumeCard,
     h("div", { class: "card" },
       fillBtn,
       h("label", { class: "check" }, overwrite, h("span", {}, "Overwrite values already on the form (values you typed after filling are never replaced)")),

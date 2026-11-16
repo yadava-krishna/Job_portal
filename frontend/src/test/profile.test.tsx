@@ -27,14 +27,19 @@ describe("resume versions", () => {
 });
 
 describe("answer bank", () => {
-  it("adds and edits saved answers", () => {
+  it("adds and edits saved answers, and marks one-job answers so they are only suggested", () => {
     const onChange = vi.fn();
     const { rerender } = render(<AnswerBank facts={{}} onChange={onChange} />);
     fireEvent.click(screen.getByRole("button", { name: /Add an answer/ }));
-    expect(onChange).toHaveBeenCalledWith({ custom_answers: [{ question: "", answer: "" }] });
-    rerender(<AnswerBank facts={{ custom_answers: [{ question: "", answer: "" }] }} onChange={onChange} />);
+    expect(onChange).toHaveBeenCalledWith({ custom_answers: [{ question: "", answer: "", applies_to: "any" }] });
+    rerender(<AnswerBank facts={{ custom_answers: [{ question: "", answer: "", applies_to: "any" }] }} onChange={onChange} />);
     fireEvent.change(screen.getByLabelText("Answer 1"), { target: { value: "Yes" } });
-    expect(onChange).toHaveBeenLastCalledWith({ custom_answers: [{ question: "", answer: "Yes" }] });
+    expect(onChange).toHaveBeenLastCalledWith({ custom_answers: [{ question: "", answer: "Yes", applies_to: "any" }] });
+    fireEvent.change(screen.getByLabelText("Use answer 1 for"), { target: { value: "one_job" } });
+    expect(onChange).toHaveBeenLastCalledWith({ custom_answers: [{ question: "", answer: "", applies_to: "one_job" }] });
+    rerender(<AnswerBank facts={{ custom_answers: [{ question: "Why us?", answer: "x", applies_to: "one_job", updated_at: "2026-11-16T10:00:00Z" }] }} onChange={onChange} />);
+    expect(screen.getByLabelText("Note for answer 1")).toBeInTheDocument();
+    expect(screen.getByText(/^Saved /)).toBeInTheDocument();
   });
 });
 

@@ -65,12 +65,12 @@ class ApplyOrchestrator:
 
         checklist = [
             "Review tailored resume highlights and summary",
-            f"Verify work authorization ({master_facts.get('work_authorization', 'India (Citizen)')})",
+            f"Verify work authorization ({master_facts.get('work_authorization') or 'not yet in your profile: add it in Settings'})",
             "Verify contact email and phone number",
         ]
         if route == "ROUTE_B_ATS_FORM":
-            checklist.append("Click 'Fill with JobPilot' in browser extension to pre-populate inputs")
-            checklist.append("Manually review every filled field before clicking employer Submit button")
+            checklist.append("Open the form and click Fill in the JobPilot extension (Smart Apply)")
+            checklist.append("Review every filled field before you submit")
         elif route == "ROUTE_C_EMAIL":
             checklist.append("Review recruiter email draft and tailored PDF attachment")
             checklist.append("Confirm send authorization")
@@ -137,31 +137,32 @@ class ApplyOrchestrator:
 
     @classmethod
     def _get_route_description(cls, route: str) -> str:
+        # Honest labels: nothing is submitted without the user authorising that one application. The route codes stay unchanged for stored records.
         if route == "ROUTE_A_DIRECT_API":
-            return "Direct Public ATS Submission API (Greenhouse/Lever/Ashby)"
+            return "Greenhouse/Lever/Ashby form: Smart Apply fills it, you review and authorise the submission"
         if route == "ROUTE_B_ATS_FORM":
-            return "Assisted ATS Form Prefill (Browser Extension, Zero Tampering)"
+            return "Employer application system (Workday, SmartRecruiters and others): Smart Apply fills what it can, you finish and submit"
         if route == "ROUTE_C_EMAIL":
-            return "Direct Verified Recruiter Email Drafting"
-        return "External Employer Career Portal (Manual Guidance)"
+            return "Email application: JobPilot drafts the email, you send it"
+        return "Employer career site: apply there yourself, then record it in JobPilot"
+
+    NEEDS_INPUT = "NEEDS_INPUT"
 
     @classmethod
-    def _generate_screening_answers(cls, facts: dict[str, Any], job: Job) -> list[dict[str, str]]:
+    def _generate_screening_answers(cls, facts: dict[str, Any], job: Job) -> list[dict[str, Any]]:
+        """Only answers backed by a fact the candidate entered. Anything unknown stays unanswered (never a default)."""
+
+        def item(question: str, value: Any, fmt) -> dict[str, Any]:
+            if value in (None, "", []):
+                return {"question": question, "answer": None, "status": cls.NEEDS_INPUT,
+                        "reason": "Not in your confirmed profile. Answer it yourself."}
+            return {"question": question, "answer": fmt(value), "status": "VERIFIED", "source": "profile"}
+
+        years = facts.get("relevant_it_experience", facts.get("years_experience"))
+        auth = facts.get("work_authorization")
         return [
-            {
-                "question": "What is your total years of relevant IT experience?",
-                "answer": f"{facts.get('relevant_it_experience', facts.get('years_experience', 0)):.1f} years",
-            },
-            {
-                "question": "Are you authorized to work in India?",
-                "answer": "Yes" if "India" in facts.get("work_authorization", "India") else "No",
-            },
-            {
-                "question": "What is your current notice period?",
-                "answer": f"{facts.get('notice_period_days', 30)} days",
-            },
-            {
-                "question": "What are your preferred work locations?",
-                "answer": ", ".join(facts.get("preferred_locations", ["Bengaluru"])),
-            },
+            item("What is your total years of relevant IT experience?", years, lambda v: f"{float(v):.1f} years"),
+            item("What is your work authorization?", auth, str),
+            item("What is your current notice period?", facts.get("notice_period_days"), lambda v: f"{int(v)} days"),
+            item("What are your preferred work locations?", facts.get("preferred_locations"), lambda v: ", ".join(v)),
         ]

@@ -147,6 +147,7 @@ class PortalScheduler:
             due = previous_fire_time(CronTrigger(timezone=self.settings.timezone, **cron), now)
             if due is None:
                 continue
+            due = due.astimezone(tz.utc)  # stored run times are UTC; compare like with like on every database
             try:
                 with session_factory()() as db:
                     ran = db.execute(select(JobRun.id).where(JobRun.name == name, JobRun.started_at >= due,

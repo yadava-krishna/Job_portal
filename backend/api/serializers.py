@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend.models import Application, DiscoveryRun, Job, JobSourceLink, UserJob
 from backend.schemas.applications import ApplicationDetail, ApplicationOut, EventOut
 from backend.schemas.jobs import DiscoveryRunOut, JobDetail, JobListing, JobSourceOut, UserJobOut
-from backend.services import application_service
+from backend.services import application_service, apply_state_service
 from backend.services.discovery_service import posted_label
 from backend.services.normalization import posted_confidence
 from intelligence.jd_analyzer import JDAnalyzer
@@ -85,6 +85,8 @@ def application(app: Application, uj: UserJob | None = None) -> ApplicationOut:
         route_metadata=getattr(app, "route_metadata", {}) or {},
         resume_version_id=app.resume_version_id, resume_export_id=app.resume_export_id, resume_checksum=app.resume_checksum,
         rejection_reason=app.rejection_reason, rejection_detail=app.rejection_detail, rejection_reason_known=app.rejection_reason_known,
+        apply_state=app.apply_state, apply_state_label=apply_state_service.LABELS.get(app.apply_state or ""), apply_mode=app.apply_mode,
+        apply_state_at=app.apply_state_at,
     )
 
 

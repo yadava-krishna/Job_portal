@@ -11,7 +11,7 @@ import { Field, NativeSelect } from "@/components/app/common";
 import { downloadFile, errorMessage, previewFile } from "@/lib/api";
 import { bytes, formatDate } from "@/lib/format";
 import { useNotificationPrefs, useResumeAction, useResumes, useSaveNotificationPrefs, type NotificationPrefs } from "@/services/queries";
-import type { VerifiedFacts } from "@/types/api";
+import type { SavedAnswer, VerifiedFacts } from "@/types/api";
 
 /** Several resume versions (e.g. one per role family); the default one is used for applications and the extension. */
 export function ResumeVersions() {
@@ -25,7 +25,7 @@ export function ResumeVersions() {
     <Card>
       <CardHeader>
         <CardTitle>Resume versions</CardTitle>
-        <CardDescription>Keep role-specific resumes. The default is attached by Fill with JobPilot and recorded on new applications. Changing the default does not change your confirmed profile.</CardDescription>
+        <CardDescription>Keep role-specific resumes. The default is offered first by the Smart Apply extension (you can pick another resume or a Resume Studio version) and recorded on applications. Changing the default does not change your confirmed profile.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {resumes.isLoading && <Loader2 className="animate-spin" />}
@@ -63,24 +63,37 @@ export function ResumeVersions() {
 
 /** The user's own approved answers to questions applications keep asking. */
 export function AnswerBank({ facts, onChange }: { facts: VerifiedFacts; onChange: (f: VerifiedFacts) => void }) {
-  const items = facts.custom_answers ?? [];
-  const set = (next: { question: string; answer: string }[]) => onChange({ ...facts, custom_answers: next });
+  const items: SavedAnswer[] = facts.custom_answers ?? [];
+  const set = (next: SavedAnswer[]) => onChange({ ...facts, custom_answers: next });
+  const patch = (i: number, p: Partial<SavedAnswer>) => set(items.map((x, j) => (j === i ? { ...x, ...p } : x)));
   return (
     <div className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold">Your saved answers</h3>
-        <p className="text-xs text-muted-foreground">Write the answer once; it is used when an application asks the same (or a very similar) question. Demographic questions are never answered for you.</p>
+        <p className="text-xs text-muted-foreground">
+          Write the answer once; it is used when an application asks the same (or a very similar) question. Answers marked
+          "One job only" are offered as a suggestion for you to check, never filled as confirmed. Demographic questions are never answered for you.
+        </p>
       </div>
       {items.map((it, i) => (
         <div key={i} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_1fr_auto]">
           <Input value={it.question} placeholder="Question, e.g. Are you comfortable working from office?" aria-label={`Question ${i + 1}`}
-                 onChange={(e) => set(items.map((x, j) => (j === i ? { ...x, question: e.target.value } : x)))} />
+                 onChange={(e) => patch(i, { question: e.target.value })} />
           <Textarea rows={1} value={it.answer} placeholder="Your answer" aria-label={`Answer ${i + 1}`}
-                    onChange={(e) => set(items.map((x, j) => (j === i ? { ...x, answer: e.target.value } : x)))} />
-          <Button size="icon-sm" variant="ghost" aria-label="Remove" onClick={() => set(items.filter((_, j) => j !== i))}><Trash2 /></Button>
+                    onChange={(e) => patch(i, { answer: e.target.value })} />
+          <Button size="icon-sm" variant="ghost" aria-label={`Remove answer ${i + 1}`} onClick={() => set(items.filter((_, j) => j !== i))}><Trash2 /></Button>
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-3">
+            <NativeSelect ariaLabel={`Use answer ${i + 1} for`} value={it.applies_to ?? "any"} onChange={(v) => patch(i, { applies_to: v as SavedAnswer["applies_to"] })}
+                          options={[{ value: "any", label: "Any application (confirmed)" }, { value: "one_job", label: "One job only (check each time)" }]} />
+            {it.applies_to === "one_job" && (
+              <Input className="h-8 max-w-56" value={it.note ?? ""} placeholder="Which job or company" aria-label={`Note for answer ${i + 1}`}
+                     onChange={(e) => patch(i, { note: e.target.value })} />
+            )}
+            {it.updated_at && <span className="text-xs text-muted-foreground">Saved {formatDate(it.updated_at)}</span>}
+          </div>
         </div>
       ))}
-      <Button size="sm" variant="outline" onClick={() => set([...items, { question: "", answer: "" }])} disabled={items.length >= 50}><Plus /> Add an answer</Button>
+      <Button size="sm" variant="outline" onClick={() => set([...items, { question: "", answer: "", applies_to: "any" }])} disabled={items.length >= 50}><Plus /> Add an answer</Button>
     </div>
   );
 }

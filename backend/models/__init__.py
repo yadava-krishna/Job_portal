@@ -311,6 +311,13 @@ class Application(Base, TimestampMixin):
     rejection_detail: Mapped[str | None] = mapped_column(Text)
     rejection_reason_known: Mapped[bool | None] = mapped_column(Boolean)
     outcome_notes: Mapped[str | None] = mapped_column(Text)
+    # Smart Apply (browser extension): fine-grained state of filling/reviewing/submitting this application.
+    # draft | ready_to_fill | filling | needs_information | ready_for_review | reviewed | submission_authorized |
+    # submission_pending | submitted_confirmed | submission_uncertain | failed | cancelled   (NULL = not used)
+    apply_state: Mapped[str | None] = mapped_column(String(30))
+    apply_state_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    apply_mode: Mapped[str | None] = mapped_column(String(20))  # autofill_review | assisted_submit | manual_handoff
+    apply_session: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
 
     job: Mapped[Job] = relationship(lazy="joined")
 

@@ -71,6 +71,11 @@ class ApplicationOut(BaseModel):
     rejection_reason: str | None = None
     rejection_detail: str | None = None
     rejection_reason_known: bool | None = None
+    # Smart Apply (browser extension) progress; None when the extension was not used for this application.
+    apply_state: str | None = None
+    apply_state_label: str | None = None
+    apply_mode: str | None = None
+    apply_state_at: datetime | None = None
     job: JobListing
 
 

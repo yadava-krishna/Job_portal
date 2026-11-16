@@ -271,3 +271,29 @@ def matcher_profile(prof: CandidateProfile, tax: SkillTaxonomy, today: date | No
         "languages": ep.languages, "resume_text": full_text,
         "resume": {"path": prof.resume_path or "", "sha256": ""},
     }
+
+
+def facts_with_provenance(old: dict, new: dict) -> dict:
+    """Verified facts as saved, with when each one was last changed (server time; the client's timestamps are ignored).
+
+    `_updated` maps each standard fact to the time its value last changed. Saved answers keep their original
+    created_at and get a new updated_at only when their text or scope changed.
+    """
+    from backend.models import utcnow
+
+    now = utcnow().isoformat()
+    meta = dict(old.get("_updated") or {})
+    out = {k: v for k, v in new.items() if k != "custom_answers"}
+    for k, v in out.items():
+        if old.get(k) != v:
+            meta[k] = now
+    previous = {" ".join(str(a.get("question", "")).lower().split()): a for a in old.get("custom_answers") or [] if isinstance(a, dict)}
+    answers = []
+    for a in new.get("custom_answers") or []:
+        prev = previous.get(" ".join(a["question"].lower().split()))
+        same = prev is not None and prev.get("answer") == a["answer"] and prev.get("applies_to", "any") == a.get("applies_to", "any")
+        answers.append({**a, "created_at": (prev or {}).get("created_at") or now,
+                        "updated_at": (prev or {}).get("updated_at") or now if same else now})
+    out["custom_answers"] = answers
+    out["_updated"] = meta
+    return out

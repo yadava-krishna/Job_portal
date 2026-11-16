@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from backend.api.deps import CurrentUser, DbSession, SettingsDep, client_ip, _too_many
@@ -19,10 +19,12 @@ from backend.models import ExtensionToken, User
 from backend.schemas.extension import (
     AnswerOut,
     AnswersRequest,
+    ApplyStateRequest,
     AutofillOut,
     DeviceOut,
     ExtApplicationOut,
     ExtConfirmRequest,
+    ExtResumeOut,
     MatchOut,
     MatchRequest,
     PairingCodeOut,
@@ -32,7 +34,7 @@ from backend.schemas.extension import (
     TokenOut,
 )
 from backend.security import rate_limiter
-from backend.services import application_service, extension_service as ext, resume_service
+from backend.services import application_service, apply_state_service, extension_service as ext, resume_service
 from backend.services.answer_service import answer_questions
 from backend.models import utcnow
 
@@ -133,21 +135,35 @@ def answers(body: AnswersRequest, p: Autofill, db: DbSession, settings: Settings
     return [AnswerOut(**a) for a in answer_questions(db, settings, p[0], body.questions)]
 
 
+@router.get("/resumes", response_model=list[ExtResumeOut])
+def resumes(p: Autofill, db: DbSession) -> list[ExtResumeOut]:
+    """Resumes you can attach: uploaded files and Resume Studio versions (PDF or Word)."""
+    return [ExtResumeOut(**r) for r in ext.resume_choices(db, p[0])]
+
+
 @router.get("/resume")
-def resume(p: Autofill, db: DbSession, settings: SettingsDep, request: Request) -> FileResponse:
-    """Your active resume file, for attaching to the form you are filling. Requires an explicit click in the extension."""
+def resume(p: Autofill, db: DbSession, settings: SettingsDep, request: Request, kind: str = "upload", id: int | None = None,
+           format: str = "pdf") -> Response:
+    """The chosen resume file (default: your active upload), for attaching to the form you are filling.
+
+    Requires an explicit click in the extension. Resume Studio versions are exported on demand as PDF or DOCX.
+    """
     user, tok = p
-    _limit(request, settings, f"resume:{tok.id}", 20, 3600)
-    r = resume_service.active_resume(db, user)
-    if r is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No resume uploaded.")
-    path = Path(r.stored_path).resolve()
-    if settings.user_dir(user.id).resolve() not in path.parents or not path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume file is missing.")
-    ext.audit(db, user, "extension.resume_downloaded", client_ip(request, settings), tok, resume_id=r.id)
+    _limit(request, settings, f"resume:{tok.id}", 30, 3600)
+    data, name, media, meta = ext.resume_file(db, settings, user, kind, id, format)
+    ext.audit(db, user, "extension.resume_downloaded", client_ip(request, settings), tok, **meta)
     db.commit()
-    return FileResponse(path, media_type="application/pdf", filename=r.original_filename,
-                        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+    from urllib.parse import quote
+
+    return Response(data, media_type=media, headers={
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}", "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff", "X-Resume-Sha256": meta.get("sha256", ""), "Access-Control-Expose-Headers":
+        "Content-Disposition, X-Resume-Sha256"})
+
+
+def _app_out(app, already: bool = False) -> ExtApplicationOut:
+    return ExtApplicationOut(application_id=app.id, status=app.status, submitted_at=app.submitted_at, already_submitted=already,
+                             **apply_state_service.summary(app))
 
 
 @router.post("/applications/start", response_model=ExtApplicationOut)
@@ -156,7 +172,7 @@ def start(body: StartRequest, p: Track, db: DbSession, settings: SettingsDep) ->
     user = p[0]
     app = application_service.prepare(db, settings, user, body.user_job_id, None)
     application_service.mark_in_progress(db, user, app, "extension")
-    return ExtApplicationOut(application_id=app.id, status=app.status, submitted_at=app.submitted_at)
+    return _app_out(app)
 
 
 @router.post("/applications/{application_id}/confirm", response_model=ExtApplicationOut)
@@ -166,4 +182,26 @@ def confirm(application_id: int, body: ExtConfirmRequest, p: Track, db: DbSessio
     app = application_service.owned_application(db, user, application_id)
     already = app.status == "SUBMITTED"
     application_service.confirm(db, user, app, body.submitted, body.reference_id, None, body.notes, source="extension_user_confirmed")
-    return ExtApplicationOut(application_id=app.id, status=app.status, submitted_at=app.submitted_at, already_submitted=already and body.submitted)
+    apply_state_service.after_user_confirm(db, app, body.submitted)
+    return _app_out(app, already and body.submitted)
+
+
+@router.get("/applications/{application_id}", response_model=ExtApplicationOut)
+def application_state(application_id: int, p: Track, db: DbSession) -> ExtApplicationOut:
+    """Where this application stands, so the extension can resume after a browser restart."""
+    return _app_out(application_service.owned_application(db, p[0], application_id))
+
+
+@router.post("/applications/{application_id}/state", response_model=ExtApplicationOut)
+def record_state(application_id: int, body: ApplyStateRequest, p: Track, db: DbSession, settings: SettingsDep,
+                 request: Request) -> ExtApplicationOut:
+    """Record a Smart Apply step (filling, reviewed, submission authorised, confirmed, uncertain, …).
+
+    A submission is recorded only with a confirmation signal from the employer's page; an already submitted
+    application can never be authorised again.
+    """
+    user, tok = p
+    _limit(request, settings, f"state:{tok.id}", 240, 3600)
+    app = application_service.owned_application(db, user, application_id)
+    app = apply_state_service.record(db, user, app, body.state, mode=body.mode, session=body.session, reference_id=body.reference_id)
+    return _app_out(app)

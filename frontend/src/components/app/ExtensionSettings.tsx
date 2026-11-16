@@ -8,7 +8,7 @@ import { formatDate, timeAgo } from "@/lib/format";
 import { useCreatePairingCode, useDisconnectDevice, useExtensionDevices } from "@/services/queries";
 import type { PairingCode } from "@/types/api";
 
-/** Connect the "Fill with JobPilot" browser extension with a one-time code, and disconnect browsers. */
+/** Connect the "JobPilot Smart Apply" browser extension with a one-time code, and disconnect browsers. */
 export function ExtensionSettings() {
   const devices = useExtensionDevices();
   const create = useCreatePairingCode();
@@ -35,10 +35,12 @@ export function ExtensionSettings() {
     <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Puzzle className="size-5" /> Fill with JobPilot</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Puzzle className="size-5" /> Smart Apply browser extension</CardTitle>
           <CardDescription>
-            The browser extension fills Greenhouse, Lever and Ashby application forms from your profile when you click Fill.
-            You review every field and press Submit yourself. It never asks for your JobPilot password.
+            Fills application forms from your profile when you click Fill, then shows a review of the form exactly as it is filled.
+            On Greenhouse, Lever and Ashby you can submit from the review once you authorise that application; on Workday, iCIMS,
+            SuccessFactors and other employer sites (allowed one by one) it fills and you submit on the page. It never runs on
+            LinkedIn, Naukri or Indeed, and never asks for your JobPilot password.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">

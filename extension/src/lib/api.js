@@ -104,12 +104,18 @@ export const jobpilot = {
   start: (userJobId) => request("/extension/applications/start", { method: "POST", body: { user_job_id: userJobId } }),
   confirm: (applicationId, submitted, referenceId) =>
     request(`/extension/applications/${applicationId}/confirm`, { method: "POST", body: { submitted, reference_id: referenceId || null } }),
-  async resume() {
-    const res = await request("/extension/resume", { raw: true });
+  state: (applicationId, body) => request(`/extension/applications/${applicationId}/state`, { method: "POST", body }),
+  application: (applicationId) => request(`/extension/applications/${applicationId}`),
+  resumes: () => request("/extension/resumes"),
+  /** The chosen resume file: {kind: "upload"|"studio", id?, format?: "pdf"|"docx"} (default: the active upload). */
+  async resume(choice = { kind: "upload" }) {
+    const q = new URLSearchParams({ kind: choice.kind || "upload", format: choice.format || "pdf" });
+    if (Number.isInteger(choice.id)) q.set("id", String(choice.id));
+    const res = await request(`/extension/resume?${q}`, { raw: true });
     const cd = res.headers.get("content-disposition") || "";
     const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
-    const name = m ? decodeURIComponent(m[1]) : "resume.pdf";
+    const name = m ? decodeURIComponent(m[1]) : `resume.${choice.format || "pdf"}`;
     const buf = await res.arrayBuffer();
-    return { name, type: res.headers.get("content-type") || "application/pdf", buf };
+    return { name, type: (res.headers.get("content-type") || "application/pdf").split(";")[0], buf, sha256: res.headers.get("x-resume-sha256") || null };
   },
 };

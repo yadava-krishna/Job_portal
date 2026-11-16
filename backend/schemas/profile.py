@@ -128,10 +128,19 @@ class ProfileOut(BaseModel):
 
 
 class CustomAnswer(BaseModel):
-    """An answer the user wrote and approved for a question applications keep asking."""
+    """An answer the user wrote and approved for a question applications keep asking.
+
+    applies_to "any": reused as a confirmed answer whenever the same question comes up.
+    applies_to "one_job": written for one application (e.g. "Why this company?"); offered only as a suggestion to check.
+    created_at / updated_at are set by the server (provenance), never trusted from the client.
+    """
 
     question: str = Field(min_length=3, max_length=300)
     answer: str = Field(min_length=1, max_length=2000)
+    applies_to: Literal["any", "one_job"] = "any"
+    note: str | None = Field(default=None, max_length=200)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class VerifiedFacts(BaseModel):
