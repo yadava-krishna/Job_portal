@@ -126,15 +126,78 @@ Started: 2026-11-16. This is the working tracker for the JobPilot 2.0 overhaul. 
 - [ ] **Deploy** (backend rebuild, which applies migration 0010; frontend; reloading the extension): awaiting the
   owner's go-ahead.
 
-### Phase 2: Resume Studio
-- [ ] A shared resume schema, HTML/CSS templates, PDF via headless Chromium (compared against the current ReportLab output first), and DOCX from the same layout spec.
-- [ ] Six templates: Classic ATS, Modern Professional, Technical Engineer, Experienced Professional, Fresher/Graduate, Executive.
-- [ ] Deterministic pagination rules and warnings. Content is never removed silently.
-- [ ] Editor: drag-and-drop ordering, undo/redo, autosave, version history and restore, a page-count indicator, style controls with ATS guard rails.
-- [ ] Parser: DOCX, layout-aware PDF (blocks and columns), tables, more heading synonyms, Indian layouts, source text shown for uncertain fields.
-- [ ] Rule-based quality checker, with the methodology stated.
-- [ ] Job-specific preparation from confirmed facts only, with provenance.
-- [ ] Rendering tests: text extraction, page boxes and margins, completeness, long resumes.
+### Phase 2: Resume Studio. Done locally on 2026-11-16, not yet deployed
+
+**Root causes found on real renders of the old ReportLab output**
+- Modern Professional: a 152 pt hole under the sidebar on page 1, and the layout changed after page 1.
+- Long resumes: a last page holding 2–3 lines.
+- Dates on their own lines, tiny bullets, and uneven spacing.
+- Duplicated achievement bullets (lifted out of experience bullets by the parser).
+
+**Work done**
+- [x] **New renderer** (`backend/services/studio_render.py`):
+  - HTML/CSS through WeasyPrint 66, compared side by side with the old output before replacing it;
+  - deterministic pagination rules: headings never end a page, an entry's title and dates stay with its first
+    bullet, short entries are never split, bullets are never split, long entries may continue on the next page;
+  - right-aligned dates;
+  - clickable mailto/tel/web links;
+  - embedded, subset fonts;
+  - PDF metadata;
+  - "page X of Y" from page 2.
+
+  Pages now fill to 86–99% (the old ones stopped well short), and keep-with-next no longer chains across sections.
+- [x] **DOCX from the same render model and layout spec.** Same fonts, sizes, margins, spacing and accent; dates
+  right-aligned with a tab stop; keep-with-next; hyperlinks; core properties. Word-for-word parity with the PDF is
+  tested for all templates.
+- [x] **Seven templates:**
+  - Classic ATS, Modern Professional (labels in the margin), Technical Engineer, Experienced Professional,
+    Fresher/Graduate, Executive (new) and International;
+  - the keys are unchanged, so existing versions keep working, and catalogue rows are updated in place.
+- [x] **Settings with guard rails:** font from each template's list, size 9–12 (9.5 or more on ATS templates), line
+  height, margins, section spacing, heading style (no margin labels on ATS templates), accent colour (contrast 4.5 or
+  more on white), date format, page size.
+- [x] **Layout report** (`GET /studio/versions/{id}/layout`): pages, fill of each page, warnings, and fit suggestions
+  that apply only when the user clicks them. Content is never removed.
+- [x] **Editor:**
+  - undo/redo (buttons and keyboard, typing grouped into single steps);
+  - drag-and-drop for sections and entries, with the arrow buttons kept for keyboard users;
+  - Design controls for every setting;
+  - a layout bar on the preview.
+
+  Autosave, save status, version history and restore, copies, and template switching already existed.
+- [x] **Parser** (no AI):
+  - Word `.docx` (page headers, tables as separate items, layout tables, bullets);
+  - layout-aware PDF: two-column pages are read column by column, with guards against title/date rows and
+    margin-label layouts;
+  - Title-Case and Indian headings ("Career Objective", "Personal Details", "Declaration" is kept out of skills);
+  - "June, 2021" dates;
+  - one skill per line;
+  - contact details (name, e-mail, phone, location) from pieces separated by "|";
+  - the "Title / dates / Company" layout.
+- [x] **DOCX upload:** magic-byte check, macros refused, zip-bomb limit, original kept, served with the right type.
+  The extension can attach `.docx` uploads.
+- [x] **Quality checker:**
+  - issues labelled by kind (format, accuracy, writing, job);
+  - duplicates, date order, missing dates, odd characters, layout warnings;
+  - reads the exported PDF back with the parser;
+  - states how the score is calculated (no "ATS score").
+- [x] **Job tailoring:** reorder skills, reorder projects, reorder bullets, and add skills from the profile only,
+  matching skill synonyms through the taxonomy. Every suggestion is "supported" and applied only when the user
+  accepts it.
+- [x] **Tests:**
+  - backend 432 passed (55 new rendering tests, 11 parsing tests including a round trip through all 7 templates, and
+    checker and tailoring tests);
+  - frontend 46 (undo/redo, layout bar);
+  - extension 27, plus real-Chrome e2e 31/31.
+- [x] **Visual review:** Studio Content, Design and Check tabs with a local backend and a throwaway database.
+- [x] **Docker:** the backend image builds with Pango and the fonts (`fonts-liberation`, `fonts-lato`,
+  `fonts-urw-base35`, `fonts-dejavu-core`) and renders correctly inside the container.
+- **Limits:**
+  - No OCR: scanned PDFs are still refused, with a clear message.
+  - Uncertain parser fields are corrected on the profile review screen; the source text isn't shown next to each
+    field yet.
+  - The editor's preview is the real PDF, refreshed about 1 second after each save, not keystroke-live.
+- [ ] **Deploy:** this needs a backend image rebuild (new system packages) and frontend publish. Awaiting the owner.
 
 ### Phase 3: Discovery and matching
 - [ ] Freshness, expiry and dead-link checks, a last-verified time, normalised location, work mode and salary, and grouping of duplicates.

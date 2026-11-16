@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Eye, EyeOff, Plus, Trash2, Eraser } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, Plus, Trash2, Eraser } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -19,11 +19,16 @@ const entryLabels: Partial<Record<SectionType, [string, string]>> = {
 };
 
 type Confirm = { title: string; body: string; label: string; run: () => void };
+/** Drag-and-drop state. Arrow buttons do the same for keyboard and screen-reader users. */
+type Drag = { kind: "section"; from: number } | { kind: "block"; section: number; from: number };
 
 /** Structured editor for a resume document: sections → blocks (contact, text, entry, skill group) → bullets. */
 export function DocumentEditor({ sections, onChange, readOnly }: { sections: Section[]; onChange: (s: Section[]) => void; readOnly: boolean }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const endDrag = () => { setDrag(null); setOver(null); };
 
   const setSection = (si: number, fn: (s: Section) => Section) => onChange(sections.map((s, i) => (i === si ? fn(s) : s)));
   const setBlocks = (si: number, fn: (b: Block[]) => Block[]) => setSection(si, (s) => ({ ...s, blocks: fn(s.blocks) }));
@@ -45,8 +50,16 @@ export function DocumentEditor({ sections, onChange, readOnly }: { sections: Sec
         const open = !collapsed[key];
         const canAdd = s.type !== "header" && !(s.type === "summary" && s.blocks.length > 0);
         return (
-          <section key={key} className={cn("rounded-xl border bg-card", !s.visible && "opacity-70")} aria-label={`${s.heading} section`}>
+          <section key={key} className={cn("rounded-xl border bg-card", !s.visible && "opacity-70", over === `s${si}` && drag?.kind === "section" && "ring-2 ring-primary")}
+                   aria-label={`${s.heading} section`}
+                   onDragOver={(e) => { if (drag?.kind === "section") { e.preventDefault(); setOver(`s${si}`); } }}
+                   onDrop={(e) => { if (drag?.kind === "section") { e.preventDefault(); onChange(move(sections, drag.from, si)); } endDrag(); }}>
             <div className="flex flex-wrap items-center gap-1.5 border-b px-2 py-1.5">
+              {!readOnly && (
+                <span draggable aria-hidden="true" title="Drag to reorder sections" className="cursor-grab text-muted-foreground active:cursor-grabbing"
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.heading); setDrag({ kind: "section", from: si }); }}
+                      onDragEnd={endDrag}><GripVertical className="size-4" /></span>
+              )}
               <Button size="icon-xs" variant="ghost" aria-label={open ? `Collapse ${s.heading}` : `Expand ${s.heading}`} aria-expanded={open}
                       onClick={() => setCollapsed({ ...collapsed, [key]: open })}>
                 {open ? <ChevronDown /> : <ChevronRight />}
@@ -75,12 +88,22 @@ export function DocumentEditor({ sections, onChange, readOnly }: { sections: Sec
               <div className="space-y-2 p-2">
                 {!s.blocks.length && <p className="px-1 py-2 text-xs text-muted-foreground">Nothing here yet.</p>}
                 {s.blocks.map((b, bi) => (
-                  <BlockEditor key={b._k ?? bi} section={s} block={b} index={bi} count={s.blocks.length} readOnly={readOnly}
+                  <div key={b._k ?? bi} className={cn("relative rounded-lg", !readOnly && s.blocks.length > 1 && b.type !== "contact" && "pl-4",
+                                                       over === `b${si}-${bi}` && drag?.kind === "block" && "ring-2 ring-primary")}
+                       onDragOver={(e) => { if (drag?.kind === "block" && drag.section === si) { e.preventDefault(); e.stopPropagation(); setOver(`b${si}-${bi}`); } }}
+                       onDrop={(e) => { if (drag?.kind === "block" && drag.section === si) { e.preventDefault(); e.stopPropagation(); setBlocks(si, (bs) => move(bs, drag.from, bi)); } endDrag(); }}>
+                  {!readOnly && s.blocks.length > 1 && b.type !== "contact" && (
+                    <span draggable aria-hidden="true" title="Drag to reorder" className="absolute left-0 top-3 z-10 cursor-grab text-muted-foreground active:cursor-grabbing"
+                          onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", blockTitle(b)); setDrag({ kind: "block", section: si, from: bi }); }}
+                          onDragEnd={endDrag}><GripVertical className="size-3.5" /></span>
+                  )}
+                  <BlockEditor section={s} block={b} index={bi} count={s.blocks.length} readOnly={readOnly}
                                onChange={(nb) => setBlock(si, bi, () => nb)}
                                onMove={(to) => setBlocks(si, (bs) => move(bs, bi, to))}
                                onRemove={() => setConfirm({ title: "Remove this item?", label: "Remove",
                                  body: `"${blockTitle(b) || "This item"}" and its bullets will be removed from this resume version. Your profile is not changed.`,
                                  run: () => setBlocks(si, (bs) => bs.filter((_, i) => i !== bi)) })} />
+                  </div>
                 ))}
                 {canAdd && (
                   <Button size="xs" variant="outline" onClick={() => addBlock(si, s)}>

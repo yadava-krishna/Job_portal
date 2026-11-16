@@ -268,7 +268,8 @@ def resume_choices(db: Session, user: User) -> list[dict[str, Any]]:
 
     out: list[dict[str, Any]] = []
     for r in db.execute(select(Resume).where(Resume.user_id == user.id).order_by(Resume.is_active.desc(), Resume.id.desc())).scalars():
-        out.append({"kind": "upload", "id": r.id, "name": r.original_filename, "formats": ["pdf"], "active": r.is_active,
+        out.append({"kind": "upload", "id": r.id, "name": r.original_filename,
+                    "formats": ["docx"] if r.stored_path.lower().endswith(".docx") else ["pdf"], "active": r.is_active,
                     "pages": r.page_count, "updated_at": r.uploaded_at})
     for v in db.execute(select(ResumeVersion).where(ResumeVersion.user_id == user.id).order_by(ResumeVersion.id.desc())).scalars():
         out.append({"kind": "studio", "id": v.id, "name": v.name, "formats": ["pdf", "docx"], "active": False,
@@ -305,7 +306,7 @@ def resume_file(db: Session, settings, user: User, kind: str, rid: int | None, f
     if settings.user_dir(user.id).resolve() not in path.parents or not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume file is missing.")
     data = path.read_bytes()
-    return data, r.original_filename, "application/pdf", {"resume_id": r.id, "sha256": hashlib.sha256(data).hexdigest()}
+    return data, r.original_filename, resume_service.media_type(path), {"resume_id": r.id, "sha256": hashlib.sha256(data).hexdigest()}
 
 
 # ---- which of my jobs is this page? ---------------------------------------------------------

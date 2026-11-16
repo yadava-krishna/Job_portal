@@ -26,7 +26,7 @@ export function AtsBadge({ safe }: { safe: boolean }) {
     </span>
   ) : (
     <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900">
-      Two-column
+      For reading by people
     </span>
   );
 }

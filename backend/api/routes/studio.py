@@ -12,17 +12,21 @@ from pydantic import BaseModel, Field
 from backend.api.deps import CurrentUser, DbSession, SettingsDep
 from backend.services import studio_service as ss
 from backend.services.storage import get_storage
-from backend.services.studio_render import TEMPLATES
+from backend.services.studio_render import DATE_FORMATS, FONTS, HEADING_STYLES, TEMPLATES, normalize_settings
 
 router = APIRouter(prefix="/studio", tags=["resume studio"])
-TemplateKey = Literal["ats_simple", "modern_professional", "technical", "finance", "graduate", "international"]
+TemplateKey = Literal["ats_simple", "modern_professional", "technical", "finance", "graduate", "executive", "international"]
 
 
 @router.get("/templates")
 def templates(user: CurrentUser, db: DbSession) -> list[dict]:
     ss.ensure_templates(db)
     return [{"key": k, "name": t["name"], "category": t["category"], "ats_safe": t["ats_safe"], "columns": t["columns"],
-             "description": t["description"], "max_pages": t.get("max_pages", 2), "supports_docx": True} for k, t in TEMPLATES.items()]
+             "description": t["description"], "max_pages": t.get("max_pages", 2), "supports_docx": True,
+             "defaults": normalize_settings(k, {})[0],
+             "fonts": [{"key": f, "label": FONTS[f]["label"]} for f in t["fonts"]],
+             "heading_styles": [h for h in HEADING_STYLES if h != "label_left" or not t["ats_safe"]],
+             "date_formats": list(DATE_FORMATS)} for k, t in TEMPLATES.items()]
 
 
 @router.get("/versions")
@@ -88,6 +92,12 @@ def preview(version_id: int, user: CurrentUser, db: DbSession, settings: Setting
     r = _file(get_storage().get(e.file_key), "pdf", ss.download_name(v, "pdf"), inline=True)
     r.headers["X-Page-Count"] = str(e.page_count or "")
     return r
+
+
+@router.get("/versions/{version_id}/layout")
+def layout(version_id: int, user: CurrentUser, db: DbSession) -> dict:
+    """Page count, how full each page is, layout warnings and settings that would save a page (suggestions only)."""
+    return ss.layout(ss.owned_version(db, user, version_id))
 
 
 class ExportIn(BaseModel):

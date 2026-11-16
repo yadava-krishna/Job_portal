@@ -25,7 +25,7 @@ from backend.models import (CandidateProfile, ResumeBlock, ResumeBullet, ResumeE
                             ResumeTemplate, ResumeVersion, User, UserJob, utcnow)
 from backend.services import platform_service
 from backend.services.storage import get_storage
-from backend.services.studio_render import TEMPLATES, render_docx, render_pdf
+from backend.services.studio_render import TEMPLATES, layout_report, normalize_settings, render_docx, render_pdf
 
 MAX_VERSIONS = 30
 SECTION_TYPES = ("header", "summary", "experience", "projects", "education", "skills", "certifications", "publications",
@@ -42,11 +42,16 @@ STOP = set("the and for with from into that this were was are our your their hav
 def ensure_templates(db: Session) -> list[ResumeTemplate]:
     have = {t.key: t for t in db.execute(select(ResumeTemplate)).scalars()}
     for key, cfg in TEMPLATES.items():
+        config = {k: v for k, v in cfg.items() if k != "name"}
         if key not in have:
             t = ResumeTemplate(key=key, name=cfg["name"], category=cfg["category"], ats_safe=cfg["ats_safe"],
-                               supports_docx=True, active=True, config_json={k: v for k, v in cfg.items() if k != "name"})
+                               supports_docx=True, active=True, config_json=config)
             db.add(t)
             have[key] = t
+        else:  # keep the catalogue row in step with the code (names and layout were redesigned); keys never change
+            t = have[key]
+            if (t.name, t.category, t.ats_safe, t.config_json) != (cfg["name"], cfg["category"], cfg["ats_safe"], config):
+                t.name, t.category, t.ats_safe, t.config_json = cfg["name"], cfg["category"], cfg["ats_safe"], config
     db.commit()
     return [have[k] for k in TEMPLATES]
 
@@ -68,6 +73,11 @@ def _doc_from_profile(conf: dict[str, Any]) -> list[dict[str, Any]]:
                 "bullets": [{"text": b, "evidence_refs": [ref] if ref else [], "source": "profile", "approved": True} for b in bullets]}
 
     links = [v for v in (conf.get("linkedin_url"), conf.get("github_url"), conf.get("portfolio_url")) if v]
+    # Achievements the resume parser lifted out of role or project bullets would print the same line twice: keep only
+    # achievements that are not already a bullet elsewhere.
+    norm = lambda t: " ".join(str(t or "").lower().split())  # noqa: E731
+    elsewhere = {norm(b) for e in (conf.get("experience") or []) + (conf.get("projects") or []) for b in (e.get("bullets") or [])}
+    achievements = [a for a in conf.get("achievements") or [] if norm(a) and norm(a) not in elsewhere]
     sections = [
         {"type": "header", "heading": "Contact", "visible": True, "blocks": [
             {"type": "contact", "source_profile_ref": "profile:contact", "visible": True, "bullets": [],
@@ -90,10 +100,10 @@ def _doc_from_profile(conf: dict[str, Any]) -> list[dict[str, Any]]:
                  "content": {"label": "Languages", "items": list(conf.get("languages") or [])}}] if conf.get("languages") else [])},
         {"type": "certifications", "heading": "Certifications", "visible": bool(conf.get("certifications")), "blocks": [
             entry(c, None, ref=f"certification:{i}") for i, c in enumerate(conf.get("certifications") or [])]},
-        {"type": "achievements", "heading": "Achievements", "visible": bool(conf.get("achievements")), "blocks": [
+        {"type": "achievements", "heading": "Achievements", "visible": bool(achievements), "blocks": [
             {"type": "entry", "source_profile_ref": "profile:achievements", "visible": True, "content": {"title": None},
              "bullets": [{"text": a, "evidence_refs": ["profile:achievements"], "source": "profile", "approved": True}
-                         for a in conf.get("achievements") or []]}] if conf.get("achievements") else []},
+                         for a in achievements]}] if achievements else []},
     ]
     return sections
 
@@ -176,7 +186,7 @@ def create_from_profile(db: Session, user: User, name: str, template_key: str, t
     conf = (prof.confirmed_profile if prof else None) or {}
     tpl = template_by_key(db, template_key)
     v = ResumeVersion(user_id=user.id, template_id=tpl.id, name=name.strip()[:120] or "My resume", status="draft",
-                      settings={"font_size": 10.5, "density": "normal", "page_size": "A4"},
+                      settings=normalize_settings(tpl.key, {})[0],
                       target_job_id=_target_job(db, user, target_user_job_id))
     v.template = tpl
     _write_sections(v, _doc_from_profile(conf))
@@ -203,12 +213,15 @@ def save(db: Session, user: User, version: ResumeVersion, data: dict[str, Any]) 
         tpl = template_by_key(db, data["template_key"])
         platform_service.track(db, user.id, "resume_template_changed", resume_version_id=version.id, from_=version.template.key, to=tpl.key)
         version.template_id, version.template = tpl.id, tpl
-    if isinstance(data.get("settings"), dict):
-        s = data["settings"]
-        version.settings = {"font_size": float(min(12, max(9, s.get("font_size", 10.5)))),
-                            "density": s.get("density") if s.get("density") in ("compact", "normal", "relaxed") else "normal",
-                            "page_size": "LETTER" if s.get("page_size") == "LETTER" else "A4",
-                            "mobility_line": str(s.get("mobility_line") or "")[:200]}
+    if isinstance(data.get("settings"), dict) or data.get("template_key"):
+        # Layout settings are validated against the (possibly new) template's guard rails: readable sizes, fonts the
+        # template supports, colours with enough contrast, and no side labels on ATS templates.
+        raw = {**(version.settings or {}), **(data.get("settings") or {})}
+        if data.get("template_key") and not isinstance(data.get("settings"), dict):
+            raw.pop("font_family", None)
+            raw.pop("accent", None)
+            raw.pop("heading_style", None)
+        version.settings, _notes = normalize_settings(version.template.key, raw)
     if isinstance(data.get("sections"), list):
         _write_sections(version, data["sections"])
     db.flush()
@@ -311,6 +324,71 @@ def _profile_facts(db: Session, user: User) -> tuple[set[str], set[str], str]:
     return bullets, skills, " ".join(bullets)
 
 
+# Each issue has a kind:
+#   format    objective, checked mechanically (contact details, dates, duplicates, characters, pages, export read-back)
+#   accuracy  figures not backed by the confirmed profile
+#   writing   style advice (weak openings, very short bullets, repetition): opinions, not rules
+#   job       how this resume covers a chosen job's listed skills
+ISSUE_KIND = {"contact": "format", "contact_email": "format", "contact_phone": "format", "empty_section": "format", "duplicate_entry": "format",
+              "duplicate_bullet": "format", "date_order": "format", "date_missing": "format", "date_current": "format",
+              "unsupported_chars": "format", "layout": "format", "overflow": "format", "last_page": "format", "long_bullet": "format",
+              "export_readback": "format", "render": "format", "unsupported_claim": "accuracy", "weak_bullet": "writing",
+              "short_bullet": "writing", "repeated_keyword": "writing", "job_keyword": "job", "job_gap": "job"}
+SCORE_METHOD = ("Readiness is JobPilot's own checklist: 100 minus 25 for each must-fix item, 8 for each worth-fixing item, 3 for each "
+                "suggestion and 1 for each note. It is not an ATS score: no universal ATS score exists, and each employer's system "
+                "reads resumes differently.")
+_ODD_CHARS = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\uE000-\uF8FF\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFD]")
+
+
+def _ym(value: Any) -> tuple[int, int] | None:
+    from backend.services.studio_render import format_date
+
+    t = format_date(value, "MM/YYYY")
+    m = re.fullmatch(r"(\d{2})/(\d{4})", t or "")
+    if m:
+        return int(m.group(2)), int(m.group(1))
+    m = re.fullmatch(r"\d{4}", t or "")
+    return (int(t), 0) if m else None
+
+
+def _readback(doc: dict[str, Any], template_key: str, settings_: dict[str, Any]) -> list[str]:
+    """Render the PDF, read it back with JobPilot's own parser, and list what did not come back out."""
+    import tempfile
+    from pathlib import Path
+
+    from core.settings import PROJECT_ROOT
+    from core.skills import SkillTaxonomy
+    from resume.profile_builder import ResumeProfileExtractor
+
+    pdf, _ = render_pdf(doc, template_key, settings_)
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "resume.pdf"
+        path.write_bytes(pdf)
+        try:
+            p = ResumeProfileExtractor(SkillTaxonomy.from_file(PROJECT_ROOT / "config" / "skills_taxonomy.yaml")).build(path)
+        except Exception as exc:  # noqa: BLE001 - any parser failure is itself the finding
+            return [f"The exported PDF could not be read back ({type(exc).__name__})."]
+    text = " ".join((p.get("resume_text") or "").split())
+    missing: list[str] = []
+    for s in doc["sections"]:
+        if not s["visible"]:
+            continue
+        for b in s["blocks"]:
+            if not b["visible"]:
+                continue
+            for u in b["bullets"]:
+                t = " ".join((u.get("text") or "").split())
+                if u.get("approved", True) and t and t[:60] not in text:
+                    missing.append(f"bullet \"{t[:50]}…\"")
+    exp = next((s for s in doc["sections"] if s["type"] == "experience" and s["visible"]), None)
+    found = {(r.get("title") or "").lower() for r in p.get("experience", [])}
+    for b in (exp or {}).get("blocks", []):
+        c = b.get("content") or {}
+        if b["visible"] and c.get("title") and c.get("start") and c["title"].lower() not in found:
+            missing.append(f"role \"{c['title']}\" (title, company and dates as one entry)")
+    return missing
+
+
 def feedback(db: Session, settings: BackendSettings, user: User, version: ResumeVersion, user_job_id: int | None) -> dict[str, Any]:
     issues: list[dict[str, Any]] = []
     doc = document(version)
@@ -320,21 +398,58 @@ def feedback(db: Session, settings: BackendSettings, user: User, version: Resume
                    for bi, b in enumerate(s["blocks"]) if b["visible"] for ui, u in enumerate(b["bullets"]) if u["approved"]]
 
     def add(level, code, message, where=None):
-        issues.append({"level": level, "code": code, "message": message, "where": where})
+        issues.append({"level": level, "code": code, "kind": ISSUE_KIND.get(code, "format"), "message": message, "where": where})
 
     if not tpl["ats_safe"]:
-        add("warning", "layout", "Two-column layout: some applicant tracking systems read columns out of order. Use ATS Simple for online forms.")
+        add("warning", "layout", "Section names in the margin and colour suit people better than applicant-tracking systems. Use Classic ATS for online forms.")
     header = next((s for s in doc["sections"] if s["type"] == "header"), None)
     hc = (header["blocks"][0]["content"] if header and header["blocks"] else {})
     if not hc.get("email") and not hc.get("phone"):
         add("error", "contact", "Add an e-mail or phone number so employers can reach you.")
-    for s in doc["sections"]:
-        if s["visible"] and s["type"] not in ("header",) and not any(b["visible"] for b in s["blocks"]):
+    elif not hc.get("email"):
+        add("warning", "contact_email", "Add an e-mail address: most application systems require one.")
+    elif not hc.get("phone"):
+        add("info", "contact_phone", "No phone number. Recruiters in India usually call first.")
+    if not hc.get("name"):
+        add("error", "contact", "Add your name to the header.")
+    for si, s in enumerate(doc["sections"]):
+        if not s["visible"] or s["type"] == "header":
+            continue
+        if not any(b["visible"] for b in s["blocks"]):
             add("info", "empty_section", f"'{s['heading']}' is empty: hide it or add content.", {"section": s["type"]})
+        seen: dict[tuple, int] = {}
+        for bi, b in enumerate(s["blocks"]):
+            c = b.get("content") or {}
+            if not b["visible"] or b["type"] != "entry":
+                continue
+            key = (str(c.get("title") or "").strip().lower(), str(c.get("organization") or "").strip().lower(), str(c.get("start") or ""))
+            if any(key[:2]) and key in seen:
+                add("warning", "duplicate_entry", f"'{c.get('title') or c.get('organization')}' appears twice in {s['heading']}.", {"section": s["type"], "block": bi})
+            seen.setdefault(key, bi)
+            if s["type"] == "experience":
+                start, end = _ym(c.get("start")), _ym(c.get("end"))
+                if c.get("title") and not c.get("start"):
+                    add("warning", "date_missing", f"'{c.get('title')}' has no start date. Dates let employers (and JobPilot) work out your experience.",
+                        {"section": s["type"], "block": bi})
+                if start and end and not c.get("current") and end < start:
+                    add("error", "date_order", f"'{c.get('title')}' ends before it starts.", {"section": s["type"], "block": bi})
+                if c.get("current") and c.get("end"):
+                    add("info", "date_current", f"'{c.get('title')}' is marked current but also has an end date; the end date is not shown.", {"section": s["type"], "block": bi})
+    texts = [json.dumps(hc, ensure_ascii=False)] + [json.dumps(b.get("content") or {}, ensure_ascii=False) for s in doc["sections"] for b in s["blocks"]] + \
+            [u["text"] for *_, u in all_bullets]
+    odd = sorted({ch for t in texts for ch in _ODD_CHARS.findall(t)})
+    if odd:
+        add("warning", "unsupported_chars", f"Emoji or special symbols ({' '.join(odd[:6])}) may show as boxes or be dropped by application systems. Use plain text.")
     words = Counter()
+    seen_bullets: dict[str, dict] = {}
+    dup_bullets: dict[str, list] = {}
     for si, bi, ui, u in all_bullets:
         text = u["text"]
         where = {"section": doc["sections"][si]["type"], "block": bi, "bullet": ui}
+        norm = " ".join(text.lower().split())
+        if norm and norm in seen_bullets:
+            dup_bullets.setdefault(where["section"], []).append((seen_bullets[norm]["section"], where))
+        seen_bullets.setdefault(norm, where)
         low = text.lower()
         for weak in WEAK_STARTS:
             if low.startswith(weak):
@@ -352,17 +467,32 @@ def feedback(db: Session, settings: BackendSettings, user: User, version: Resume
         for w in re.findall(r"[a-zA-Z][a-zA-Z+#.-]{3,}", low):
             if w not in STOP:
                 words[w] += 1
+    for sec_type, dups in dup_bullets.items():
+        first_where = dups[0][1]
+        also = sorted({src for src, _ in dups})
+        heading = next((s["heading"] for s in doc["sections"] if s["type"] == sec_type), sec_type)
+        add("warning", "duplicate_bullet", f"{len(dups)} bullet{'s' if len(dups) > 1 else ''} in {heading} repeat{'' if len(dups) > 1 else 's'} "
+            f"text already used in {', '.join(next((s['heading'] for s in doc['sections'] if s['type'] == t), t) for t in also)}. Remove the repeats.",
+            first_where)
     for w, c in words.most_common(3):
         if c >= 7:
             add("warning", "repeated_keyword", f"'{w}' appears {c} times: repetition reads as keyword stuffing.")
     pages = None
     try:
-        exp = export(db, settings, user, version, "pdf")
-        pages = exp.page_count
-        limit = tpl.get("max_pages", 2)
-        if pages and pages > limit:
-            add("warning", "overflow", f"{pages} pages: this template is designed for {limit}. Tighten bullets or use compact density.")
+        rep = layout(version)
+        pages = rep["pages"]
+        for w in rep["warnings"]:
+            if w["level"] == "warning":
+                add("warning", "last_page" if "last page" in w["message"] else "overflow", w["message"])
+        missing = _readback(doc, version.template.key, version.settings or {})
+        if missing:
+            add("error", "export_readback", "When JobPilot reads the exported PDF back, it can't find: " + "; ".join(missing[:4])
+                + (f" and {len(missing) - 4} more" if len(missing) > 4 else "") + ". Application systems may miss them too.")
     except HTTPException:
+        add("error", "render", "The resume could not be rendered; check for unusual characters.")
+    except Exception:  # noqa: BLE001
+        log_ = __import__("logging").getLogger(__name__)
+        log_.exception("resume layout/read-back check failed")
         add("error", "render", "The resume could not be rendered; check for unusual characters.")
     job = None
     if user_job_id:
@@ -384,7 +514,7 @@ def feedback(db: Session, settings: BackendSettings, user: User, version: Resume
     db.add(fb)
     db.commit()
     return {"resume_version_id": version.id, "job_id": job.id if job else None, "pages": pages, "issues": issues,
-            "readiness": score, "ats_safe_template": tpl["ats_safe"],
+            "readiness": score, "score_method": SCORE_METHOD, "ats_safe_template": tpl["ats_safe"],
             "note": "ATS-safe means a conservative, parseable layout. It does not guarantee how any employer's system will read it."}
 
 
@@ -430,6 +560,36 @@ def suggestions(db: Session, user: User, version: ResumeVersion, user_job_id: in
                                 "before": None, "after": None, "evidence": "supported",
                                 "reason": "Moves the bullets that match this job's requirements to the top."})
     if job:
+        canon = _canonical_skills()
+        wanted = set()
+        for t in (job.required_skills or []) + (job.preferred_skills or []):
+            wanted |= canon(t) | {t.lower()}
+
+        def relevance(text: str) -> int:
+            low = (text or "").lower()
+            return len((canon(text) & wanted) | {w for w in wanted if w in low})
+
+        for si, s in enumerate(doc["sections"]):
+            if not s["visible"]:
+                continue
+            # Skills the job asks for first in each skill group (same items, new order).
+            for bi, b in enumerate(s["blocks"]):
+                items = (b.get("content") or {}).get("items") or []
+                if b["type"] == "skill_group" and len(items) > 1:
+                    order = sorted(range(len(items)), key=lambda i: (-min(1, relevance(items[i])), i))
+                    if order != list(range(len(items))) and relevance(items[order[0]]):
+                        matched = [items[i] for i in order if relevance(items[i])]
+                        out.append({"id": f"k{si}-{bi}", "kind": "reorder_skills", "where": {"section": si, "block": bi}, "order": order,
+                                    "before": ", ".join(items[:6]), "after": ", ".join(items[i] for i in order[:6]), "evidence": "supported",
+                                    "reason": f"Puts the skills this job asks for first ({', '.join(matched[:4])})."})
+            # Most relevant projects first (same entries, new order).
+            if s["type"] == "projects" and len(s["blocks"]) > 1:
+                score = [relevance(json.dumps(b.get("content")) + " " + " ".join(u["text"] for u in b["bullets"])) for b in s["blocks"]]
+                order = sorted(range(len(score)), key=lambda i: (-score[i], i))
+                if order != list(range(len(score))) and score[order[0]]:
+                    out.append({"id": f"p{si}", "kind": "reorder_entries", "where": {"section": si, "block": 0}, "order": order,
+                                "before": None, "after": None, "evidence": "supported",
+                                "reason": "Moves the projects that match this job's requirements to the top."})
         skills_sec = next((i for i, s in enumerate(doc["sections"]) if s["type"] == "skills"), None)
         on_resume = json.dumps(doc).lower()
         for skill in job.required_skills or []:
@@ -438,3 +598,23 @@ def suggestions(db: Session, user: User, version: ResumeVersion, user_job_id: in
                             "before": None, "after": skill, "evidence": "supported",
                             "reason": f"The job asks for {skill} and your confirmed profile includes it."})
     return out
+
+
+def _canonical_skills():
+    """text -> set of canonical skill names found in it (synonyms such as "MS Excel" and "Excel" agree)."""
+    from functools import lru_cache
+
+    from core.settings import PROJECT_ROOT
+    from core.skills import SkillTaxonomy
+
+    tax = SkillTaxonomy.from_file(PROJECT_ROOT / "config" / "skills_taxonomy.yaml")
+
+    @lru_cache(maxsize=2048)
+    def canon(text: str) -> frozenset[str]:
+        return frozenset(h.skill.lower() for h in tax.find(text or ""))
+    return canon
+
+
+def layout(version: ResumeVersion) -> dict[str, Any]:
+    """Pages, page fill, warnings and fit suggestions for the current version (suggestions are never applied)."""
+    return layout_report(document(version), version.template.key, version.settings or {})

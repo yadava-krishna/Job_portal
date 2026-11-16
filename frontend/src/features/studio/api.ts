@@ -4,7 +4,9 @@ import { api } from "@/lib/api";
 
 // ---------------- types (mirror backend/services/studio_service.py) ----------------
 
-export type TemplateKey = "ats_simple" | "modern_professional" | "technical" | "finance" | "graduate" | "international";
+export type TemplateKey = "ats_simple" | "modern_professional" | "technical" | "finance" | "graduate" | "executive" | "international";
+export type HeadingStyle = "caps_rule" | "accent" | "underline" | "plain" | "label_left";
+export type DateFormat = "MMM YYYY" | "MM/YYYY" | "YYYY";
 export type VersionStatus = "draft" | "locked" | "archived";
 export type Density = "compact" | "normal" | "relaxed";
 export type PageSize = "A4" | "LETTER";
@@ -21,13 +23,34 @@ export interface StudioTemplate {
   description: string;
   max_pages: number;
   supports_docx: boolean;
+  defaults?: StudioSettings;
+  fonts?: { key: string; label: string }[];
+  heading_styles?: HeadingStyle[];
+  date_formats?: DateFormat[];
 }
 
+/** Layout settings. The server validates every value against the template's guard rails (readable sizes,
+ *  supported fonts, accent colours with enough contrast, no side labels on ATS templates). */
 export interface StudioSettings {
   font_size?: number;
   density?: Density;
   page_size?: PageSize;
   mobility_line?: string;
+  font_family?: string;
+  line_height?: number;
+  margin_mm?: number;
+  section_spacing?: number;
+  heading_style?: HeadingStyle;
+  accent?: string;
+  date_format?: DateFormat;
+}
+
+export interface LayoutReport {
+  pages: number;
+  page_fill: number[];
+  warnings: { level: "info" | "warning"; message: string }[];
+  fit_suggestions: { label: string; settings: Partial<StudioSettings>; pages: number }[];
+  settings: StudioSettings;
 }
 
 export interface ContactContent { name?: string | null; headline?: string | null; email?: string | null; phone?: string | null; location?: string | null; links?: string[] }
@@ -93,9 +116,12 @@ export interface ExportResult {
 }
 
 export type IssueLevel = "error" | "warning" | "suggestion" | "info";
+export type IssueKind = "format" | "accuracy" | "writing" | "job";
 export interface FeedbackIssue {
   level: IssueLevel;
   code: string;
+  /** format = objective, mechanical checks; accuracy = figures not in your profile; writing = style opinions; job = job coverage */
+  kind?: IssueKind;
   message: string;
   /** Feedback uses the section *type*; block/bullet are indexes in that section. */
   where: { section: string; block?: number; bullet?: number } | null;
@@ -106,13 +132,14 @@ export interface Feedback {
   pages: number | null;
   issues: FeedbackIssue[];
   readiness: number;
+  score_method?: string;
   ats_safe_template: boolean;
   note: string;
 }
 
 export interface Suggestion {
   id: string;
-  kind: "rewrite" | "reorder" | "add_skill";
+  kind: "rewrite" | "reorder" | "add_skill" | "reorder_skills" | "reorder_entries";
   /** Suggestions use section/block/bullet *indexes* of the saved document. */
   where: { section: number; block: number; bullet?: number };
   before: string | null;
@@ -151,6 +178,15 @@ export const studioKeys = {
 
 export const useStudioTemplates = () =>
   useQuery({ queryKey: studioKeys.templates, queryFn: async () => (await api.get<StudioTemplate[]>("/studio/templates")).data, staleTime: 3_600_000 });
+
+/** Pages, page fill, layout warnings and fit suggestions for the saved revision. */
+export const useStudioLayout = (id: number, revision: number) =>
+  useQuery({
+    queryKey: ["studio", "layout", id, revision] as const,
+    queryFn: async () => (await api.get<LayoutReport>(`/studio/versions/${id}/layout`, { timeout: 60_000 })).data,
+    refetchOnWindowFocus: false,
+    staleTime: Infinity,
+  });
 
 export const useStudioVersions = (enabled = true) =>
   useQuery({ queryKey: studioKeys.versions, queryFn: async () => (await api.get<VersionSummary[]>("/studio/versions")).data, enabled });
@@ -287,8 +323,20 @@ export function applySuggestion(sections: Section[], s: Suggestion): { sections:
     });
     return { sections: replaceSection({ ...sec, blocks }) };
   }
+  if (s.kind === "reorder_entries") {
+    const order = s.order ?? [];
+    if (order.length !== sec.blocks.length || new Set(order).size !== order.length || order.some((i) => !sec.blocks[i])) return stale;
+    return { sections: replaceSection({ ...sec, blocks: order.map((i) => sec.blocks[i]) }) };
+  }
   const blk = sec.blocks[s.where.block];
   if (!blk) return stale;
+  if (s.kind === "reorder_skills") {
+    if (blk.type !== "skill_group") return stale;
+    const items = blk.content.items ?? [];
+    const order = s.order ?? [];
+    if (order.length !== items.length || new Set(order).size !== order.length || order.some((i) => items[i] == null)) return stale;
+    return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where.block ? ({ ...b, content: { ...blk.content, items: order.map((i) => items[i]) } } as Block) : b)) }) };
+  }
   if (s.kind === "rewrite") {
     const ui = s.where.bullet ?? -1;
     const bullet = blk.bullets[ui];

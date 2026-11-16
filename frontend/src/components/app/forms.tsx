@@ -21,7 +21,8 @@ export function ResumeUpload({ profile, onUploaded }: { profile?: ProfileRespons
   const [drag, setDrag] = useState(false);
   const pick = (file?: File) => {
     if (!file) return;
-    if (file.type && file.type !== "application/pdf") return toast.error("Please choose a PDF file.");
+    const okType = !file.type || file.type === "application/pdf" || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || /\.(pdf|docx)$/i.test(file.name);
+    if (!okType) return toast.error("Please choose a PDF or Word (.docx) file.");
     if (file.size > 5 * 1024 * 1024) return toast.error("The resume must be 5 MB or smaller.");
     upload.mutate(file, {
       onSuccess: () => { toast.success("Resume uploaded and parsed"); onUploaded?.(); },
@@ -35,8 +36,8 @@ export function ResumeUpload({ profile, onUploaded }: { profile?: ProfileRespons
              className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed p-10 text-center transition-colors ${drag ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}>
         {upload.isPending ? <Loader2 className="size-8 animate-spin text-primary" /> : <UploadCloud className="size-8 text-muted-foreground" />}
         <span className="font-medium">{upload.isPending ? "Uploading and parsing your resume…" : "Drop your resume PDF here or click to browse"}</span>
-        <span className="text-xs text-muted-foreground">PDF only · up to 5 MB · stored privately for your account</span>
-        <input type="file" accept="application/pdf,.pdf" className="sr-only" disabled={upload.isPending} onChange={(e) => pick(e.target.files?.[0])} />
+        <span className="text-xs text-muted-foreground">PDF or Word (.docx) · up to 5 MB · stored privately for your account</span>
+        <input type="file" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" disabled={upload.isPending} onChange={(e) => pick(e.target.files?.[0])} />
       </label>
       {profile?.resume && (
         <p className="text-sm text-muted-foreground">

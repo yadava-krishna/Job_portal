@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, ChevronDown, Copy, Download, FileText, Loader2, Lock, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChevronDown, Copy, Download, FileText, Loader2, Lock, Redo2, RefreshCw, Undo2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -22,6 +22,16 @@ import { AtsBadge, VersionStatusBadge } from "./parts";
 
 type SaveState = "idle" | "pending" | "saving" | "saved" | "error" | "conflict";
 const AUTOSAVE_MS = 1200;
+const HISTORY_LIMIT = 100;
+const COALESCE_MS = 800;  // keystrokes within this window are one undo step
+
+type Snapshot = Pick<Version, "name" | "template_key" | "settings" | "sections">;
+const snap = (v: Version): Snapshot => ({ name: v.name, template_key: v.template_key, settings: v.settings, sections: v.sections });
+/** Switching template resets the style choices to the new template's defaults (content is untouched). */
+const styleReset = (s: Version["settings"]) => {
+  const { font_family: _f, accent: _a, heading_style: _h, ...rest } = s ?? {};
+  return rest;
+};
 
 export function StudioEditor({ id }: { id: number }) {
   const query = useStudioVersion(id);
@@ -41,6 +51,10 @@ export function StudioEditor({ id }: { id: number }) {
   const [exporting, setExporting] = useState<"pdf" | "docx" | null>(null);
 
   const draftRef = useRef<Version | null>(null);
+  const past = useRef<Snapshot[]>([]);
+  const future = useRef<Snapshot[]>([]);
+  const lastPush = useRef<{ at: number; keys: string }>({ at: 0, keys: "" });
+  const [, setHistoryTick] = useState(0);
   const seqRef = useRef(0);
   const savedSeqRef = useRef(0);
   const revisionRef = useRef(0);
@@ -56,6 +70,9 @@ export function StudioEditor({ id }: { id: number }) {
     seqRef.current = 0;
     savedSeqRef.current = 0;
     blockedRef.current = false;
+    past.current = [];
+    future.current = [];
+    setHistoryTick((t) => t + 1);
     setDraft(next);
     setSavedRevision(v.revision);
     setSeq(0);
@@ -72,8 +89,24 @@ export function StudioEditor({ id }: { id: number }) {
 
   const readOnly = draft?.status === "locked";
 
+  const apply = (next: Version) => {
+    draftRef.current = next;
+    seqRef.current += 1;
+    setDraft(next);
+    setSeq(seqRef.current);
+    if (!blockedRef.current) setSaveState("pending");
+  };
+
   const update = (patch: Partial<Version>) => {
     if (!draftRef.current || readOnly) return;
+    const keys = Object.keys(patch).sort().join(",");
+    const now = Date.now();
+    if (now - lastPush.current.at > COALESCE_MS || keys !== lastPush.current.keys) {
+      past.current = [...past.current.slice(-(HISTORY_LIMIT - 1)), snap(draftRef.current)];
+    }
+    lastPush.current = { at: now, keys };
+    future.current = [];
+    setHistoryTick((t) => t + 1);
     const next = { ...draftRef.current, ...patch };
     draftRef.current = next;
     seqRef.current += 1;
@@ -146,6 +179,42 @@ export function StudioEditor({ id }: { id: number }) {
       });
     };
   }, [qc]);
+
+  const undo = useCallback(() => {
+    const d = draftRef.current;
+    const prev = past.current.at(-1);
+    if (!d || !prev || d.status === "locked") return;
+    past.current = past.current.slice(0, -1);
+    future.current = [...future.current, snap(d)];
+    lastPush.current = { at: 0, keys: "" };
+    setHistoryTick((t) => t + 1);
+    apply({ ...d, ...prev });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const redo = useCallback(() => {
+    const d = draftRef.current;
+    const nextSnap = future.current.at(-1);
+    if (!d || !nextSnap || d.status === "locked") return;
+    future.current = future.current.slice(0, -1);
+    past.current = [...past.current, snap(d)];
+    lastPush.current = { at: 0, keys: "" };
+    setHistoryTick((t) => t + 1);
+    apply({ ...d, ...nextSnap });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or Ctrl+Y redo. (Form fields are controlled, so the browser's own per-field undo
+  // would desynchronise from the document; the editor's history covers every change instead.)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [undo, redo]);
 
   const reload = async () => {
     const r = await query.refetch();
@@ -222,6 +291,12 @@ export function StudioEditor({ id }: { id: number }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {!readOnly && (
+            <div className="flex gap-1" role="group" aria-label="Undo and redo">
+              <Button size="icon-sm" variant="outline" aria-label="Undo (Ctrl+Z)" title="Undo (Ctrl+Z)" disabled={!past.current.length} onClick={undo}><Undo2 /></Button>
+              <Button size="icon-sm" variant="outline" aria-label="Redo (Ctrl+Shift+Z)" title="Redo (Ctrl+Shift+Z)" disabled={!future.current.length} onClick={redo}><Redo2 /></Button>
+            </div>
+          )}
           <Button size="sm" variant="outline" onClick={() => void makeCopy(draft)} disabled={clone.isPending}><Copy /> Make a copy</Button>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button size="sm" disabled={!!exporting} />}>
@@ -274,7 +349,7 @@ export function StudioEditor({ id }: { id: number }) {
             </TabsContent>
             <TabsContent value="design" className="pt-2">
               <DesignPanel templateKey={draft.template_key} settings={draft.settings ?? {}} readOnly={readOnly}
-                           onTemplate={(template_key) => update({ template_key })} onSettings={(settings) => update({ settings })} />
+                           onTemplate={(template_key) => update({ template_key, settings: styleReset(draft.settings) })} onSettings={(settings) => update({ settings })} />
             </TabsContent>
             <TabsContent value="check" className="pt-2">
               <CheckPanel versionId={draft.id} jobId={jobId} onJob={setJobId} revision={savedRevision} />
@@ -288,7 +363,8 @@ export function StudioEditor({ id }: { id: number }) {
           </Tabs>
         </div>
         <div className={cn("min-w-0 lg:sticky lg:top-4 lg:h-[calc(100dvh-8rem)] lg:self-start", mobileView !== "preview" && "hidden lg:block")}>
-          <PreviewPane versionId={draft.id} revision={savedRevision} templateName={templateName} />
+          <PreviewPane versionId={draft.id} revision={savedRevision} templateName={templateName} readOnly={readOnly}
+                       onApplySettings={(patch) => update({ settings: { ...(draftRef.current?.settings ?? {}), ...patch } })} />
         </div>
       </div>
     </>

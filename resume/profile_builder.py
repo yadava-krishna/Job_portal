@@ -134,13 +134,21 @@ def parse_experience(lines: list[str], today: date) -> tuple[list[dict[str, Any]
         if not header:
             warnings.append(f"Could not find a title/company line for the role dated '{lines[i].strip()}'.")
         title, company, confidence = split_role_header(header)
-        if confidence == "low":
-            warnings.append(f"Title and company could not be separated in '{header}'.")
         # Bullets run until the next role's header block (or its date line).
         stop = len(lines)
         if n + 1 < len(date_idx):
             nxt = date_idx[n + 1]
             stop = headers[nxt][0] if headers[nxt] else nxt
+        body_from = i + 1
+        # "Title / dates / Company" layout: the company is the plain line right under the dates.
+        if not company and body_from < stop:
+            below = lines[body_from].strip()
+            if below and not is_bullet(lines[body_from]) and len(below) <= 80 and not below.endswith((".", ";", ":")) \
+                    and not DATE_RANGE_RE.search(below):
+                company, confidence, body_from = below, "medium", body_from + 1
+                header = f"{header} | {below}"
+        if confidence == "low":
+            warnings.append(f"Title and company could not be separated in '{header}'.")
         roles.append(
             {
                 "title": title,
@@ -152,7 +160,7 @@ def parse_experience(lines: list[str], today: date) -> tuple[list[dict[str, Any]
                 "is_current": current,
                 "months": months_between(start, end),
                 "date_text": DATE_RANGE_RE.search(lines[i]).group(0),  # type: ignore[union-attr]
-                "bullets": join_bullets(lines[i + 1 : stop]),
+                "bullets": join_bullets(lines[body_from:stop]),
             }
         )
     if not roles:
@@ -218,6 +226,68 @@ def _looks_like_title(line: str) -> bool:
         bool(s) and s[0].isupper() and len(s) < 90 and not s.endswith((".", ","))
         and (bool(re.search(r"\s[—–|-]\s", s)) or "project" in s.lower())
     )
+
+
+_EMAIL = re.compile(r"[\w.+\-]+@[\w\-]+\.[\w.\-]+")
+_PHONE = re.compile(r"(?<![\w])(?:\+\d{1,3}[\s\-]?)?(?:\(?\d[\d\s\-()]{7,15}\d)(?![\w])")
+_URL = re.compile(r"(https?://|www\.|linkedin\.com|github\.com)", re.I)
+_LABEL = re.compile(r"^\s*(e-?mail|phone|mobile|contact|address|location|linkedin|github|portfolio|website)\s*[:\-]\s*", re.I)
+
+
+def parse_contact(header: list[str], contact_lines: list[str], text: str) -> dict[str, Any]:
+    """Name, e-mail, phone, location and headline from the top of the resume (and a sidebar contact block).
+
+    Lines and "|", "·", "•" separated pieces are classified one by one; nothing is guessed: a value that can't be
+    identified stays empty for the user to fill in on review.
+    """
+    pieces: list[str] = []
+    for ln in header[:8] + contact_lines[:12]:
+        for part in re.split(r"\s*(?:\||·|•|\u2022|\s{3,})\s*", ln):
+            part = _LABEL.sub("", part.strip()).strip()
+            if part:
+                pieces.append(part)
+    email = next((m.group(0) for p in pieces for m in [_EMAIL.search(p)] if m), None)
+    if email is None:
+        m = _EMAIL.search(text)
+        email = m.group(0) if m else None
+    phone = None
+    for p in pieces:
+        m = _PHONE.search(p)
+        if m and len(re.sub(r"\D", "", m.group(0))) >= 10 and not _EMAIL.search(p):
+            phone = " ".join(m.group(0).split())
+            break
+
+    def plain(p: str) -> bool:
+        return not (_EMAIL.search(p) or _URL.search(p) or (_PHONE.search(p) and len(re.sub(r"\D", "", p)) >= 8))
+
+    first = header[0].strip() if header else ""
+    first_piece = re.split(r"\s*(?:\||·|•)\s*", first)[0].strip() if first else ""
+    name = first_piece if first_piece and plain(first_piece) and len(first_piece.split()) <= 5 and \
+        re.fullmatch(r"[A-Za-z][A-Za-z .'\-]+", first_piece) else None
+    location = None
+    for p in pieces:
+        if p == name or not plain(p) or len(p) > 40 or any(ch.isdigit() for ch in p):
+            continue
+        if "," in p and all(w[:1].isupper() for w in re.findall(r"[A-Za-z]+", p) if len(w) > 2):
+            location = p
+            break
+    if location is None:  # a lone place name in a separated contact line ("… | Pune | …")
+        for ln in header[:4] + contact_lines[:12]:
+            parts = [x.strip() for x in re.split(r"\s*(?:\||·|•)\s*", ln) if x.strip()]
+            if len(parts) >= 2 or ln in contact_lines:
+                for x in parts:
+                    if x != name and plain(x) and re.fullmatch(r"[A-Z][a-z]+(?: [A-Z][a-z]+){0,2}", x):
+                        location = x
+                        break
+            if location:
+                break
+    headline = None
+    for ln in header[1:4]:
+        t = ln.strip()
+        if t and plain(t) and "|" not in t and t != location and len(t.split()) <= 12:
+            headline = t
+            break
+    return {"name": name, "email": email, "phone": phone, "location": location, "headline": headline}
 
 
 def extract_achievements(roles: list[dict[str, Any]], projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -352,22 +422,20 @@ class ResumeProfileExtractor:
 
         intervals = [(date.fromisoformat(r["start"] + "-01"), date.fromisoformat((r["end"] or today.strftime("%Y-%m")) + "-01")) for r in roles]
         header = doc.header_lines
-        contact_line = header[1] if len(header) > 1 else ""
-        email = re.search(r"[\w.+\-]+@[\w\-]+\.[\w.\-]+", doc.text)
-        phone = re.search(r"(?:\+?\d{1,3}[\s\-]?)?\d{10}\b|\+?\d[\d\s\-]{9,14}\d", contact_line)
+        contact = parse_contact(header, doc.sections.get("contact", []), doc.text)
 
         profile: dict[str, Any] = {
             "schema_version": PROFILE_SCHEMA_VERSION,
             "generated_at": timeutil.iso_now(),
             "resume": {"path": str(resume), "file_name": resume.name, "sha256": doc.sha256, "pages": doc.page_count, "parser": "pymupdf-rule-based"},
-            "name": header[0].strip() if header else self.default_name,
+            "name": contact["name"] or self.default_name,
             "configured_name": self.default_name,
             "contact": {
-                "email": email.group(0) if email else None,
-                "phone": phone.group(0).strip() if phone else None,
-                "location": contact_line.split("|")[0].strip() if "|" in contact_line else self.default_location,
+                "email": contact["email"],
+                "phone": contact["phone"],
+                "location": contact["location"] or self.default_location,
             },
-            "headline": header[2].strip() if len(header) > 2 else None,
+            "headline": contact["headline"],
             "summary": " ".join(l.strip() for l in doc.sections.get("summary", [])),
             "skills": skills,
             "skills_listed_on_resume": listed_skills + technical_skills,

@@ -80,7 +80,7 @@ def test_resume_studio_versions_exports_and_immutability(client, resume_bytes):
     h = onboard(client, "studio@example.com", resume_bytes)
     uj = import_job(client, h)["user_job_ids"][0]
     tpls = client.get(f"{API}/studio/templates", headers=h).json()
-    assert [t["key"] for t in tpls] == ["ats_simple", "modern_professional", "technical", "finance", "graduate", "international"]
+    assert [t["key"] for t in tpls] == ["ats_simple", "modern_professional", "technical", "finance", "graduate", "executive", "international"]
     v = client.post(f"{API}/studio/versions", headers=h, json={"name": "Base", "template_key": "ats_simple"}).json()
     types = [s["type"] for s in v["sections"]]
     assert types[0] == "header" and "experience" in types and "skills" in types

@@ -26,7 +26,8 @@ Click **Sign in** and enter your e-mail and password. You stay signed in on that
 
 JobPilot walks you through five short steps:
 
-1. **Upload your resume.** Choose your resume as a PDF file.
+1. **Upload your resume.** Choose your resume as a PDF or a Word (.docx) file. Two-column designs and Word tables
+   are read too. Scanned images can't be read: export a text PDF instead.
 2. **Check your details.** JobPilot reads your resume and fills in your profile: name, contact details, work
    history, education and skills. Correct anything that is wrong, and tick **current** next to your present job.
 3. **Choose what you are looking for.** Job titles, cities, remote or office work, type of job, experience and salary.
@@ -186,6 +187,63 @@ it, and keeps your JobPilot list up to date.
 - JobPilot never asks for your LinkedIn, Indeed or Naukri password and never logs in to those sites.
 - **Export your data**: In Settings → Account & connection, click **Export my data (JSON)** to download a complete copy of your resumes, profile, applications, notes, interviews, and offers.
 - **Delete your account**: In Settings → Account & connection, you can permanently delete your account and all associated data by entering your password.
+
+---
+
+## 8a. Resume Studio: making a resume
+
+Resume Studio builds a resume from your confirmed profile. You can edit it, change how it looks, and download it as
+PDF or Word.
+
+### Make one
+1. Open **Resume Studio** and click **New resume**. Pick a template:
+
+   | Template | Best for |
+   |---|---|
+   | **Classic ATS** | Online application forms. The safest choice. |
+   | **Modern Professional** | Sending straight to a person: section names in the margin and a colour accent. |
+   | **Technical Engineer** | Engineering, data and analytics roles. Skills and projects come first. |
+   | **Experienced Professional** | Long careers. A conservative serif design. |
+   | **Fresher / Graduate** | Students and early careers. Education and projects come first, aimed at one page. |
+   | **Executive** | Senior roles. A centred name, with achievements before experience. |
+   | **International (A4)** | Applications abroad. Adds a line for work permit or relocation. |
+2. Edit in the **Content** tab. Changes save on their own; the top bar says **Saved**.
+   - Drag the ⋮⋮ handle to reorder sections or entries, or use the arrow buttons.
+   - **Undo** and **Redo** are at the top, or press Ctrl+Z and Ctrl+Shift+Z.
+3. The **Preview** on the right is the real PDF.
+   - Above it you see how many pages you have and how full each one is.
+   - If the last page is nearly empty, JobPilot suggests a setting that fits everything on fewer pages. It changes
+     nothing unless you click **Apply**. It never removes your content.
+
+### Change the look (Design tab)
+- **Text:** font, size, line spacing and how dates appear (Jan 2024, 01/2024 or 2024).
+- **Page:** A4 or US Letter, margins and spacing between sections.
+- **Style:** heading style and accent colour.
+- **Limits that keep it readable:** ATS templates keep text at 9.5 pt or bigger, and colours too pale to read are not
+  used.
+- **Switching template keeps all your content.**
+
+### Check it (Check tab)
+- **Format** items are facts JobPilot can check, for example:
+  - a missing phone or email;
+  - a job that ends before it starts;
+  - the same entry or bullet used twice;
+  - emoji that application forms may drop;
+  - too many pages.
+
+  JobPilot also reads your downloaded PDF back to make sure every job and bullet can be found in it.
+- **Accuracy** items are numbers that aren't in your confirmed profile. Keep only what you can back up.
+- **Writing** items are style tips, not rules.
+- **The score** is JobPilot's own checklist. It is **not** an "ATS score": no such universal score exists.
+
+### Tailor it to a job (Suggestions tab)
+Pick a job. JobPilot can:
+- put the skills that job asks for first;
+- move your most relevant projects and bullets up;
+- add a skill the job asks for, if it is already in your profile.
+
+It never invents skills, numbers or experience. Nothing changes until you click **Accept**. To keep your main resume
+as it is, click **Make a copy** first.
 
 ---
 

@@ -16,7 +16,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="w-full max-w-md space-y-6">
         <div className="flex justify-center"><Brand /></div>
         {children}
-        <p className="text-center text-xs text-muted-foreground">You always submit applications yourself on the original job site.</p>
+        <p className="text-center text-xs text-muted-foreground">Nothing is ever submitted to an employer without your explicit click.</p>
       </div>
     </div>
   );

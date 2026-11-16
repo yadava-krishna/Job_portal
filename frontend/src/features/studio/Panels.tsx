@@ -9,13 +9,22 @@ import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   useStudioFeedback, useStudioSuggestions, useStudioTemplates, useStudioVersions,
-  type Density, type FeedbackIssue, type IssueLevel, type PageSize, type Section, type StudioSettings, type Suggestion, type TemplateKey, type Version, type VersionSummary,
+  type DateFormat, type FeedbackIssue, type IssueLevel, type HeadingStyle, type PageSize, type Section, type StudioSettings, type Suggestion, type TemplateKey, type Version, type VersionSummary,
 } from "./api";
 import { JobPicker, TemplatePicker, VersionStatusBadge } from "./parts";
 
 // ---------------- design: template + layout settings ----------------
 
 const FONT_SIZES = [9, 9.5, 10, 10.5, 11, 11.5, 12];
+const LINE_HEIGHTS = [1.15, 1.2, 1.25, 1.3, 1.4, 1.5];
+const MARGINS = [12, 13, 14, 16, 18, 20, 22];
+const SPACINGS: { value: number; label: string }[] = [
+  { value: 0.75, label: "Compact" }, { value: 0.9, label: "Snug" }, { value: 1, label: "Normal" }, { value: 1.25, label: "Relaxed" }, { value: 1.5, label: "Airy" },
+];
+const HEADING_LABELS: Record<HeadingStyle, string> = {
+  caps_rule: "Capitals with a line", accent: "Coloured", underline: "Capitals, coloured line", plain: "Plain bold", label_left: "In the left margin",
+};
+const ACCENTS = ["#111827", "#1e3a5f", "#1d4ed8", "#0f766e", "#6d28d9", "#7f1d1d", "#7c2d12"];
 
 export function DesignPanel({ templateKey, settings, readOnly, onTemplate, onSettings }: {
   templateKey: TemplateKey; settings: StudioSettings; readOnly: boolean;
@@ -23,31 +32,90 @@ export function DesignPanel({ templateKey, settings, readOnly, onTemplate, onSet
 }) {
   const templates = useStudioTemplates();
   const list = Array.isArray(templates.data) ? templates.data : [];
+  const tpl = list.find((t) => t.key === templateKey);
+  const d = tpl?.defaults ?? {};
+  const v = <K extends keyof StudioSettings>(k: K): StudioSettings[K] => (settings[k] ?? d[k]) as StudioSettings[K];
+  const set = (patch: Partial<StudioSettings>) => onSettings({ ...settings, ...patch });
+  const minSize = tpl?.ats_safe ? 9.5 : 9;
+  const nearest = (list: number[], x: number) => list.reduce((a, b) => (Math.abs(b - x) < Math.abs(a - x) ? b : a));
   return (
-    <fieldset disabled={readOnly} className="min-w-0 space-y-4">
+    <fieldset disabled={readOnly} className="min-w-0 space-y-5">
       <legend className="sr-only">Design</legend>
       <div className="space-y-1.5">
         <span className="text-sm font-medium">Template</span>
-        <p className="text-xs text-muted-foreground">Switching template keeps all your content.</p>
+        <p className="text-xs text-muted-foreground">Switching template keeps all your content. Fonts, colour and headings reset to the new template's defaults.</p>
         {templates.isLoading ? <Loader2 className="animate-spin" /> : <TemplatePicker templates={list} value={templateKey} onChange={onTemplate} disabled={readOnly} compact />}
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Font size" htmlFor="st-font">
-          <NativeSelect id="st-font" className="w-full" value={String(settings.font_size ?? 10.5)} onChange={(v) => onSettings({ ...settings, font_size: Number(v) })}
-                        options={FONT_SIZES.map((f) => ({ value: String(f), label: `${f} pt` }))} />
-        </Field>
-        <Field label="Spacing" htmlFor="st-density">
-          <NativeSelect id="st-density" className="w-full" value={settings.density ?? "normal"} onChange={(v) => onSettings({ ...settings, density: v as Density })}
-                        options={[{ value: "compact", label: "Compact" }, { value: "normal", label: "Normal" }, { value: "relaxed", label: "Relaxed" }]} />
-        </Field>
-        <Field label="Page size" htmlFor="st-page">
-          <NativeSelect id="st-page" className="w-full" value={settings.page_size ?? "A4"} onChange={(v) => onSettings({ ...settings, page_size: v as PageSize })}
-                        options={[{ value: "A4", label: "A4" }, { value: "LETTER", label: "US Letter" }]} />
-        </Field>
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Text</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Font" htmlFor="st-family" className="sm:col-span-3">
+            <NativeSelect id="st-family" className="w-full" value={String(v("font_family") ?? "")} onChange={(x) => set({ font_family: x })}
+                          options={(tpl?.fonts ?? []).map((f) => ({ value: f.key, label: f.label }))} />
+          </Field>
+          <Field label="Size" htmlFor="st-font">
+            <NativeSelect id="st-font" className="w-full" value={String(nearest(FONT_SIZES, Number(v("font_size") ?? 10.5)))} onChange={(x) => set({ font_size: Number(x) })}
+                          options={FONT_SIZES.filter((f) => f >= minSize).map((f) => ({ value: String(f), label: `${f} pt` }))} />
+          </Field>
+          <Field label="Line spacing" htmlFor="st-lh">
+            <NativeSelect id="st-lh" className="w-full" value={String(nearest(LINE_HEIGHTS, Number(v("line_height") ?? 1.3)))} onChange={(x) => set({ line_height: Number(x) })}
+                          options={LINE_HEIGHTS.map((f) => ({ value: String(f), label: f.toFixed(2) }))} />
+          </Field>
+          <Field label="Dates" htmlFor="st-date">
+            <NativeSelect id="st-date" className="w-full" value={String(v("date_format") ?? "MMM YYYY")} onChange={(x) => set({ date_format: x as DateFormat })}
+                          options={(tpl?.date_formats ?? ["MMM YYYY", "MM/YYYY", "YYYY"]).map((f) => ({ value: f, label: f === "MMM YYYY" ? "Jan 2024" : f === "MM/YYYY" ? "01/2024" : "2024" }))} />
+          </Field>
+        </div>
+        {tpl?.ats_safe && <p className="text-xs text-muted-foreground">ATS-friendly template: text stays at {minSize} pt or larger and fonts are limited to ones applicant-tracking systems read reliably.</p>}
       </div>
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Page</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Page size" htmlFor="st-page">
+            <NativeSelect id="st-page" className="w-full" value={String(v("page_size") ?? "A4")} onChange={(x) => set({ page_size: x as PageSize })}
+                          options={[{ value: "A4", label: "A4" }, { value: "LETTER", label: "US Letter" }]} />
+          </Field>
+          <Field label="Margins" htmlFor="st-margin">
+            <NativeSelect id="st-margin" className="w-full" value={String(nearest(MARGINS, Number(v("margin_mm") ?? 16)))} onChange={(x) => set({ margin_mm: Number(x) })}
+                          options={MARGINS.map((m) => ({ value: String(m), label: `${m} mm` }))} />
+          </Field>
+          <Field label="Section spacing" htmlFor="st-spacing">
+            <NativeSelect id="st-spacing" className="w-full" value={String(nearest(SPACINGS.map((x) => x.value), Number(v("section_spacing") ?? 1)))}
+                          onChange={(x) => set({ section_spacing: Number(x) })} options={SPACINGS.map((x) => ({ value: String(x.value), label: x.label }))} />
+          </Field>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium">Style</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Section headings" htmlFor="st-heading">
+            <NativeSelect id="st-heading" className="w-full" value={String(v("heading_style") ?? "caps_rule")} onChange={(x) => set({ heading_style: x as HeadingStyle })}
+                          options={(tpl?.heading_styles ?? ["caps_rule", "accent", "underline", "plain"]).map((h) => ({ value: h, label: HEADING_LABELS[h] }))} />
+          </Field>
+          <div className="space-y-1.5">
+            <span className="text-sm font-medium" id="st-accent-label">Accent colour</span>
+            <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-labelledby="st-accent-label">
+              {ACCENTS.map((c) => (
+                <button key={c} type="button" role="radio" aria-checked={v("accent") === c} aria-label={`Accent ${c}`} onClick={() => set({ accent: c })}
+                        className={cn("size-6 rounded-full border-2 border-background ring-1 ring-border", v("accent") === c && "ring-2 ring-primary")} style={{ background: c }} />
+              ))}
+              <input type="color" aria-label="Custom accent colour" value={String(v("accent") ?? "#111827")} onChange={(e) => set({ accent: e.target.value })}
+                     className="h-6 w-8 cursor-pointer rounded border bg-transparent" />
+            </div>
+            <p className="text-xs text-muted-foreground">Colours too light to read on white are not used.</p>
+          </div>
+        </div>
+        <Button size="xs" variant="ghost" onClick={() => onSettings({ page_size: settings.page_size, mobility_line: settings.mobility_line })}>
+          <RotateCcw /> Reset to template defaults
+        </Button>
+      </div>
+
       {templateKey === "international" && (
         <Field label="Work authorisation / relocation line (optional)" htmlFor="st-mobility" hint="Shown under your contact details, e.g. “EU Blue Card eligible · open to relocate to Germany”. Only add what is true.">
-          <Input id="st-mobility" maxLength={200} value={settings.mobility_line ?? ""} onChange={(e) => onSettings({ ...settings, mobility_line: e.target.value })} />
+          <Input id="st-mobility" maxLength={200} value={settings.mobility_line ?? ""} onChange={(e) => set({ mobility_line: e.target.value })} />
         </Field>
       )}
     </fieldset>
@@ -55,6 +123,13 @@ export function DesignPanel({ templateKey, settings, readOnly, onTemplate, onSet
 }
 
 // ---------------- check (feedback) ----------------
+
+const KIND_HELP: Record<string, string> = {
+  format: "Objective check: contact details, dates, duplicates, characters, page layout and whether the exported PDF reads back correctly.",
+  accuracy: "A figure that isn't in your confirmed profile. Keep only what you can back up.",
+  writing: "Style advice. A matter of judgement, not a rule.",
+  job: "How this resume covers the selected job's listed skills.",
+};
 
 const levelMeta: Record<IssueLevel, { label: string; icon: ReactNode; cls: string }> = {
   error: { label: "Must fix", icon: <AlertCircle className="size-4 text-rose-600" />, cls: "text-rose-700 dark:text-rose-300" },
@@ -98,7 +173,7 @@ export function CheckPanel({ versionId, jobId, onJob, revision }: { versionId: n
                   <div className="text-xs text-muted-foreground">Checklist score</div>
                 </div>
                 <p className="max-w-sm flex-1 text-xs text-muted-foreground">
-                  How many of these layout and wording checks pass. It is not a prediction of whether you'll be shortlisted or hired.
+                  {fb.data.score_method ?? "How many of these layout and wording checks pass."} It is not a prediction of whether you'll be shortlisted or hired.
                 </p>
                 <div className="text-sm">{fb.data.pages != null ? `${fb.data.pages} page${fb.data.pages === 1 ? "" : "s"}` : "Pages unknown"}</div>
               </div>
@@ -112,6 +187,10 @@ export function CheckPanel({ versionId, jobId, onJob, revision }: { versionId: n
                       <ul className="divide-y rounded-lg border">
                         {group.map((i, n) => (
                           <li key={`${i.code}-${n}`} className="p-2 text-sm">
+                            {i.kind && <span className={cn("mr-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                              i.kind === "format" ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" : i.kind === "accuracy" ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200"
+                                : i.kind === "job" ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200" : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200")}
+                              title={KIND_HELP[i.kind]}>{i.kind === "format" ? "Format" : i.kind === "accuracy" ? "Accuracy" : i.kind === "job" ? "Job" : "Writing"}</span>}
                             {i.message}
                             {whereLabel(i.where) && <span className="ml-1 text-xs text-muted-foreground">({whereLabel(i.where)})</span>}
                           </li>
@@ -133,7 +212,7 @@ export function CheckPanel({ versionId, jobId, onJob, revision }: { versionId: n
 function suggestionTarget(s: Suggestion, sections: Section[]): string {
   const sec = sections[s.where.section];
   if (!sec) return "";
-  if (s.kind === "add_skill") return sec.heading;
+  if (s.kind === "add_skill" || s.kind === "reorder_entries") return sec.heading;
   const b = sec.blocks[s.where.block];
   const title = b?.type === "entry" ? [b.content.title, b.content.organization].filter(Boolean).join(" — ") : "";
   return [sec.heading, title, s.where.bullet != null ? `bullet ${s.where.bullet + 1}` : ""].filter(Boolean).join(" · ");
@@ -165,7 +244,7 @@ export function SuggestionsPanel({ versionId, jobId, onJob, sections, readOnly, 
                 {list.map((s) => (
                   <li key={s.id} className="rounded-lg border p-2.5 text-sm" aria-label={`Suggestion: ${s.reason}`}>
                     <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="font-medium">{s.kind === "rewrite" ? "Reword" : s.kind === "reorder" ? "Reorder bullets" : "Add skill"}</span>
+                      <span className="font-medium">{s.kind === "rewrite" ? "Reword" : s.kind === "reorder" ? "Reorder bullets" : s.kind === "reorder_skills" ? "Reorder skills" : s.kind === "reorder_entries" ? "Reorder projects" : "Add skill"}</span>
                       <span className="text-muted-foreground">{suggestionTarget(s, sections)}</span>
                       <span className={cn("ml-auto rounded px-1.5 py-0.5 text-[11px] font-medium",
                         s.evidence === "supported" ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200" : "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200")}>
@@ -185,6 +264,12 @@ export function SuggestionsPanel({ versionId, jobId, onJob, sections, readOnly, 
                       return top ? <p className="text-xs">Move to the top: <span className="italic">“{top}”</span></p> : null;
                     })()}
                     {s.kind === "add_skill" && <p>Add <span className="font-medium">{s.skill ?? s.after}</span> to your skills.</p>}
+                    {s.kind === "reorder_skills" && <p className="text-xs">New order: <span className="font-medium">{s.after}</span>{(s.order?.length ?? 0) > 6 ? "…" : ""}</p>}
+                    {s.kind === "reorder_entries" && (() => {
+                      const b = sections[s.where.section]?.blocks[s.order?.[0] ?? -1];
+                      const t = b?.type === "entry" ? b.content.title : null;
+                      return t ? <p className="text-xs">Move to the top: <span className="font-medium">{t}</span></p> : null;
+                    })()}
                     <p className="mt-1.5 text-xs text-muted-foreground">{s.reason}</p>
                     <div className="mt-2 flex justify-end gap-1.5">
                       <Button size="xs" variant="ghost" onClick={() => done(s.id)}><X /> Dismiss</Button>

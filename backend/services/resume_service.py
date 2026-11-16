@@ -33,12 +33,40 @@ def taxonomy(settings: BackendSettings) -> SkillTaxonomy:
     return SkillTaxonomy.from_file(PROJECT_ROOT / "config" / "skills_taxonomy.yaml")
 
 
-def safe_display_name(name: str | None) -> str:
-    base = os.path.basename((name or "resume.pdf").replace("\\", "/"))
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+MEDIA = {".pdf": "application/pdf", ".docx": DOCX_MIME}
+
+
+def safe_display_name(name: str | None, ext: str = ".pdf") -> str:
+    base = os.path.basename((name or f"resume{ext}").replace("\\", "/"))
     base = re.sub(r"[^A-Za-z0-9._ ()\-]+", "_", base).strip(" ._") or "resume"
-    if not base.lower().endswith(".pdf"):
-        base += ".pdf"
-    return base[:120]
+    stem = base[: -len(ext)] if base.lower().endswith(ext) else re.sub(r"\.(pdf|docx?)$", "", base, flags=re.I)
+    return (stem[: 120 - len(ext)] or "resume") + ext
+
+
+def media_type(path: str | Path) -> str:
+    return MEDIA.get(Path(path).suffix.lower(), "application/pdf")
+
+
+def _check_docx(data: bytes) -> int:
+    """A real Word .docx (no macros, no zip bomb). Returns the page count Word saved, or 1."""
+    import io
+    import zipfile
+
+    try:
+        z = zipfile.ZipFile(io.BytesIO(data))
+        infos = z.infolist()
+    except zipfile.BadZipFile:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "The file is not a valid Word document.") from None
+    names = {i.filename for i in infos}
+    if "word/document.xml" not in names:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "The file is not a Word .docx document.")
+    if any(n.lower().endswith("vbaproject.bin") for n in names):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Documents with macros are not accepted. Save it as a plain .docx.")
+    if len(infos) > 2000 or sum(i.file_size for i in infos) > 60 * 1024 * 1024:
+        raise HTTPException(422, "The Word document is too large once unpacked.")
+    m = re.search(rb"<Pages>(\d+)</Pages>", z.read("docProps/app.xml")) if "docProps/app.xml" in names else None
+    return max(1, int(m.group(1))) if m else 1
 
 
 def get_or_create_profile(db: Session, user: User) -> CandidateProfile:
@@ -56,29 +84,36 @@ async def store_upload(db: Session, settings: BackendSettings, user: User, uploa
     data = await upload.read(limit + 1)
     if len(data) > limit:
         raise HTTPException(413, f"Resume must be {settings.max_upload_mb} MB or smaller.")
-    if len(data) < 200 or not data.startswith(b"%PDF-"):
-        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Only PDF resumes are accepted (the file is not a valid PDF).")
-    if upload.content_type not in (None, "", "application/pdf", "application/x-pdf", "application/octet-stream"):
-        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Only PDF resumes are accepted.")
+    is_pdf = data.startswith(b"%PDF-")
+    is_docx = data.startswith(b"PK\x03\x04")
+    if len(data) < 200 or not (is_pdf or is_docx):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Upload a PDF or a Word (.docx) resume.")
+    allowed = ("application/pdf", "application/x-pdf") if is_pdf else (DOCX_MIME, "application/zip")
+    if upload.content_type not in (None, "", "application/octet-stream", *allowed):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Upload a PDF or a Word (.docx) resume.")
 
-    import pymupdf
+    if is_docx:
+        pages = _check_docx(data)
+    else:
+        import pymupdf
 
-    try:
-        doc = pymupdf.open(stream=data, filetype="pdf")
-    except Exception:
-        raise HTTPException(422, "The PDF is damaged or cannot be opened.") from None
-    try:
-        if doc.needs_pass:
-            raise HTTPException(422, "The PDF is password-protected. Upload an unprotected copy.")
-        pages = doc.page_count
-    finally:
-        doc.close()
+        try:
+            doc = pymupdf.open(stream=data, filetype="pdf")
+        except Exception:
+            raise HTTPException(422, "The PDF is damaged or cannot be opened.") from None
+        try:
+            if doc.needs_pass:
+                raise HTTPException(422, "The PDF is password-protected. Upload an unprotected copy.")
+            pages = doc.page_count
+        finally:
+            doc.close()
     if pages < 1 or pages > MAX_PAGES:
         raise HTTPException(422, f"The resume must have between 1 and {MAX_PAGES} pages.")
 
+    ext = ".docx" if is_docx else ".pdf"
     folder = settings.user_dir(user.id, "resumes")
     folder.mkdir(parents=True, exist_ok=True)
-    target = folder / f"{uuid.uuid4().hex}.pdf"  # server-chosen name: no client path ever reaches the filesystem
+    target = folder / f"{uuid.uuid4().hex}{ext}"  # server-chosen name: no client path ever reaches the filesystem
     tmp = target.with_suffix(".part")
     tmp.write_bytes(data)
     os.replace(tmp, target)
@@ -89,7 +124,7 @@ async def store_upload(db: Session, settings: BackendSettings, user: User, uploa
     make_default = make_default or active_resume(db, user) is None  # the first resume is always the default
     if make_default:
         db.execute(update(Resume).where(Resume.user_id == user.id).values(is_active=False))
-    resume = Resume(user_id=user.id, original_filename=safe_display_name(name or upload.filename), stored_path=str(target),
+    resume = Resume(user_id=user.id, original_filename=safe_display_name(name or upload.filename, ext), stored_path=str(target),
                     sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data), page_count=pages, is_active=make_default)
     db.add(resume)
     db.flush()
@@ -132,7 +167,7 @@ def set_default(db: Session, user: User, r: Resume) -> Resume:
 
 
 def rename(db: Session, r: Resume, name: str) -> Resume:
-    r.original_filename = safe_display_name(name if name.lower().endswith(".pdf") else f"{name}.pdf")
+    r.original_filename = safe_display_name(name, Path(r.stored_path).suffix.lower() or ".pdf")
     db.commit()
     db.refresh(r)
     return r

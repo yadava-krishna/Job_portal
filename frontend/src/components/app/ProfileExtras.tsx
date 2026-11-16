@@ -44,14 +44,14 @@ export function ResumeVersions() {
             </div>
             <div className="flex items-center gap-1">
               {r.is_active ? <Badge>Default</Badge> : <Button size="sm" variant="outline" onClick={() => run({ kind: "default", id: r.id }, "Default resume changed")}><Star /> Make default</Button>}
-              <Button size="icon-sm" variant="ghost" aria-label="Preview" onClick={() => previewFile(`/profile/resumes/${r.id}/file?inline=true`).catch((e) => toast.error(errorMessage(e)))}><Eye /></Button>
+              {r.original_filename.toLowerCase().endsWith(".pdf") && <Button size="icon-sm" variant="ghost" aria-label="Preview" onClick={() => previewFile(`/profile/resumes/${r.id}/file?inline=true`).catch((e) => toast.error(errorMessage(e)))}><Eye /></Button>}
               <Button size="icon-sm" variant="ghost" aria-label="Download" onClick={() => downloadFile(`/profile/resumes/${r.id}/file`, r.original_filename).catch((e) => toast.error(errorMessage(e)))}><Download /></Button>
               {!r.is_active && <Button size="icon-sm" variant="ghost" aria-label="Delete" onClick={() => run({ kind: "delete", id: r.id }, "Deleted")}><Trash2 /></Button>}
             </div>
           </div>
         ))}
         <div className="flex flex-wrap items-center gap-3">
-          <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="sr-only" aria-label="Add a resume version"
+          <input ref={fileRef} type="file" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" aria-label="Add a resume version"
                  onChange={(e) => { const f = e.target.files?.[0]; if (f) run({ kind: "upload", file: f, makeDefault }, makeDefault ? "Uploaded. Review your profile below." : "Added"); e.target.value = ""; }} />
           <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={act.isPending}>{act.isPending ? <Loader2 className="animate-spin" /> : <UploadCloud />} Add a version</Button>
           <label className="flex items-center gap-2 text-sm"><Switch checked={makeDefault} onCheckedChange={(c) => setMakeDefault(!!c)} /> Make it the default (and re-read it into the profile for review)</label>

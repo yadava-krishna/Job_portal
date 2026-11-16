@@ -124,4 +124,41 @@ describe("resume studio editor", () => {
     expect(bullet).not.toHaveProperty("_k");
     expect(await screen.findByText("Saved")).toBeInTheDocument();
   });
+
+  it("undo and redo step through edits, from the buttons and the keyboard", async () => {
+    routeGets({ "/studio/versions/1": version(), "/studio/versions": [] });
+    api.put.mockImplementation(async (_url: string, body: { revision: number }) => ({ data: { ...version(), revision: body.revision + 1 } }));
+    renderAt("/studio/1");
+    const title = await screen.findByLabelText("Job title");
+    const undo = screen.getByRole("button", { name: /Undo/ });
+    const redo = screen.getByRole("button", { name: /Redo/ });
+    expect(undo).toBeDisabled();
+    fireEvent.change(title, { target: { value: "AR Lead" } });
+    expect(title).toHaveValue("AR Lead");
+    fireEvent.click(undo);
+    expect(screen.getByLabelText("Job title")).toHaveValue("AR Executive");
+    expect(redo).toBeEnabled();
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(screen.getByLabelText("Job title")).toHaveValue("AR Lead");
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    expect(screen.getByLabelText("Job title")).toHaveValue("AR Executive");
+  });
+
+  it("shows page count and layout warnings, and applies a fit suggestion only when clicked", async () => {
+    const layout = { pages: 3, page_fill: [0.97, 0.95, 0.08], settings: {},
+                     warnings: [{ level: "warning", message: "The last page is only about 8% full." }],
+                     fit_suggestions: [{ label: "Tighter spacing", settings: { section_spacing: 0.8, line_height: 1.2 }, pages: 2 }] };
+    routeGets({ "/studio/versions/1": version(), "/studio/versions": [], "/studio/versions/1/layout": layout });
+    api.put.mockImplementation(async (_url: string, body: { revision: number }) => ({ data: { ...version(), revision: body.revision + 1 } }));
+    renderAt("/studio/1");
+    expect(await screen.findByText("3 pages")).toBeInTheDocument();
+    expect(screen.getByText(/last page is only about 8% full/)).toBeInTheDocument();
+    expect(screen.getByText(/fits it on 2 pages without removing anything/)).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Apply/ }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    const body = api.put.mock.calls[0][1] as { settings: Record<string, number>; sections: Section[] };
+    expect(body.settings).toMatchObject({ section_spacing: 0.8, line_height: 1.2, font_size: 10.5 });
+    expect(body.sections[1].blocks[0].bullets).toHaveLength(1);  // content untouched
+  });
 });

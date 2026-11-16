@@ -12,4 +12,6 @@ email-validator>=2.2
 scrapling[fetchers]==0.5.1
 python-docx>=1.2.0
 reportlab>=4.0.0
+# Resume Studio PDF rendering (HTML/CSS print engine); needs Pango and the fonts installed in backend/Dockerfile
+weasyprint==66.0
 

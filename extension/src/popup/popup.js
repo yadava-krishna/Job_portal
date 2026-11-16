@@ -128,7 +128,10 @@ function missingCard(missing) {
 function resumeOptions(resumes) {
   const opts = [];
   for (const r of resumes) {
-    if (r.kind === "upload") opts.push({ value: `upload:${r.id}:pdf`, label: `${r.name}${r.active ? " (default)" : ""} · uploaded PDF` });
+    if (r.kind === "upload") {
+      const f = r.formats?.[0] || "pdf";
+      opts.push({ value: `upload:${r.id}:${f}`, label: `${r.name}${r.active ? " (default)" : ""} · uploaded ${f === "docx" ? "Word" : "PDF"}` });
+    }
     else for (const f of r.formats) opts.push({ value: `studio:${r.id}:${f}`, label: `${r.name} · Resume Studio ${f.toUpperCase()}` });
   }
   return opts;

@@ -122,8 +122,10 @@ def delete_resume(resume_id: int, user: CurrentUser, db: DbSession, settings: Se
 def resume_file(resume_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep,
                 inline: bool = Query(False, description="true to preview in the browser")) -> FileResponse:
     r = resume_service.owned_resume(db, user, resume_id)
-    return FileResponse(resume_service.resume_file(settings, user, r), media_type="application/pdf", filename=r.original_filename,
-                        content_disposition_type="inline" if inline else "attachment",
+    path = resume_service.resume_file(settings, user, r)
+    is_pdf = resume_service.media_type(path) == "application/pdf"
+    return FileResponse(path, media_type=resume_service.media_type(path), filename=r.original_filename,
+                        content_disposition_type="inline" if inline and is_pdf else "attachment",
                         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
@@ -135,7 +137,7 @@ def download_resume(user: CurrentUser, db: DbSession, settings: SettingsDep) -> 
     path = Path(resume.stored_path).resolve()
     if settings.user_dir(user.id).resolve() not in path.parents or not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume file is missing.")
-    return FileResponse(path, media_type="application/pdf", filename=resume.original_filename,
+    return FileResponse(path, media_type=resume_service.media_type(path), filename=resume.original_filename,
                         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
