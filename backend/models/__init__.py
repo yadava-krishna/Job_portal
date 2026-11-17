@@ -861,3 +861,4 @@ from backend.models.career import *  # noqa: E402,F401,F403  (career graph table
 from backend.models.career import CAREER_USER_OWNED  # noqa: E402
 
 USER_OWNED_MODELS = USER_OWNED_MODELS + CAREER_USER_OWNED
+from backend.models.catalogue import CataloguePosting, CrawlRawItem, CrawlResult, CrawlResultItem, CrawlState, IndexOutbox  # noqa: E402,F401  (JPSE, migrations 0012-0013)

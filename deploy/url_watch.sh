@@ -14,8 +14,14 @@ exec 9>.deploy/url_watch.lock
 flock -n 9 || exit 0
 set -a; [ -f .env ] && . ./.env; set +a
 INSPECT=${NGROK_INSPECT_PORT:-4041}
+CF_METRICS=${CLOUDFLARED_METRICS_PORT:-2001}
 for i in $(seq 1 30); do  # at boot, give Docker time to bring the tunnel up
-  public=$(curl -fsS "http://127.0.0.1:${INSPECT}/api/tunnels" 2>/dev/null | python3 -c "import sys,json; t=[x['public_url'] for x in json.load(sys.stdin).get('tunnels',[]) if x['public_url'].startswith('https://')]; print(t[0] if t else '')" 2>/dev/null || true)
+  # A Cloudflare quick tunnel (profile "quicktunnel") wins when it runs: it was started because ngrok's free monthly
+  # limit ran out (ERR_NGROK_727, 2026-11-17). Otherwise the ngrok tunnel's address is used.
+  # With a fixed ngrok address (NGROK_DOMAIN in .env) ngrok is always the one published.
+  public=""
+  [ -z "${NGROK_DOMAIN:-}" ] && public=$(curl -fsS -m 3 "http://127.0.0.1:${CF_METRICS}/quicktunnel" 2>/dev/null | python3 -c "import sys,json; h=json.load(sys.stdin).get('hostname'); print('https://'+h if h else '')" 2>/dev/null || true)
+  [ -z "$public" ] && public=$(curl -fsS "http://127.0.0.1:${INSPECT}/api/tunnels" 2>/dev/null | python3 -c "import sys,json; t=[x['public_url'] for x in json.load(sys.stdin).get('tunnels',[]) if x['public_url'].startswith('https://')]; print(t[0] if t else '')" 2>/dev/null || true)
   [ -n "$public" ] && break
   [ "${1:-}" = "--boot" ] || exit 0  # not at boot: tunnel down (stopped on purpose?) → nothing to do
   sleep 10

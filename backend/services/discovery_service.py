@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import tempfile
-from datetime import date
+from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Iterable
@@ -173,6 +173,10 @@ def reap_expired_jobs(db: Session, max_age_days: int = 45) -> int:
     return count
 
 
+def _aware(dt: datetime | None) -> datetime | None:
+    return dt.replace(tzinfo=timezone.utc) if dt is not None and dt.tzinfo is None else dt
+
+
 def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
     """Insert a public listing, or merge it into the job it duplicates. Returns (job, created)."""
     now = utcnow()
@@ -206,8 +210,11 @@ def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
         job.is_expired = True  # past the closing date the source itself published
     _fit_columns(job)
     if nj.source in ATS_SOURCES or nj.source in FEED_SOURCES:
-        # Listed on the employer's board, or in an official feed's current listings, right now.
-        job.last_verified_at = now
+        # Listed on the employer's board, or in an official feed's current listings: right now, or (served from the
+        # crawl catalogue) when the crawler last saw it. Never moved backwards.
+        seen = _aware(nj.observed_at) or now
+        if job.last_verified_at is None or _aware(job.last_verified_at) < seen:
+            job.last_verified_at = seen
         if nj.source in ATS_SOURCES:
             job.closed_at = None
     from backend.services.career_service import infer_seniority, sponsorship_signal
@@ -224,7 +231,7 @@ def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
         _fit_columns(link)
         db.add(link)
     else:
-        link.last_seen_at, link.url = now, nj.job_url or link.url
+        link.last_seen_at, link.url = _aware(nj.observed_at) or now, nj.job_url or link.url
     db.flush()
     return job, created
 

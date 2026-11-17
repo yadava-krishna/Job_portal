@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from datetime import date, timedelta
 from typing import Literal
 
@@ -20,6 +22,7 @@ from core.models import MatchResult
 from intelligence.jd_analyzer import JDAnalyzer
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+log = logging.getLogger(__name__)
 VERIFIED = discovery_service.VERIFIED_DATE_SOURCES
 
 
@@ -41,7 +44,13 @@ def _discover_bg(settings, user_id: int, run_id: int, sources: list[str] | None)
             if sources:
                 discovery_service.run_discovery(db, settings, user, sources, run=run)
             else:
-                saved_search_service.run_all(db, settings, user, run)
+                saved_search_service.run_all(db, settings, user, run)  # answers from the crawl catalogue
+                try:  # then re-check this user's boards in the background; anything new arrives by percolation
+                    from backend.services.crawler import service as crawler
+                    crawler.refresh_for_user(db, settings, user.id)
+                except Exception:
+                    log.exception("post-Discover refresh for user %s failed", user_id)
+                    db.rollback()
     finally:
         db.close()
 

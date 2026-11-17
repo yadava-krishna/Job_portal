@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import replace
-from datetime import timedelta
+from datetime import timedelta, timezone
 from typing import Iterable
 
 from fastapi import HTTPException, status
@@ -13,11 +13,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
-from backend.models import CandidateProfile, Company, DiscoveryRun, SavedSearch, User, UserCompany, utcnow
+from backend.models import CandidateProfile, Company, CrawlState, DiscoveryRun, SavedSearch, User, UserCompany, utcnow
 from backend.schemas.discovery import SavedSearchIn, SavedSearchOut, SearchCriteria
 from backend.services import discovery_service, preference_service, resume_service, source_registry
 from backend.services.adzuna import AdzunaClient, AdzunaError
 from backend.services.ats import AtsError, smartrecruiters
+from backend.services.ats.base import BoardResult
+from backend.services.crawler import catalogue
+from backend.services.crawler import service as crawler
 from backend.services.company_service import curated, get_or_create, refresh_board
 from backend.services.normalization import (
     ATS_SOURCES,
@@ -224,7 +227,7 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
             seen_boards.add(company.id)
             discovery_service.source_result(run, company.ats)
             try:
-                result = refresh_board(db, company)
+                result, posting_ids = _board_source(db, company)
             except AtsError as exc:
                 kind = "BOARD_NOT_FOUND" if exc.kind == "not_found" else "BOARD_FETCH_FAILED"
                 discovery_service._error(db, user, run, kind, f"{company.name} ({company.ats}): {exc}", platform=company.ats.title(),
@@ -236,12 +239,14 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
             discovery_service.source_result(run, company.ats, boards_ok=1, listings_checked=len(result.jobs))
         if result is None:  # already fetched for another search in this run
             try:
-                result = refresh_board(db, company)
+                result, posting_ids = _board_source(db, company)
             except AtsError:
                 continue
-        for nj in result.jobs:
-            if not crit.title_ok(nj.title) or not crit.location_ok(nj):
-                continue
+        kept = [(posting_ids[i] if posting_ids else None, nj) for i, nj in enumerate(result.jobs)
+                if crit.title_ok(nj.title) and crit.location_ok(nj)]
+        # Catalogue boards come without descriptions; load them only for the postings this search kept.
+        kept_jobs = catalogue.with_descriptions(db, kept) if posting_ids else [nj for _, nj in kept]
+        for nj in kept_jobs:
             nj = _copy(nj, company)
             smartrecruiters.complete(nj, company.board_token)  # full job ad, fetched only for postings this search kept
             enrich(nj, analyzer)
@@ -269,6 +274,40 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
         discovery_service.source_result(run, ats, status=status_, message=msg)
     db.commit()
     return items[:MAX_JOBS_PER_RUN]
+
+
+CATALOGUE_MAX_AGE = timedelta(hours=24)
+
+
+def _catalogue_state(db: Session, key: str) -> CrawlState | None:
+    return db.execute(select(CrawlState).where(CrawlState.target_key == key)).scalar_one_or_none()
+
+
+def _fresh(state: CrawlState | None) -> bool:
+    seen = state.last_success_at if state is not None else None
+    if seen is None:
+        return False
+    seen = seen.replace(tzinfo=timezone.utc) if seen.tzinfo is None else seen
+    return utcnow() - seen <= CATALOGUE_MAX_AGE
+
+
+def _board_source(db: Session, company: Company) -> tuple[BoardResult, list[int] | None]:
+    """A board's listings for a saved-search run: from the crawl catalogue when the background crawler has a recent
+    complete snapshot (no network wait), otherwise fetched live as before and stored, so the next run is offline.
+    Returns (result, catalogue posting ids or None for a live result)."""
+    state = _catalogue_state(db, crawler.board_key(company))
+    if _fresh(state):
+        return catalogue.board_result(db, state, company)
+    if state is not None and state.last_status == "not_found" and state.last_success_at is None:
+        raise AtsError("not_found", "Job board not found (the company may have moved or renamed its board).")
+    result = refresh_board(db, company)
+    if state is not None:
+        try:
+            crawler.store_live(db, state, [replace(nj) for nj in result.jobs])
+        except Exception:  # the catalogue is an accelerator; a failure here must not fail the run
+            log.exception("storing %s in the catalogue failed", company.board_token)
+            db.rollback()
+    return result, None
 
 
 def _plural(n: int, word: str) -> str:
@@ -350,8 +389,18 @@ def _feed_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, anal
         if sid not in cache:
             discovery_service.progress(db, run, f"Reading the {discovery_service.SOURCE_LABELS.get(sid, sid)} remote-jobs feed…")
             discovery_service.source_result(run, sid)
+            state = _catalogue_state(db, crawler.feed_key(sid))
             try:
-                jobs, err = _fetch_feed(sid)
+                if _fresh(state):
+                    jobs, err = catalogue.feed_jobs(db, state), None  # crawled in the background: no network wait
+                else:
+                    jobs, err = _fetch_feed(sid)
+                    if not err and state is not None:
+                        try:
+                            crawler.store_live(db, state, [replace(nj) for nj in jobs])
+                        except Exception:
+                            log.exception("storing feed %s in the catalogue failed", sid)
+                            db.rollback()
             except Exception as exc:  # one feed failing must not stop the others
                 jobs, err = [], f"{type(exc).__name__}: {exc}"
             cache[sid] = jobs

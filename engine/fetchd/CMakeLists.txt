@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.20)
+project(jp_fetchd C)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+option(JPF_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(CURL REQUIRED libcurl>=7.85)
+pkg_check_modules(PQ REQUIRED libpq)
+pkg_check_modules(YYJSON REQUIRED yyjson)
+pkg_check_modules(XXHASH REQUIRED libxxhash)
+
+set(HARDEN -Wall -Wextra -Wformat=2 -Wshadow -Wvla -Werror=implicit-function-declaration -fstack-protector-strong
+           -fstack-clash-protection -D_FORTIFY_SOURCE=3 -fPIE)
+if(JPF_SANITIZE)
+  set(SAN -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
+  string(REPLACE "-D_FORTIFY_SOURCE=3" "" HARDEN "${HARDEN}")
+endif()
+
+add_library(jpfcore STATIC src/policy.c src/hashmap.c src/split.c)
+target_include_directories(jpfcore PUBLIC src ${YYJSON_INCLUDE_DIRS} ${XXHASH_INCLUDE_DIRS})
+target_compile_options(jpfcore PRIVATE -O2 ${HARDEN} ${SAN})
+target_link_libraries(jpfcore PUBLIC ${YYJSON_LIBRARIES} ${XXHASH_LIBRARIES} ${SAN})
+
+add_executable(jp-fetchd src/main.c src/fetch.c src/db.c)
+target_include_directories(jp-fetchd PRIVATE ${CURL_INCLUDE_DIRS} ${PQ_INCLUDE_DIRS})
+target_compile_options(jp-fetchd PRIVATE -O2 ${HARDEN} ${SAN})
+target_link_options(jp-fetchd PRIVATE -pie -Wl,-z,relro,-z,now ${SAN})
+target_link_libraries(jp-fetchd PRIVATE jpfcore ${CURL_LIBRARIES} ${PQ_LIBRARIES})
+
+enable_testing()
+add_executable(test_core tests/test_core.c)
+target_compile_options(test_core PRIVATE -O1 -g ${SAN})
+target_link_options(test_core PRIVATE ${SAN})
+target_link_libraries(test_core PRIVATE jpfcore)
+add_test(NAME core COMMAND test_core)

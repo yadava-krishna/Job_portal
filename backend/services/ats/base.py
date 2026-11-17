@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -24,7 +26,8 @@ transport_override: httpx.BaseTransport | None = None
 
 
 class AtsError(Exception):
-    """kind: not_found (board does not exist), transient (retry later), invalid (unexpected response)."""
+    """kind: not_found (board does not exist), transient (retry later), invalid (unexpected response),
+    not_modified (crawl context only: the board answered 304 to our ETag, so nothing changed)."""
 
     def __init__(self, kind: str, message: str):
         super().__init__(message)
@@ -44,6 +47,67 @@ class BoardResult:
 RETRY_DELAYS: tuple[float, ...] = (2.0, 6.0)
 
 
+class CrawlContext:
+    """Opt-in per-thread fetch settings used by the background crawler (backend/services/crawler).
+
+    - one pooled HTTP client per worker thread, so a host's connections are reused across boards;
+    - ``etag``: sent as If-None-Match on the board's first request; a 304 raises AtsError("not_modified");
+    - after the fetch, ``etag_out`` holds the board's new ETag and ``body_hash`` a fingerprint of every response body.
+
+    Code that never enters a CrawlContext (saved-search runs, company lookups, tests) behaves exactly as before.
+    """
+
+    _local = threading.local()
+    _all_clients: "list[httpx.Client]" = []
+    _clients_lock = threading.Lock()
+
+    def __init__(self, etag: str | None = None, *, conditional: bool = True) -> None:
+        self.etag = etag if conditional else None
+        self.etag_out: str | None = None
+        self.requests = 0
+        self.got_first = False  # the board's first page answered (a retried first request still counts as first)
+        self.bytes = 0
+        self._hash = hashlib.blake2b(digest_size=16)
+
+    @property
+    def body_hash(self) -> str:
+        return self._hash.hexdigest()
+
+    def __enter__(self) -> "CrawlContext":
+        CrawlContext._local.current = self
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        CrawlContext._local.current = None
+
+    @classmethod
+    def current(cls) -> "CrawlContext | None":
+        return getattr(cls._local, "current", None)
+
+    @classmethod
+    def client(cls) -> httpx.Client:
+        c = getattr(cls._local, "client", None)
+        if c is None or c.is_closed:
+            c = httpx.Client(timeout=TIMEOUT, transport=transport_override, follow_redirects=True,
+                             headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+                             limits=httpx.Limits(max_keepalive_connections=8, keepalive_expiry=60))
+            cls._local.client = c
+            with cls._clients_lock:
+                cls._all_clients.append(c)
+        return c
+
+    @classmethod
+    def close_all(cls) -> None:
+        """Close every worker thread's pooled client (end of a crawl tick)."""
+        with cls._clients_lock:
+            clients, cls._all_clients = cls._all_clients, []
+        for c in clients:
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
 def get_json(url: str, params: dict[str, Any] | None = None) -> Any:
     """GET a job-board JSON document; transient failures are retried (RETRY_DELAYS) before giving up."""
     for delay in (*RETRY_DELAYS, None):
@@ -57,6 +121,9 @@ def get_json(url: str, params: dict[str, Any] | None = None) -> Any:
 
 
 def _get_json_once(url: str, params: dict[str, Any] | None = None) -> Any:
+    ctx = CrawlContext.current()
+    if ctx is not None:
+        return _crawl_get_json(ctx, url, params)
     try:
         with httpx.Client(timeout=TIMEOUT, transport=transport_override, follow_redirects=True,
                           headers={"User-Agent": USER_AGENT, "Accept": "application/json"}) as client:
@@ -76,6 +143,42 @@ def _get_json_once(url: str, params: dict[str, Any] | None = None) -> Any:
         raise AtsError("transient", "Job board timed out.") from exc
     except httpx.HTTPError as exc:
         raise AtsError("transient", f"Job board unreachable ({type(exc).__name__}).") from exc
+    try:
+        return json.loads(bytes(body))
+    except ValueError as exc:
+        raise AtsError("invalid", "Job board returned a response that is not JSON.") from exc
+
+
+def _crawl_get_json(ctx: CrawlContext, url: str, params: dict[str, Any] | None) -> Any:
+    """Same status handling and size limit as _get_json_once, on the thread's pooled client, with ETag support."""
+    first = not ctx.got_first
+    ctx.requests += 1
+    headers = {"If-None-Match": ctx.etag} if first and ctx.etag else {}
+    try:
+        with CrawlContext.client().stream("GET", url, params=params, headers=headers) as r:
+            if r.status_code == 304 and headers:
+                ctx.etag_out, ctx.got_first = r.headers.get("etag") or ctx.etag, True
+                raise AtsError("not_modified", "Not modified since the last crawl.")
+            if r.status_code == 404:
+                raise AtsError("not_found", "Job board not found (the company may have moved or renamed its board).")
+            if r.status_code == 429 or r.status_code >= 500:
+                raise AtsError("transient", f"Job board temporarily unavailable (HTTP {r.status_code}).")
+            if r.status_code >= 400:
+                raise AtsError("invalid", f"Job board request failed (HTTP {r.status_code}).")
+            if first:
+                ctx.etag_out = r.headers.get("etag")
+                ctx.got_first = True
+            body = bytearray()
+            for chunk in r.iter_bytes():
+                body += chunk
+                if len(body) > MAX_BYTES:
+                    raise AtsError("invalid", "Job board response is too large.")
+    except httpx.TimeoutException as exc:
+        raise AtsError("transient", "Job board timed out.") from exc
+    except httpx.HTTPError as exc:
+        raise AtsError("transient", f"Job board unreachable ({type(exc).__name__}).") from exc
+    ctx.bytes += len(body)
+    ctx._hash.update(bytes(body))
     try:
         return json.loads(bytes(body))
     except ValueError as exc:

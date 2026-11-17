@@ -136,6 +136,30 @@ def _normalise_and_dedupe(db, settings):
     return out
 
 
+def _catalogue_crawl(db, settings):
+    """JPSE Phase 1: crawl what is due into the catalogue, re-run saved searches whose boards changed, prune the outbox."""
+    from backend.services.crawler import service as crawler
+    rep = crawler.crawl(db)
+    if rep.get("changed") or rep.get("new"):
+        rep["percolated"] = crawler.percolate(db, settings)
+    rep["outbox_pruned"] = crawler.prune_outbox(db)
+    from backend.services.crawler import fetchd
+    rep["fetchd_results_pruned"] = fetchd.prune(db)
+    return rep
+
+
+def _fetchd_apply(db, settings):
+    """JPSE Phase 2: apply what jp-fetchd (the C crawler) fetched; re-run saved searches whose boards changed."""
+    from backend.services.crawler import fetchd
+    from backend.services.crawler import service as crawler
+    if not fetchd.enabled():
+        return {"skipped": "JPSE_FETCHD is off: the Python crawler handles boards"}
+    rep = fetchd.apply_pending(db)
+    if rep.get("new") or rep.get("changed") or rep.get("closed"):
+        rep["percolated"] = crawler.percolate(db, settings)
+    return rep
+
+
 def _link_check(db, settings):
     from backend.services import link_check
     return link_check.check(db)
@@ -301,6 +325,12 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
     JobSpec("source_refresh", "daily 05:00", "discovery", "Refresh connector health/telemetry.", _source_refresh),
     JobSpec("job_normalisation", "inline with discovery", "discovery", "Normalise raw postings into canonical jobs.", _normalise_and_dedupe, retries=0),
     JobSpec("job_deduplication", "inline with discovery", "discovery", "Merge duplicate postings across sources.", _normalise_and_dedupe, retries=0),
+    JobSpec("catalogue_crawl", "every 10 minutes", "discovery",
+            "Crawl due employer boards and feeds into the shared catalogue (ETag, politeness limits, adaptive intervals); "
+            "re-run saved searches whose boards changed.", _catalogue_crawl, retries=0),
+    JobSpec("fetchd_apply", "every minute", "discovery",
+            "Apply board results written by jp-fetchd (the C crawler, JPSE_FETCHD=1); re-run saved searches whose boards "
+            "changed. Does nothing while the switch is off.", _fetchd_apply, retries=0),
     JobSpec("job_link_check", "daily 04:30", "discovery",
             "Re-check job pages no employer board confirms (feeds, imports); close jobs whose page is gone. Never visits "
             "LinkedIn, Naukri or Indeed.", _link_check, retries=0),
@@ -324,7 +354,7 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
 SCHEDULES: dict[str, dict[str, Any]] = {
     "source_refresh": {"hour": 5, "minute": 0}, "job_link_check": {"hour": 4, "minute": 30}, "job_matching": {"hour": 6, "minute": 0}, "gap_generation": {"hour": 6, "minute": 30},
     "resume_feedback_generation": {"hour": 7, "minute": 0}, "resource_refresh": {"day_of_week": "sun", "hour": 4, "minute": 0},
-    "notification_dispatch": {"minute": "*/30"}, "notification_sweep": {"minute": 15}, "report_generation": {"hour": 21, "minute": 0}, "visa_source_check": {"hour": 3, "minute": 0},
+    "notification_dispatch": {"minute": "*/30"}, "catalogue_crawl": {"minute": "*/10"}, "fetchd_apply": {"minute": "*"}, "notification_sweep": {"minute": 15}, "report_generation": {"hour": 21, "minute": 0}, "visa_source_check": {"hour": 3, "minute": 0},
     "analytics_rollup": {"hour": 0, "minute": 30}, "cleanup_and_retention": {"hour": 1, "minute": 30},
 }
 

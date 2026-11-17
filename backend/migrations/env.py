@@ -23,7 +23,7 @@ target_metadata = Base.metadata
 
 
 # Expression indexes created by raw SQL in migrations (not expressible in the models) are intentional.
-SQL_ONLY_INDEXES = {"ix_jobs_fulltext"}
+SQL_ONLY_INDEXES = {"ix_jobs_fulltext", "ix_catalogue_fts"}
 
 
 def include_object(obj, name, type_, reflected, compare_to):

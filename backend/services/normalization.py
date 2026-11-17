@@ -72,6 +72,7 @@ class NormalizedJob:
     extraction_confidence: float | None = None
     parser_version: str | None = None
     expires_at: date | None = None   # the source's own closing date, when it publishes one
+    observed_at: datetime | None = None  # when the source last listed it, if not "now" (served from the crawl catalogue)
 
     @property
     def key(self) -> str:

@@ -302,8 +302,34 @@ Started: 2026-11-16. This is the working tracker for the JobPilot 2.0 overhaul. 
   - **Extension version reporting.**
   - **Postgres-only ops-health queries:** verify on the live database at deploy.
 
-### Discovery engine (JPSE)
-- [ ] Plan of record: `JOBPILOT_JPSE_BLUEPRINT.md` (owner-reviewed 2026-11-17). Its Phase 0 (instrumentation and baseline) and Phase 1 (background crawling, so that Discover never waits on the network) come first. Not started.
+### Discovery engine (JPSE). Plan of record: `JOBPILOT_JPSE_BLUEPRINT.md` (owner-reviewed 2026-11-17)
+- [x] Phase 0, measurements (`engine/bench/`):
+  - all four ATS APIs (Greenhouse, Lever, Ashby, SmartRecruiters) send an ETag and answer 304 Not Modified;
+  - network is 85–99% of each board's time;
+  - connection reuse saves 0.2–2 s per board on Ashby and Lever;
+  - `phase1_bench.py` measures a cold crawl, a warm re-crawl, Discover served from the catalogue, and the GIN baseline, on a scratch copy of the live database.
+- [x] Phase 1, Discover no longer waits on job boards (local, not deployed):
+  - **Migration 0012** (additive): `crawl_state` (durable frontier), `catalogue_postings` (every permitted posting, identity = the source's own requisition key), `index_outbox` (written in the same transaction as each change), and a PostgreSQL GIN full-text baseline index.
+  - **Background crawler** (`backend/services/crawler/`, job `catalogue_crawl` every 10 min):
+    - one queue and up to 2 workers per host (no head-of-line blocking);
+    - a global cap of 16 transfers in flight;
+    - a token bucket per host;
+    - pooled connections per worker, and an ETag sent on every board;
+    - LinkedIn, Naukri, Indeed and Glassdoor denied inside the fetcher.
+  - **Adaptive intervals:** 15 min to 12 h, with watched boards capped at 1 h; exponential back-off on errors (5 min to 6 h), which a priority request never overrides.
+  - **Correctness:**
+    - a posting is closed only after a complete valid snapshot;
+    - a board that suddenly lists nothing is quarantined (nothing closed);
+    - a reappearing posting is reopened with a new revision;
+    - the user-facing `jobs` rows are confirmed or closed with the crawler's real "last seen" time, never "now".
+  - **Saved searches and Discover** read boards and feeds from the catalogue, through the same filters and scoring as before (a test proves identical matches with zero board requests). They fall back to a live fetch only for a board with no snapshot from the last 24 h.
+  - **After Discover answers,** the user's boards are re-checked in the background.
+  - **Percolation:** a scheduled saved search whose boards changed re-runs from the catalogue, at most every 30 minutes, so new matches arrive without anyone clicking Discover.
+  - **Tests:** `tests/api/test_catalogue_crawler.py` (11). The full suite passes. On PostgreSQL, migration 0012 goes up, down and up cleanly on a copy of live data, and the migration tests pass.
+- [ ] Phase 2: C crawler `jp-fetchd` (libcurl multi, yyjson, fuzzing).
+- [ ] Phase 3: C search server `jp-searchd`.
+- [ ] Phase 4: advanced retrieval.
+- [ ] Phase 5: shadow mode and rollout.
 
 ## Platform terms (checked 2026-11-16)
 

@@ -31,7 +31,7 @@ export function JobStatusBadge({ status }: { status: string | null }) {
   );
 }
 
-const TRIGGER_LABEL: Record<string, string> = { schedule: "on schedule", scheduled: "on schedule", catch_up: "catch-up after downtime", manual: "run by an admin", replay: "run by an admin" };
+const TRIGGER_LABEL: Record<string, string> = { schedule: "on schedule", scheduled: "on schedule", catch_up: "catch-up after downtime", background: "background update (boards changed)", manual: "run by an admin", replay: "run by an admin" };
 const humanize = (name: string) => name.charAt(0).toUpperCase() + name.slice(1).replaceAll("_", " ");
 
 function LastRun({ j }: { j: AdminJob }) {

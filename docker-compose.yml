@@ -52,6 +52,9 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       REGISTRATION_INVITE_CODE: ${REGISTRATION_INVITE_CODE:-}
+      # JPSE Phase 2: jp-fetchd (the C crawler, service "fetchd") owns the employer boards. Set JPSE_FETCHD=0 in .env
+      # and stop "fetchd" to hand the boards back to the Python crawler (nothing else changes).
+      JPSE_FETCHD: ${JPSE_FETCHD:-1}
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
       REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-14}
       AUTH_RATE_LIMIT_PER_MINUTE: ${AUTH_RATE_LIMIT_PER_MINUTE:-10}
@@ -104,6 +107,29 @@ services:
       resources:
         limits: { cpus: "0.5", memory: 128M }
     networks: [edge]
+
+  # JPSE Phase 2: the native board crawler (engine/fetchd, C17). It fetches the permitted employer job-board APIs
+  # politely (16 transfers overall, 2 per host, per-host rate limits, ETag/304) and writes results to PostgreSQL; the
+  # backend applies them every minute. Database password via libpq's PGPASSWORD, never in a URL or argument.
+  fetchd:
+    <<: *limits
+    build:
+      context: ./engine/fetchd
+    image: jobpilot-fetchd:latest
+    depends_on:
+      backend: { condition: service_healthy }   # the backend applies migrations (0013) before the crawler starts
+    environment:
+      JPF_DATABASE_URL: "host=postgres port=5432 dbname=jobpilot user=jobpilot connect_timeout=10"
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      JPF_TICK_S: "30"
+      JPF_BUDGET_S: "300"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 256M }
+    networks: [internal, edge]
 
   # Daily backups (database + uploads) inside the stack, so no host crontab is needed. See deploy/backup/backup.sh.
   backup:
