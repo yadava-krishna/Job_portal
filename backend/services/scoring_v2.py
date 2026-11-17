@@ -21,7 +21,7 @@ from typing import Any
 from backend.models import Job, JobPreference
 from core.models import EligibilityStatus, MatchResult
 
-SCORE_VERSION = "v2.2026-11"
+SCORE_VERSION = "v2.2026-11.2"  # .2: remote scope in location; multi-currency salary; explanation
 WEIGHTS: dict[str, float] = {
     "required_skills": 30, "experience": 20, "responsibilities": 15, "education_certifications": 10,
     "location_work_mode": 10, "industry_domain": 5, "salary": 5, "work_authorization": 5,
@@ -48,35 +48,28 @@ def _industry(job: Job, prefs: JobPreference | None) -> tuple[float | None, str]
 
 
 def _salary(job: Job, prefs: JobPreference | None) -> tuple[float | None, str]:
-    want = prefs.salary_min / 100000 if prefs and prefs.salary_min and prefs.currency == "INR" else None
-    top = job.salary_max_lpa or job.salary_min_lpa
-    if top is None:
-        return None, "the posting does not state a salary"
-    if want is None:
-        return None, "you have not set a minimum salary"
-    if top >= want:
-        return 100.0, f"up to {top:g} LPA meets your minimum of {want:g} LPA"
-    return max(0.0, round(100 * top / want - 30, 1)), f"up to {top:g} LPA is below your minimum of {want:g} LPA"
+    from core.salary import Salary, comparable
+
+    want = float(prefs.salary_min) if prefs and prefs.salary_min else None
+    cur = (prefs.currency or "INR").upper() if prefs else None
+    posted = None
+    if getattr(job, "salary_min", None) is not None or getattr(job, "salary_max", None) is not None:
+        posted = Salary(job.salary_currency, job.salary_min, job.salary_max, job.salary_period, bool(job.salary_period_assumed))
+    elif job.salary_max_lpa is not None or job.salary_min_lpa is not None:  # stored before normalisation existed
+        posted = Salary("INR", None if job.salary_min_lpa is None else job.salary_min_lpa * 1e5,
+                        None if job.salary_max_lpa is None else job.salary_max_lpa * 1e5, "year")
+    ok, why = comparable(posted, want, cur)
+    if ok is None:
+        return None, why
+    mine = Salary(cur, want, None, "year").label()
+    if ok:
+        return 100.0, f"{why} meets your minimum of {mine}"
+    lo, hi = posted.annual()  # type: ignore[union-attr]
+    top = hi if hi is not None else lo
+    return max(0.0, round(100 * top / want - 30, 1)), f"{why} is below your minimum of {mine}"
 
 
-_COUNTRY_WORDS = {
-    "IN": ("india", "bengaluru", "bangalore", "mumbai", "pune", "hyderabad", "chennai", "gurugram", "gurgaon", "noida",
-           "new delhi", "delhi", "kolkata", "ahmedabad", "kochi", "coimbatore", "jaipur", "chandigarh", "thiruvananthapuram"),
-    "GB": ("united kingdom", "london", "manchester", "edinburgh", "england", "scotland"),
-    "US": ("united states", "usa", "new york", "san francisco", "seattle", "austin", "boston", "chicago"),
-    "CA": ("canada", "toronto", "vancouver", "montreal"), "DE": ("germany", "berlin", "munich", "hamburg"),
-    "NL": ("netherlands", "amsterdam", "rotterdam"), "IE": ("ireland", "dublin"), "AU": ("australia", "sydney", "melbourne"),
-    "SG": ("singapore",), "AE": ("united arab emirates", "dubai", "abu dhabi"),
-}
-
-
-def infer_country(location: str | None) -> str | None:
-    """Country from an unambiguous location string; None for remote/unknown/multi-country locations."""
-    text = (location or "").lower()
-    if not text or "remote" in text and not any(w in text for ws in _COUNTRY_WORDS.values() for w in ws):
-        return None
-    hits = {c for c, words in _COUNTRY_WORDS.items() if any(w in text for w in words)}
-    return hits.pop() if len(hits) == 1 else None
+from core.locations import infer_country  # noqa: E402  (re-exported: callers import it from here)
 
 
 def _authorization(job: Job, prefs: JobPreference | None) -> tuple[float | None, str, str]:
@@ -145,4 +138,38 @@ def score(match: MatchResult, elig_status: EligibilityStatus, elig_reasons: list
         reasons.append(f"Work authorisation: {raw['work_authorization'][1]}")
     return {"score_version": SCORE_VERSION, "total": total, "components": components, "eligibility": eligibility,
             "eligibility_reasons": reasons, "unknown": [c["name"] for c in components if c["status"] == "unknown"],
-            "disclaimer": DISCLAIMER}
+            "disclaimer": DISCLAIMER, "explanation": explain(components, match)}
+
+
+MATCHED, PARTIAL = 75.0, 45.0
+
+
+def explain(components: list[dict[str, Any]], match: MatchResult) -> dict[str, Any]:
+    """What matched, what partly matched, what didn't, and what couldn't be checked, in plain words.
+
+    Every line comes from a scored dimension's own evidence; nothing is inferred beyond the score."""
+    groups: dict[str, list[dict[str, Any]]] = {"matched": [], "partial": [], "not_matched": [], "not_evaluated": []}
+    for c in components:
+        item = {"name": c["name"], "label": c["label"], "detail": c["evidence"], "score": c["score"], "weight": c["base_weight"]}
+        if c["status"] != "known":
+            groups["not_evaluated"].append(item)
+        elif c["score"] >= MATCHED:
+            groups["matched"].append(item)
+        elif c["score"] >= PARTIAL:
+            groups["partial"].append(item)
+        else:
+            groups["not_matched"].append(item)
+    for g in groups.values():
+        g.sort(key=lambda i: -i["weight"])
+    checked = len(components) - len(groups["not_evaluated"])
+    summary = f"{len(groups['matched'])} of {checked} checks match"
+    if groups["partial"]:
+        summary += f", {len(groups['partial'])} partly"
+    if groups["not_matched"]:
+        summary += f", {len(groups['not_matched'])} don't"
+    summary += "."
+    if groups["not_evaluated"]:
+        summary += f" {len(groups['not_evaluated'])} couldn't be checked, so they don't count either way."
+    return {**groups, "summary": summary,
+            "skills": {"matched": list(match.matching_skills or []), "missing": list(match.missing_skills or []),
+                       "missing_optional": list(match.missing_optional_skills or [])}}

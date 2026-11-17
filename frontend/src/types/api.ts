@@ -213,7 +213,24 @@ export interface JobListing {
   seniority?: string | null;
   sponsorship_signal?: "verified" | "inferred" | "none" | "unknown" | null;
   sources: JobSource[];
+  /** Consistent forms of the source's own text (location is kept as written). */
+  location_normalized?: string | null;
+  country?: string | null;
+  /** Remote roles: ["*"] anywhere, or country/region codes; null when the posting doesn't say. */
+  remote_scope?: string[] | null;
+  remote_scope_label?: string | null;
+  /** e.g. "USD 80k–110k a year (assumed)". Never converted between currencies. */
+  salary_label?: string | null;
+  expires_at?: string | null;
+  freshness?: Freshness | null;
 }
+export interface Freshness {
+  state: "open" | "unconfirmed" | "unchecked" | "expired" | "closed";
+  label: string;
+  detail: string;
+  checked_at: string | null;
+}
+export interface SimilarListing { user_job_id: number; location: string | null; match_score: number | null }
 export type PostedConfidence = "verified" | "estimated" | "unknown";
 export interface JobSource {
   source: string;
@@ -239,6 +256,8 @@ export interface UserJob {
   application_id: number | null;
   application_status: string | null;
   job: JobListing;
+  /** Other listings of the same role at the same company in your feed (other cities, re-posts). */
+  similar?: SimilarListing[];
 }
 export interface JobDetail extends UserJob {
   description: string | null;

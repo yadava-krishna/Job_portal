@@ -65,6 +65,14 @@ def configs_for(prefs: JobPreference | None) -> tuple[MatchingConfig, SearchConf
     return matching, search, eligibility
 
 
+def work_countries(prefs: JobPreference | None) -> list[str]:
+    """Where the candidate may work: their stated work authorisation, or India for an India-only search."""
+    auth = [c.upper() for c in ((prefs.work_authorization if prefs else None) or [])]
+    if not auth and (prefs is None or getattr(prefs, "search_mode", "india") == "india"):
+        auth = ["IN"]
+    return auth
+
+
 def job_to_posting(job: Job) -> JobPosting:
     platform = Platform(job.platform) if job.platform in {p.value for p in Platform} else Platform.LINKEDIN
     return JobPosting(
@@ -102,7 +110,8 @@ class UserMatcher:
         llm, desc = get_llm(settings) if use_llm else (None, "rule_based (configured)")
         self.llm, self.llm_desc = llm, desc
         self.matcher = JobMatcher(self.matching, self.search, self.profile, self.taxonomy, llm, desc,
-                                  willing_to_relocate=self.verified_facts.get("willing_to_relocate"))
+                                  willing_to_relocate=self.verified_facts.get("willing_to_relocate"),
+                                  work_countries=work_countries(self.prefs))
 
     @property
     def candidate_years(self) -> float:
@@ -127,7 +136,7 @@ class UserMatcher:
         uj.match_score = v2["total"]
         uj.match_category = match.category
         uj.match = {**match.model_dump(mode="json"), "v1_overall_score": match.overall_score, "overall_score": v2["total"],
-                    "disclaimer": v2["disclaimer"], "unknown_dimensions": v2["unknown"]}
+                    "disclaimer": v2["disclaimer"], "unknown_dimensions": v2["unknown"], "explanation": v2["explanation"]}
         uj.score_version = v2["score_version"]
         uj.match_components = v2["components"]
         uj.eligibility = v2["eligibility"]

@@ -199,10 +199,37 @@ Started: 2026-11-16. This is the working tracker for the JobPilot 2.0 overhaul. 
   - The editor's preview is the real PDF, refreshed about 1 second after each save, not keystroke-live.
 - [ ] **Deploy:** this needs a backend image rebuild (new system packages) and frontend publish. Awaiting the owner.
 
-### Phase 3: Discovery and matching
-- [ ] Freshness, expiry and dead-link checks, a last-verified time, normalised location, work mode and salary, and grouping of duplicates.
-- [ ] Permitted new sources, once the owner supplies keys (Adzuna, Jooble, Careerjet).
-- [ ] Matching explanations: what matched, what didn't, and what couldn't be evaluated. More synonyms.
+### Phase 3: Discovery and matching. Deployed on 2026-11-16 (migration 0011)
+- [x] Normalised facts, filled on every ingest and back-filled once by the `job_normalisation` job (each row is version-stamped):
+  - locations, countries and remote scope: `core/locations.py`;
+  - salaries in any currency: `core/salary.py`;
+  - migration 0011 (additive): `location_normalized`, `remote_scope`, `salary_*`, `expires_at`, `link_status`, `link_checked_at`, `normalized_version`.
+  - The raw text the source wrote is kept and shown on hover.
+  - The country used to be dropped on ingest (a bug); it is now stored.
+- [x] Salaries are never converted between currencies. With no period stated, only 5-figure and larger amounts are read as yearly, and they're labelled "assumed".
+- [x] Freshness (`backend/services/freshness.py`):
+  - states: open / unconfirmed / unchecked / expired / closed, each saying how and when it was confirmed;
+  - "expired" no longer sets `closed_at`;
+  - old jobs still listed on the board stay open;
+  - the source's own closing date is respected;
+  - the feed hides closed and expired jobs by default.
+- [x] Dead-link check (`job_link_check`, daily 04:30):
+  - only for jobs no board re-confirms;
+  - never LinkedIn, Naukri, Indeed or Glassdoor;
+  - goes through the shared client (robots.txt, SSRF guard, rate limits);
+  - 60 pages a day at most, each job once every 3 days;
+  - only a 404/410 or a clear "job closed" title or visible text closes a job.
+- [x] Duplicate grouping: the feed shows one card per company and title. Filters apply first, then grouping; the other cities and re-posts are listed on the card. `group_similar=false` lists them all.
+- [x] Connector fixes:
+  - Himalayas: dates (Unix seconds), closing date, currency and period, application link, seniority, and the countries a job is open to. Every job used to read "Worldwide Remote".
+  - A source can now correct its own earlier location or salary.
+- [x] Matching:
+  - remote roles not open to the candidate's country score 10 on location (they used to score 100), and remote roles that don't say get 85;
+  - the salary dimension uses the normalised pay;
+  - `breakdown` lists what matched, partly matched, didn't match, and couldn't be checked;
+  - the score version is `v2.2026-11.2`;
+  - 35 new skills and many synonyms, including upper-case acronyms (O2C, P2P, R2R, DSO, ERP).
+- [ ] New sources (Adzuna is built; Jooble and Careerjet aren't). All three need API keys from the owner. Not started.
 
 ### Phase 4: UI/UX
 - [ ] Design-system pass. Dashboard actions. Discovery details. A Kanban board for applications. Onboarding. Accessibility.

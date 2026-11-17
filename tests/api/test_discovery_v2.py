@@ -114,8 +114,16 @@ def test_same_title_in_two_cities_on_one_board_stays_two_jobs(client, boards, re
     search = {**SEARCH, "criteria": {**SEARCH["criteria"], "locations": ["Bengaluru", "Mumbai"]}}
     h, sid, _ = _setup(client, resume_bytes, search=search)
     _run(client, h, sid)
-    acme = [i["job"] for i in _feed(client, h) if i["job"]["company"] == "Acme Fintech"]
+    acme = [i["job"] for i in _feed(client, h, group_similar=False) if i["job"]["company"] == "Acme Fintech"]
     assert sorted(j["location"] for j in acme) == ["Bengaluru", "Mumbai"]
+    # The feed shows the role once and lists the other city on the card.
+    grouped = [i for i in _feed(client, h) if i["job"]["company"] == "Acme Fintech"]
+    assert len(grouped) == 1
+    assert [s["location"] for s in grouped[0]["similar"]] == [
+        {"Bengaluru": "Mumbai, India", "Mumbai": "Bengaluru, India"}[grouped[0]["job"]["location"]]]
+    # A location filter applies before grouping, so it never hides the group.
+    only_mumbai = [i for i in _feed(client, h, location="Mumbai") if i["job"]["company"] == "Acme Fintech"]
+    assert [i["job"]["location"] for i in only_mumbai] == ["Mumbai"]
 
 
 def test_clipped_linkedin_job_and_board_job_merge_into_one(client, boards, resume_bytes):
@@ -656,8 +664,8 @@ def test_date_range_without_dates_hides_nothing(client, boards, resume_bytes):
     search = {**SEARCH, "criteria": {**SEARCH["criteria"], "locations": ["Bengaluru", "Mumbai"]}}
     h, sid, _ = _setup(client, resume_bytes, search=search)
     _run(client, h, sid)
-    everything = client.get(f"{API}/jobs", headers=h).json()
-    ranged = client.get(f"{API}/jobs", headers=h, params={"posted": "range"}).json()
+    everything = client.get(f"{API}/jobs", headers=h, params={"group_similar": False}).json()
+    ranged = client.get(f"{API}/jobs", headers=h, params={"group_similar": False, "posted": "range"}).json()
     assert ranged["total"] == everything["total"] and ranged["hidden_unknown_dates"] == 0
     assert "Mumbai" in {i["job"]["location"] for i in ranged["items"]}  # its posting date is unknown
 
@@ -668,17 +676,17 @@ def test_date_filters_report_and_optionally_include_unknown_dates(client, boards
     search = {**SEARCH, "criteria": {**SEARCH["criteria"], "locations": ["Bengaluru", "Mumbai"]}}
     h, sid, _ = _setup(client, resume_bytes, search=search)
     _run(client, h, sid)
-    week = client.get(f"{API}/jobs", headers=h, params={"posted": "7d"}).json()
+    week = client.get(f"{API}/jobs", headers=h, params={"group_similar": False, "posted": "7d"}).json()
     assert week["hidden_unknown_dates"] == 1 and "Mumbai" not in {i["job"]["location"] for i in week["items"]}
-    shown = client.get(f"{API}/jobs", headers=h, params={"posted": "7d", "include_unknown_dates": True}).json()
+    shown = client.get(f"{API}/jobs", headers=h, params={"group_similar": False, "posted": "7d", "include_unknown_dates": True}).json()
     assert shown["total"] == week["total"] + 1 and shown["hidden_unknown_dates"] == 0
     mumbai = [i["job"] for i in shown["items"] if i["job"]["location"] == "Mumbai"][0]
     assert mumbai["posted_at_confidence"] == "unknown" and mumbai["posted_label"] == "Unknown"
     start = (timeutil.today() - timedelta(days=30)).isoformat()
-    ranged = client.get(f"{API}/jobs", headers=h, params={"posted": "range", "date_from": start}).json()
+    ranged = client.get(f"{API}/jobs", headers=h, params={"group_similar": False, "posted": "range", "date_from": start}).json()
     assert ranged["hidden_unknown_dates"] == 1 and ranged["total"] == week["total"] + 1  # +1: the 10-day-old Lever job
     # "today" with include_unknown_dates still never calls an unknown date "today": it is listed and labelled unknown.
-    today = client.get(f"{API}/jobs", headers=h, params={"posted": "today", "include_unknown_dates": True}).json()
+    today = client.get(f"{API}/jobs", headers=h, params={"group_similar": False, "posted": "today", "include_unknown_dates": True}).json()
     assert [i["job"]["posted_label"] for i in today["items"]] == ["Unknown"]
 
 

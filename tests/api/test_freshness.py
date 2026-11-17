@@ -82,5 +82,5 @@ def test_reap_expired_jobs_sqlite():
 
         assert fresh_job.is_expired is False
         assert stale_job.is_expired is True
-        assert stale_job.closed_at is not None
+        assert stale_job.closed_at is None  # expired is not "closed": only a board or a dead page closes a job
         assert stale_job.freshness_score == 0.05

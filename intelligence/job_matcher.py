@@ -84,8 +84,11 @@ Rules:
 
 class JobMatcher:
     def __init__(self, cfg: MatchingConfig, search: SearchConfig, profile: dict[str, Any], taxonomy: SkillTaxonomy,
-                 llm: LLMClient | None = None, llm_description: str = "rule_based", willing_to_relocate: bool | None = None):
+                 llm: LLMClient | None = None, llm_description: str = "rule_based", willing_to_relocate: bool | None = None,
+                 work_countries: list[str] | None = None):
         self.cfg = cfg
+        # Countries the candidate may work from/in (ISO codes). Used to tell whether a remote role is open to them.
+        self.work_countries = [c.upper() for c in (work_countries or [])]
         self.search = search
         self.profile = profile
         self.taxonomy = taxonomy
@@ -165,7 +168,15 @@ class JobMatcher:
         if mode and mode not in self.search.work_modes:
             return 20.0, f"work mode {mode} is not in the preferred modes"
         if mode == "Remote" or "remote" in loc:
-            return (100.0, "remote role and remote work is preferred") if remote_ok else (60.0, "remote role; remote not in preferences")
+            from core.locations import describe_scope, normalize_location, remote_open_to
+
+            scope = normalize_location(job.location, remote_hint=True).remote_scope
+            open_to = remote_open_to(scope, self.work_countries) if self.work_countries else None
+            if open_to is False:
+                return 10.0, f"remote, but only for candidates in {describe_scope(scope)}"
+            where = f" (open to {describe_scope(scope)})" if open_to else " (the posting doesn't say which countries it hires in)"
+            return (100.0 if open_to or not self.work_countries else 85.0, f"remote role and remote work is preferred{where}") \
+                if remote_ok else (60.0, f"remote role; remote not in preferences{where}")
         if not loc:
             return 60.0, "location not stated"
         if any(c and c in loc for c in cities):

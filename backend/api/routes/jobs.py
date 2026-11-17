@@ -125,6 +125,8 @@ def list_jobs(
     eligibility: list[Literal["pass", "fail", "unknown"]] | None = Query(None),
     application_status: list[Literal["none", "PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"]] | None = Query(None),
     sort: Literal["score", "posted", "discovered"] = "score",
+    group_similar: bool = Query(True, description="Feed only: show one card per role when the same company lists the same "
+                                                  "title more than once (other cities, re-posts); the rest are listed on the card"),
     page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100),
 ) -> JobList:
     stmt = select(UserJob).join(Job, Job.id == UserJob.job_id).where(UserJob.user_id == user.id)
@@ -145,8 +147,10 @@ def list_jobs(
             like = f"%{q.lower()}%"
             stmt = stmt.where(or_(func.lower(Job.title).like(like), func.lower(Job.company).like(like), func.lower(Job.description).like(like)))
     if country:
-        from backend.services.scoring_v2 import _COUNTRY_WORDS
-        words = _COUNTRY_WORDS.get(country.upper(), ())
+        from core.locations import _COUNTRY_WORDS
+        # The stored country decides (filled from the location for every job); the location text is a fallback for
+        # rows not yet normalised, using only longer words so "uk" never matches "Dukes".
+        words = [w for w in _COUNTRY_WORDS.get(country.upper(), ()) if len(w) > 4]
         stmt = stmt.where(or_(func.upper(Job.country) == country.upper(),
                               *[func.lower(Job.location).like(f"%{w}%") for w in words]))
     if seniority:
@@ -224,7 +228,7 @@ def list_jobs(
                                                  DiscoveryRun.user_id == user.id).exists()
         stmt = stmt.where(found_by)
     if not include_closed and view == "feed":
-        stmt = stmt.where(Job.closed_at.is_(None))
+        stmt = stmt.where(Job.closed_at.is_(None), Job.is_expired.is_(False))
     hidden_unknown = 0
     if date_cond is not None:
         if include_unknown_dates:
@@ -232,6 +236,8 @@ def list_jobs(
         else:
             hidden_unknown = db.execute(select(func.count()).select_from(stmt.where(unknown_date).subquery())).scalar_one()
             stmt = stmt.where(date_cond)
+    if group_similar and view == "feed":
+        stmt = _one_per_role(stmt)
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     order = {
         "score": (UserJob.match_score.desc().nullslast(), UserJob.id.desc()),
@@ -239,8 +245,21 @@ def list_jobs(
         "discovered": (UserJob.discovered_at.desc(), UserJob.id.desc()),
     }[sort]
     rows = db.execute(stmt.order_by(*order).offset((page - 1) * page_size).limit(page_size)).unique().scalars().all()
-    return JobList(items=serializers.user_jobs(db, list(rows)), total=total, page=page, page_size=page_size,
-                   hidden_unknown_dates=hidden_unknown)
+    items = serializers.user_jobs(db, list(rows), similar=view == "feed")
+    return JobList(items=items, total=total, page=page, page_size=page_size, hidden_unknown_dates=hidden_unknown)
+
+
+def _one_per_role(stmt):
+    """Keep one row per (company, title) group among the rows the filters selected: the best-scoring one (then the
+    oldest). Rows without a group key always stay. Filters are applied first, so a filter never hides a whole group."""
+    from sqlalchemy import and_, exists
+
+    filtered = stmt.with_only_columns(UserJob.id.label("uid"), Job.dedup_key.label("dk"),
+                                      func.coalesce(UserJob.match_score, -1.0).label("sc")).cte("filtered")
+    a, b = filtered.alias("a"), filtered.alias("b")
+    better = exists(select(b.c.uid).where(b.c.dk == a.c.dk, or_(b.c.sc > a.c.sc, and_(b.c.sc == a.c.sc, b.c.uid < a.c.uid))))
+    keep = select(a.c.uid).where(or_(a.c.dk.is_(None), ~better))
+    return stmt.where(UserJob.id.in_(keep))
 
 
 @router.get("/{user_job_id}", response_model=JobDetail)
@@ -267,6 +286,7 @@ def analysis(user_job_id: int, user: CurrentUser, db: DbSession) -> JobAnalysis:
         responsibilities_match=m.matching_responsibilities if m else [], reasons_for=m.reasons_for if m else [],
         reasons_against=m.reasons_against if m else [], recommendation=m.recommendation if m else "",
         explanation=m.explanation() if m else "Not scored yet.", eligibility_status=uj.eligibility_status,
+        breakdown=(uj.match or {}).get("explanation"),
         eligibility_reasons=uj.eligibility_reasons or [], scoring_method=uj.scoring_method,
         confidence=m.confidence if m else None, notes=m.notes if m else [],
         score_version=uj.score_version, dimensions=uj.match_components or [], eligibility=uj.eligibility,

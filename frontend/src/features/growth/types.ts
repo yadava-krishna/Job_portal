@@ -20,6 +20,17 @@ export interface AnalysisV2 extends JobAnalysis {
   eligibility?: Eligibility | null;
   unknown_dimensions?: string[];
   disclaimer?: string | null;
+  breakdown?: MatchBreakdown | null;
+}
+export interface BreakdownItem { name: string; label: string; detail: string; score: number | null; weight: number }
+/** What matched, partly matched, didn't match, and couldn't be checked (backend scoring_v2.explain). */
+export interface MatchBreakdown {
+  matched: BreakdownItem[];
+  partial: BreakdownItem[];
+  not_matched: BreakdownItem[];
+  not_evaluated: BreakdownItem[];
+  summary: string;
+  skills: { matched: string[]; missing: string[]; missing_optional: string[] };
 }
 
 // ---- interview prep & practice ----

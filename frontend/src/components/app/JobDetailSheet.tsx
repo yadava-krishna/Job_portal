@@ -13,6 +13,8 @@ import { errorMessage } from "@/lib/api";
 import { formatDate, postedDisplay, scoreTone, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EligibilityBox, ScoreDimensions } from "@/features/growth/ScoreDimensions";
+import { MatchBreakdown } from "@/features/growth/MatchBreakdown";
+import { FreshnessBadge, freshnessOf } from "@/components/app/Freshness";
 import type { AnalysisV2 } from "@/features/growth/types";
 
 const componentNames: Record<string, string> = {
@@ -25,8 +27,8 @@ const componentNames: Record<string, string> = {
 
 const barTone = { excellent: "bg-emerald-500", good: "bg-sky-500", moderate: "bg-amber-500", low: "bg-rose-500", none: "bg-muted" };
 
-export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
-  userJobId: number | null; onOpenChange: (open: boolean) => void; onApply: (id: number) => void;
+export function JobDetailSheet({ userJobId, onOpenChange, onApply, onOpenJob }: {
+  userJobId: number | null; onOpenChange: (open: boolean) => void; onApply: (id: number) => void; onOpenJob?: (id: number) => void;
 }) {
   const job = useJob(userJobId);
   const analysis = useAnalysis(userJobId);
@@ -44,17 +46,35 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
         ) : (
           <>
             <SheetHeader className="border-b pb-4">
-              <div className="flex items-center gap-2"><PlatformBadge platform={d.job.platform} /><ScoreBadge score={d.match_score} category={d.match_category} /></div>
+              <div className="flex flex-wrap items-center gap-2"><PlatformBadge platform={d.job.platform} /><ScoreBadge score={d.match_score} category={d.match_category} /><FreshnessBadge job={d.job} /></div>
               <SheetTitle className="text-xl">{d.job.title}</SheetTitle>
               <SheetDescription>
-                {d.job.company} · {d.job.location ?? "Location not stated"}{d.job.work_mode ? ` · ${d.job.work_mode}` : ""}
+                {d.job.company} · {d.job.location_normalized || d.job.location || "Location not stated"}
+                {d.job.work_mode && !(d.job.work_mode === "Remote" && (d.job.location_normalized ?? "").startsWith("Remote")) ? ` · ${d.job.work_mode}` : ""}
               </SheetDescription>
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-1 text-sm" aria-label="Job provenance">
                 <dt className="text-muted-foreground">Posting date</dt>
                 <dd title={postedDisplay(d.job).title}>{postedDisplay(d.job).text} <span className="text-xs text-muted-foreground">({postedDisplay(d.job).badge.toLowerCase()})</span></dd>
                 <dt className="text-muted-foreground">Found by JobPilot</dt>
                 <dd>{formatDate(d.job.first_seen_at, true)}{d.job.last_verified_at ? ` · still listed ${timeAgo(d.job.last_verified_at)}` : ""}</dd>
-                {d.job.closed_at && <><dt className="text-muted-foreground">No longer listed</dt><dd>since {formatDate(d.job.closed_at, true)}</dd></>}
+                {freshnessOf(d.job) && <><dt className="text-muted-foreground">Still open?</dt><dd data-testid="freshness-detail">{freshnessOf(d.job)!.detail}</dd></>}
+                {d.job.location && d.job.location_normalized && d.job.location !== d.job.location_normalized && (
+                  <><dt className="text-muted-foreground">Location as posted</dt><dd>{d.job.location}</dd></>
+                )}
+                {d.job.remote_scope_label && <><dt className="text-muted-foreground">Remote, open to</dt><dd>{d.job.remote_scope_label}</dd></>}
+                {(d.job.salary_label || d.job.salary_range) && (
+                  <><dt className="text-muted-foreground">Salary</dt>
+                    <dd>{d.job.salary_label || d.job.salary_range}
+                      {d.job.salary_label?.includes("(assumed)") && <span className="block text-xs text-muted-foreground">The posting doesn't say per year; a figure this size is read as yearly.</span>}
+                    </dd></>
+                )}
+                {(d.similar?.length ?? 0) > 0 && (
+                  <><dt className="text-muted-foreground">Also listed</dt>
+                    <dd className="flex flex-wrap gap-1.5">{d.similar!.map((x) => (
+                      <button key={x.user_job_id} type="button" disabled={!onOpenJob} onClick={() => onOpenJob?.(x.user_job_id)}
+                              className="rounded border px-1.5 py-0.5 text-xs hover:bg-muted disabled:cursor-default">{x.location || "location not stated"}</button>
+                    ))}</dd></>
+                )}
                 <dt className="text-muted-foreground">Seen on</dt>
                 <dd className="flex flex-wrap gap-x-3 gap-y-1">
                   {(d.job.sources.length ? d.job.sources : [{ source: d.job.source, platform: d.job.platform, url: d.job.job_url, first_seen_at: "" }]).map((s) => (
@@ -84,6 +104,7 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply }: {
                   <div className="space-y-3">
                     <p className="text-xs text-muted-foreground">{a.disclaimer || "A match score is a guide to which jobs to read first, not proof a job suits you. Check the description yourself."}</p>
                     {a.eligibility && <EligibilityBox eligibility={a.eligibility} reasons={a.eligibility_reasons} />}
+                    {a.breakdown && <MatchBreakdown breakdown={a.breakdown} />}
                     {dims.length > 0 ? <ScoreDimensions dimensions={dims} /> : a.components.map((c) => (
                       <div key={c.name}>
                         <div className="flex justify-between text-sm"><span className="font-medium">{componentNames[c.name] ?? c.name} <span className="text-muted-foreground">({c.weight.toFixed(0)}%)</span></span><span className="tabular-nums">{c.score.toFixed(0)}</span></div>

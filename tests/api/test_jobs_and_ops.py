@@ -20,13 +20,13 @@ def _admin(client, email="ops-admin@example.com"):
     return h
 
 
-def test_all_fifteen_named_jobs_are_registered():
+def test_all_named_jobs_are_registered():
     from backend.services import jobs_registry
 
     assert set(jobs_registry.REGISTRY) == {
         "daily_discovery", "source_refresh", "job_normalisation", "job_deduplication", "job_matching", "gap_generation",
         "resume_feedback_generation", "resource_refresh", "notification_dispatch", "alert_email_ingestion", "report_generation",
-        "visa_source_check", "visa_change_detection", "analytics_rollup", "cleanup_and_retention"}
+        "visa_source_check", "visa_change_detection", "analytics_rollup", "cleanup_and_retention", "job_link_check"}
     assert all(n in jobs_registry.REGISTRY for n in jobs_registry.SCHEDULES)
 
 

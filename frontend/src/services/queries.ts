@@ -78,6 +78,8 @@ export interface JobQuery {
   company?: string;
   saved_search_id?: number;
   include_closed?: boolean;
+  /** false: list every listing; default groups the same company + title onto one card. */
+  group_similar?: boolean;
   include_unknown_dates?: boolean;
   date_from?: string;
   date_to?: string;

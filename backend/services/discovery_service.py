@@ -29,6 +29,7 @@ from backend.services.normalization import (  # noqa: F401  (VERIFIED_DATE_SOURC
     NormalizedJob,
     from_posting,
     locations_compatible,
+    normalize_facts,
     posted_confidence,
 )
 from core import timeutil
@@ -89,6 +90,9 @@ def find_existing(db: Session, nj: NormalizedJob) -> tuple[Job | None, str | Non
     return None, None
 
 
+SOURCE_CORRECTABLE = ("location", "salary_range", "work_mode", "employment_type", "country", "expires_at")
+
+
 def _enrich_existing(job: Job, nj: NormalizedJob) -> None:
     cols = nj.job_columns()
     for k, v in cols.items():
@@ -96,6 +100,8 @@ def _enrich_existing(job: Job, nj: NormalizedJob) -> None:
             continue
         if getattr(job, k) in (None, "", []):
             setattr(job, k, v)
+        elif k in SOURCE_CORRECTABLE and nj.source == job.source and getattr(job, k) != v:
+            setattr(job, k, v)  # the job's own source changed (or now reads correctly) what it says: take the new value
     if nj.description and not nj.description_is_snippet and (
             job.description_is_snippet or not job.description or len(nj.description) > len(job.description or "")):
         for k in ("description", "required_skills", "preferred_skills", "education_requirements", "mandatory_qualifications"):
@@ -137,20 +143,29 @@ def calculate_freshness(posted_at: date | None, reference_date: date | None = No
     return 0.15
 
 
+FEED_SOURCES = ("himalayas", "remoteok", "remotive", "arbeitnow")  # official public job feeds (paged: absence ≠ closed)
+
+
 def reap_expired_jobs(db: Session, max_age_days: int = 45) -> int:
-    """Flag active jobs older than max_age_days as expired."""
+    """Flag active jobs as expired: older than max_age_days, or past the closing date their source published."""
     from datetime import timedelta
-    cutoff = date.today() - timedelta(days=max_age_days)
+    from sqlalchemy import or_
+    today = timeutil.today()
+    cutoff = today - timedelta(days=max_age_days)
     now = utcnow()
+    recently_listed = Job.last_verified_at >= now - timedelta(days=3)
     stmt = (
         select(Job)
-        .where(Job.is_expired == False, Job.posted_at != None, Job.posted_at < cutoff)
+        .where(Job.is_expired == False,  # noqa: E712
+               or_(Job.expires_at < today,
+                   (Job.posted_at < cutoff) & or_(Job.last_verified_at.is_(None), ~recently_listed)))
     )
     stale_jobs = db.execute(stmt).scalars().all()
     count = 0
     for j in stale_jobs:
+        # Expired is not "closed": closed_at is only set when the employer's board stops listing the job (or its page
+        # is gone). An old job that is still listed on the board stays open; the employer keeps it up on purpose.
         j.is_expired = True
-        j.closed_at = now
         j.freshness_score = 0.05
         count += 1
     if count > 0:
@@ -184,9 +199,17 @@ def upsert_normalized(db: Session, nj: NormalizedJob) -> tuple[Job, bool]:
         job.freshness_score = calculate_freshness(job.posted_at)
         job.last_scraped_at = now
         job.is_expired = False
-        _fit_columns(job)
-    if nj.source in ATS_SOURCES:
-        job.last_verified_at, job.closed_at = now, None  # listed on the employer's board right now
+        if nj.expires_at:
+            job.expires_at = nj.expires_at
+    normalize_facts(job)
+    if job.expires_at and job.expires_at < timeutil.today():
+        job.is_expired = True  # past the closing date the source itself published
+    _fit_columns(job)
+    if nj.source in ATS_SOURCES or nj.source in FEED_SOURCES:
+        # Listed on the employer's board, or in an official feed's current listings, right now.
+        job.last_verified_at = now
+        if nj.source in ATS_SOURCES:
+            job.closed_at = None
     from backend.services.career_service import infer_seniority, sponsorship_signal
     job.sponsorship_signal, job.sponsorship_evidence = sponsorship_signal(job.description)
     if not job.seniority:

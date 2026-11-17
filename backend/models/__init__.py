@@ -205,10 +205,22 @@ class Job(Base):
     sponsorship_signal: Mapped[str] = mapped_column(String(10), default="unknown", server_default=text("'unknown'"), nullable=False, index=True)
     sponsorship_evidence: Mapped[str | None] = mapped_column(String(300))
     last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Normalised facts (core.locations / core.salary), filled on ingest and back-filled by the job_normalisation job.
+    location_normalized: Mapped[str | None] = mapped_column(String(300))
+    remote_scope: Mapped[list[str] | None] = mapped_column(JSONType)  # remote roles: ["*"], country/region codes, or None
+    salary_currency: Mapped[str | None] = mapped_column(String(3))
+    salary_min: Mapped[float | None] = mapped_column(Float)          # as posted, for salary_period
+    salary_max: Mapped[float | None] = mapped_column(Float)
+    salary_period: Mapped[str | None] = mapped_column(String(10))    # year | month | week | day | hour | None
+    salary_period_assumed: Mapped[bool | None] = mapped_column(Boolean)
+    expires_at: Mapped[date | None] = mapped_column(Date)            # the source's own closing date
+    link_status: Mapped[str | None] = mapped_column(String(12))      # ok | gone | unreachable | skipped (see link_check)
+    link_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    normalized_version: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
-    __table_args__ = (Index("ix_jobs_active_posted", "is_expired", "posted_at"),)
+    __table_args__ = (Index("ix_jobs_active_posted", "is_expired", "posted_at"), Index("ix_jobs_dedup_key_open", "dedup_key", "closed_at"))
 
 
 class DiscoveryRun(Base):

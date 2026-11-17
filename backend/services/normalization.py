@@ -71,6 +71,7 @@ class NormalizedJob:
     extraction_method: str | None = None
     extraction_confidence: float | None = None
     parser_version: str | None = None
+    expires_at: date | None = None   # the source's own closing date, when it publishes one
 
     @property
     def key(self) -> str:
@@ -96,7 +97,54 @@ class NormalizedJob:
             screening_questions=self.screening_questions, verification_flags=self.verification_flags, job_url=self.job_url,
             application_method=self.application_method, source=self.source, canonical_url=self.canonical_url,
             dedup_key=self.dedup_key, industry=self.industry, department=self.department, company_id=self.company_id,
+            country=self.country, expires_at=self.expires_at,
         )
+
+
+# ---- normalised facts on a stored job --------------------------------------------------------
+
+NORMALIZED_VERSION = "n1.2026-11"
+
+
+def normalize_facts(job: Any) -> Any:
+    """Fill the normalised columns of a backend Job from its raw values (location, work mode, salary text, country).
+
+    Used on every ingest and by the back-fill job, so old and new rows look the same. Raw columns are never rewritten,
+    except that an empty work mode or country is filled when the location says so unambiguously."""
+    from core.locations import normalize_location
+    from core.salary import parse as parse_salary_text
+
+    place = normalize_location(job.location, remote_hint=(job.work_mode == "Remote"))
+    job.location_normalized = (place.display or None) and place.display[:300]
+    job.remote_scope = place.remote_scope if place.remote else None
+    if not job.work_mode and place.mode:
+        job.work_mode = place.mode
+    if not job.country and place.country:
+        job.country = place.country
+    sal = parse_salary_text(job.salary_range, country=job.country)
+    if sal is None:
+        job.salary_currency = job.salary_min = job.salary_max = job.salary_period = job.salary_period_assumed = None
+        if job.salary_min_lpa is not None or job.salary_max_lpa is not None:  # structured INR values from the analyser
+            job.salary_currency, job.salary_period, job.salary_period_assumed = "INR", "year", False
+            job.salary_min = None if job.salary_min_lpa is None else job.salary_min_lpa * 1e5
+            job.salary_max = None if job.salary_max_lpa is None else job.salary_max_lpa * 1e5
+    else:
+        job.salary_currency, job.salary_min, job.salary_max = sal.currency, sal.min, sal.max
+        job.salary_period, job.salary_period_assumed = sal.period, sal.period_assumed
+        lo, hi = sal.lpa()
+        if sal.currency == "INR" and job.salary_min_lpa is None and job.salary_max_lpa is None and (lo or hi):
+            job.salary_min_lpa, job.salary_max_lpa = lo, hi
+    job.normalized_version = NORMALIZED_VERSION
+    return job
+
+
+def salary_label(job: Any) -> str | None:
+    """"USD 80k–110k a year (assumed)" from the normalised columns; None when there is nothing to show."""
+    from core.salary import Salary
+
+    if job.salary_min is None and job.salary_max is None:
+        return None
+    return Salary(job.salary_currency, job.salary_min, job.salary_max, job.salary_period, bool(job.salary_period_assumed)).label()
 
 
 # ---- posting dates -------------------------------------------------------------------------

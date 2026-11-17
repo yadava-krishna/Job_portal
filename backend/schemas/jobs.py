@@ -43,6 +43,29 @@ class JobListing(BaseModel):
     seniority: str | None = None
     sponsorship_signal: str | None = None  # verified | inferred | none | unknown
     sources: list[JobSourceOut] = Field(default_factory=list)
+    # Normalised facts (Phase 3). location keeps the source's own text; these are the consistent forms.
+    location_normalized: str | None = None
+    country: str | None = None
+    remote_scope: list[str] | None = None   # remote roles: ["*"] anywhere, or country/region codes; None = not stated
+    remote_scope_label: str | None = None
+    salary_label: str | None = None         # "USD 80k–110k a year (assumed)"; never converted between currencies
+    expires_at: date | None = None
+    freshness: FreshnessOut | None = None
+
+
+class FreshnessOut(BaseModel):
+    state: Literal["open", "unconfirmed", "unchecked", "expired", "closed"]
+    label: str
+    detail: str
+    checked_at: datetime | None = None
+
+
+class SimilarListingOut(BaseModel):
+    """Another listing of the same role at the same company (another city, or a re-post) in your feed."""
+
+    user_job_id: int
+    location: str | None
+    match_score: float | None
 
 
 class UserJobOut(BaseModel):
@@ -65,6 +88,7 @@ class UserJobOut(BaseModel):
     application_id: int | None
     application_status: str | None
     job: JobListing
+    similar: list[SimilarListingOut] = Field(default_factory=list)
 
 
 class JobDetail(UserJobOut):
@@ -106,6 +130,7 @@ class JobAnalysis(BaseModel):
     eligibility: str | None = None  # pass | fail | unknown, separate from the suitability score
     unknown_dimensions: list[str] = []
     disclaimer: str | None = None
+    breakdown: dict[str, Any] | None = None  # matched / partial / not_matched / not_evaluated, with skills (scoring_v2.explain)
 
 
 class JobList(BaseModel):
@@ -168,3 +193,6 @@ class SearchLinkOut(BaseModel):
     title: str
     location: str
     url: str
+
+
+JobListing.model_rebuild()

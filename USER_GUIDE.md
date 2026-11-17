@@ -72,7 +72,28 @@ Your list of matching jobs, best matches first.
   - **Verified:** the employer published that date.
   - **Estimated:** from an alert e-mail.
   - **Unknown:** no date was given.
-- Click a job to read the full description and to see **why it matches you**: what fits and what is missing.
+- Each job also says whether it is **still open**:
+  - **Open:** JobPilot saw it on the employer's job page, or in an official job feed, in the last few days.
+  - **Not recently confirmed:** it was seen before, but not lately. Check it before you spend time on it.
+  - **Check on the site:** JobPilot can't check sites like LinkedIn, Naukri or Indeed for you, so open the job there.
+  - **Applications closed / No longer listed:** these are hidden from your list unless you tick
+    **Show closed and expired jobs** under Filters.
+
+  Hover over the badge to see when and how the job was checked.
+- Places and pay are written the same way everywhere. For example, "Bangalore" and "bengaluru, , India" both show
+  as "Bengaluru, India", and "$80K – $110K" shows as "USD 80k–110k a year". Hover over them to see what the employer wrote.
+  - Pay is never converted between currencies.
+  - "(assumed)" means the employer didn't say "per year", but the amount is clearly yearly.
+- When a company lists the same job in several cities, you see it **once**, with "Also listed in…" underneath.
+  Click a city to open that listing, or tick **Show every listing separately** under Filters.
+- Remote jobs show who they are open to, for example "Remote (United States)". A remote job that isn't open to
+  people in your country gets a low location score.
+- Click a job to read the full description and to see **why it matches you**. The match is split into four lists:
+  - **What matches**
+  - **Partly matches**
+  - **Doesn't match**
+  - **Couldn't be checked:** for example, the job doesn't state a salary. These don't count for or against you.
+
   The match score is a guide to help you decide what to read first. Always read the job yourself.
 - **Save** jobs you like for later, and **Dismiss** the ones you don't want to see again.
 

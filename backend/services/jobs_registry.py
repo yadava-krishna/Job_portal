@@ -113,7 +113,15 @@ def _normalise_and_dedupe(db, settings):
 
     from backend.models import Job
     from backend.services.career_service import infer_seniority, sponsorship_signal
-    out = {"sponsorship": 0, "seniority": 0}
+    from backend.services.normalization import NORMALIZED_VERSION, normalize_facts
+    out = {"sponsorship": 0, "seniority": 0, "normalised": 0}
+    # Location, remote scope, country and salary in one form for every stored job (version-stamped, so a rule change
+    # back-fills again exactly once). Raw columns are left as the source wrote them.
+    stale = select(Job).where(or_(Job.normalized_version.is_(None), Job.normalized_version != NORMALIZED_VERSION))
+    for job in db.execute(stale).scalars():
+        normalize_facts(job)
+        out["normalised"] += 1
+    db.flush()
     rows = db.execute(select(Job).where(or_(Job.seniority.is_(None), Job.sponsorship_signal.is_(None),
                                             Job.sponsorship_signal == "unknown"))).scalars().all()
     for job in rows:
@@ -126,6 +134,11 @@ def _normalise_and_dedupe(db, settings):
             out["seniority"] += 1
     db.commit()
     return out
+
+
+def _link_check(db, settings):
+    from backend.services import link_check
+    return link_check.check(db)
 
 
 def _job_matching(db, settings):
@@ -287,6 +300,9 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
     JobSpec("source_refresh", "daily 05:00", "discovery", "Refresh connector health/telemetry.", _source_refresh),
     JobSpec("job_normalisation", "inline with discovery", "discovery", "Normalise raw postings into canonical jobs.", _normalise_and_dedupe, retries=0),
     JobSpec("job_deduplication", "inline with discovery", "discovery", "Merge duplicate postings across sources.", _normalise_and_dedupe, retries=0),
+    JobSpec("job_link_check", "daily 04:30", "discovery",
+            "Re-check job pages no employer board confirms (feeds, imports); close jobs whose page is gone. Never visits "
+            "LinkedIn, Naukri or Indeed.", _link_check, retries=0),
     JobSpec("job_matching", "daily 06:00", "matching", "Re-score every user's feed with the current scoring version.", _job_matching),
     JobSpec("gap_generation", "daily 06:30", "career", "Recompute each user's gaps from their relevant jobs and rejections.", _gap_generation),
     JobSpec("resume_feedback_generation", "daily 07:00", "resume studio", "Refresh ATS/readiness feedback for changed drafts.", _resume_feedback),
@@ -302,7 +318,7 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
 
 # (name, cron fields) wired by scheduler_service; jobs marked "inline" run as part of daily_discovery.
 SCHEDULES: dict[str, dict[str, Any]] = {
-    "source_refresh": {"hour": 5, "minute": 0}, "job_matching": {"hour": 6, "minute": 0}, "gap_generation": {"hour": 6, "minute": 30},
+    "source_refresh": {"hour": 5, "minute": 0}, "job_link_check": {"hour": 4, "minute": 30}, "job_matching": {"hour": 6, "minute": 0}, "gap_generation": {"hour": 6, "minute": 30},
     "resume_feedback_generation": {"hour": 7, "minute": 0}, "resource_refresh": {"day_of_week": "sun", "hour": 4, "minute": 0},
     "notification_dispatch": {"minute": "*/30"}, "report_generation": {"hour": 21, "minute": 0}, "visa_source_check": {"hour": 3, "minute": 0},
     "analytics_rollup": {"hour": 0, "minute": 30}, "cleanup_and_retention": {"hour": 1, "minute": 30},

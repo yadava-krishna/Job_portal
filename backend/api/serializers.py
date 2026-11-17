@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 
 from backend.models import Application, DiscoveryRun, Job, JobSourceLink, UserJob
 from backend.schemas.applications import ApplicationDetail, ApplicationOut, EventOut
-from backend.schemas.jobs import DiscoveryRunOut, JobDetail, JobListing, JobSourceOut, UserJobOut
-from backend.services import application_service, apply_state_service
+from backend.schemas.jobs import DiscoveryRunOut, FreshnessOut, JobDetail, JobListing, JobSourceOut, SimilarListingOut, UserJobOut
+from backend.services import application_service, apply_state_service, freshness
+from core.locations import describe_scope
 from backend.services.discovery_service import posted_label
-from backend.services.normalization import posted_confidence
+from backend.services.normalization import posted_confidence, salary_label
 from intelligence.jd_analyzer import JDAnalyzer
 
 
@@ -34,6 +35,9 @@ def job_listing(job: Job, links: list[JobSourceLink] | None = None) -> JobListin
         posted_at_confidence=posted_confidence(job.posted_at, job.posted_at_source), first_seen_at=job.discovered_at or job.created_at,
         last_verified_at=job.last_verified_at, closed_at=job.closed_at, industry=job.industry, department=job.department, seniority=job.seniority, sponsorship_signal=job.sponsorship_signal,
         sources=[JobSourceOut(source=l.source, platform=l.platform, url=l.url, first_seen_at=l.first_seen_at) for l in links or []],
+        location_normalized=job.location_normalized, country=job.country, remote_scope=job.remote_scope,
+        remote_scope_label=describe_scope(job.remote_scope) if job.remote_scope else None, salary_label=salary_label(job),
+        expires_at=job.expires_at, freshness=FreshnessOut(**freshness.status(job)),
     )
 
 
@@ -44,12 +48,32 @@ def _apps_by_job(db: Session, user_id: int, job_ids: list[int]) -> dict[int, App
     return {a.job_id: a for a in rows}
 
 
-def user_jobs(db: Session, items: list[UserJob]) -> list[UserJobOut]:
+def user_jobs(db: Session, items: list[UserJob], *, similar: bool = False) -> list[UserJobOut]:
     if not items:
         return []
     apps = _apps_by_job(db, items[0].user_id, [u.job_id for u in items])
     links = job_links(db, [u.job_id for u in items])
-    return [user_job(u, apps.get(u.job_id), links.get(u.job_id)) for u in items]
+    out = [user_job(u, apps.get(u.job_id), links.get(u.job_id)) for u in items]
+    if similar:
+        groups = similar_listings(db, items[0].user_id, [u.job.dedup_key for u in items if u.job.dedup_key])
+        for o, u in zip(out, items):
+            o.similar = [s for s in groups.get(u.job.dedup_key or "", []) if s.user_job_id != u.id][:12]
+    return out
+
+
+def similar_listings(db: Session, user_id: int, keys: list[str]) -> dict[str, list[SimilarListingOut]]:
+    """Open listings in the user's feed that share a (company, title) key, by key."""
+    out: dict[str, list[SimilarListingOut]] = {}
+    if not keys:
+        return out
+    rows = db.execute(select(UserJob.id, UserJob.match_score, Job.dedup_key, Job.location_normalized, Job.location)
+                      .join(Job, Job.id == UserJob.job_id)
+                      .where(UserJob.user_id == user_id, UserJob.status.in_(["new", "shortlisted"]), Job.dedup_key.in_(set(keys)),
+                             Job.closed_at.is_(None), Job.is_expired.is_(False))
+                      .order_by(UserJob.match_score.desc().nullslast(), UserJob.id)).all()
+    for uid, score, key, loc_n, loc in rows:
+        out.setdefault(key, []).append(SimilarListingOut(user_job_id=uid, location=loc_n or loc, match_score=score))
+    return out
 
 
 def user_job(uj: UserJob, app: Application | None, links: list[JobSourceLink] | None = None) -> UserJobOut:
@@ -64,6 +88,9 @@ def user_job(uj: UserJob, app: Application | None, links: list[JobSourceLink] | 
 def job_detail(db: Session, uj: UserJob, analyzer: JDAnalyzer) -> JobDetail:
     app = _apps_by_job(db, uj.user_id, [uj.job_id]).get(uj.job_id)
     base = user_job(uj, app, job_links(db, [uj.job_id]).get(uj.job_id)).model_dump()
+    if uj.job.dedup_key:
+        base["similar"] = [s.model_dump() for s in similar_listings(db, uj.user_id, [uj.job.dedup_key]).get(uj.job.dedup_key, [])
+                           if s.user_job_id != uj.id][:12]
     job = uj.job
     return JobDetail(
         **base, description=job.description, responsibilities=analyzer.analyze(job.description or "").responsibilities if job.description else [],

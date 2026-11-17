@@ -1,7 +1,8 @@
-import { Archive, Bookmark, BookmarkCheck, Briefcase, CalendarDays, EyeOff, FileText, IndianRupee, MapPin, Radar, Send, Undo2 } from "lucide-react";
+import { Banknote, Bookmark, BookmarkCheck, Briefcase, CalendarDays, Copy, EyeOff, FileText, MapPin, Radar, Send, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PlatformBadge, ScoreRing, SkillChips, StatusBadge } from "@/components/app/common";
+import { FreshnessBadge } from "@/components/app/Freshness";
 import { postedDisplay, seenOn, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { UserJob } from "@/types/api";
@@ -11,6 +12,8 @@ export interface JobCardActions {
   onSave: (j: UserJob) => void;
   onApply: (j: UserJob) => void;
   onDismiss: (j: UserJob) => void;
+  /** Open another listing of the same role (a city or re-post grouped onto this card). */
+  onViewId?: (userJobId: number) => void;
 }
 
 export function JobCard({ item, active, actions, disabled }: { item: UserJob; active?: boolean; actions: JobCardActions; disabled?: boolean }) {
@@ -30,7 +33,7 @@ export function JobCard({ item, active, actions, disabled }: { item: UserJob; ac
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{j.company || "Unknown company"}</span>
             {platforms.map((p) => <PlatformBadge key={p} platform={p} />)}
-            {j.closed_at && <span className="flex items-center gap-1 rounded bg-zinc-200 px-1.5 py-0.5 text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" title="The employer's job board no longer lists this job"><Archive className="size-3" /> No longer listed</span>}
+            <FreshnessBadge job={j} />
             {item.application_status && <StatusBadge status={item.application_status} />}
             {(item.eligibility_status === "INELIGIBLE" || item.eligibility === "fail") && (
               <span data-testid="not-eligible-badge" className="cursor-help rounded bg-rose-100 px-1.5 py-0.5 text-xs text-rose-800 dark:bg-rose-950 dark:text-rose-200"
@@ -45,7 +48,10 @@ export function JobCard({ item, active, actions, disabled }: { item: UserJob; ac
       </div>
 
       <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-muted-foreground sm:grid-cols-2">
-        <span className="flex items-center gap-1.5"><MapPin className="size-3.5" />{j.location || "Location not stated"}{j.work_mode ? ` · ${j.work_mode}` : ""}</span>
+        <span className="flex items-center gap-1.5" title={j.location && j.location !== j.location_normalized ? `As posted: ${j.location}` : undefined}>
+          <MapPin className="size-3.5 shrink-0" />{j.location_normalized || j.location || "Location not stated"}
+          {j.work_mode && !(j.work_mode === "Remote" && (j.location_normalized ?? "").startsWith("Remote")) ? ` · ${j.work_mode}` : ""}
+        </span>
         <span className="flex items-center gap-1.5" title={posted.title}>
           <CalendarDays className="size-3.5" />{posted.text}
           <span data-testid="posted-confidence" className={cn("rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide",
@@ -55,11 +61,25 @@ export function JobCard({ item, active, actions, disabled }: { item: UserJob; ac
           </span>
         </span>
         <span className="flex items-center gap-1.5"><Briefcase className="size-3.5" />{j.experience_required || "Experience not stated"}</span>
-        <span className="flex items-center gap-1.5"><IndianRupee className="size-3.5" />{j.salary_range || "Salary not disclosed"}</span>
+        <span className="flex items-center gap-1.5" title={j.salary_range && j.salary_label ? `As posted: ${j.salary_range}` : undefined}>
+          <Banknote className="size-3.5 shrink-0" />{j.salary_label || j.salary_range || "Salary not disclosed"}
+        </span>
         <span className="flex items-center gap-1.5 sm:col-span-2" title={j.first_seen_at ?? item.discovered_at}>
           <Radar className="size-3.5" />Found {timeAgo(item.discovered_at)}{j.industry ? ` · ${j.industry}` : ""}{j.department ? ` · ${j.department}` : ""}
         </span>
       </div>
+
+      {(item.similar?.length ?? 0) > 0 && (
+        <div data-testid="similar-listings" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <Copy className="size-3.5" aria-hidden />
+          <span>Also listed {item.similar!.length === 1 ? "once more" : `${item.similar!.length} more times`}:</span>
+          {item.similar!.slice(0, 4).map((s) => (
+            <button key={s.user_job_id} type="button" onClick={() => actions.onViewId?.(s.user_job_id)} disabled={!actions.onViewId}
+                    className="rounded border px-1.5 py-0.5 hover:bg-muted disabled:cursor-default">{s.location || "location not stated"}</button>
+          ))}
+          {item.similar!.length > 4 && <span>+{item.similar!.length - 4} more</span>}
+        </div>
+      )}
 
       {(item.matching_skills.length > 0 || item.missing_skills.length > 0) && (
         <div className="space-y-1.5">

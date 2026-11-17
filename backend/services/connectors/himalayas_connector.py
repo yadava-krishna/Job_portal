@@ -27,6 +27,39 @@ PAGE_SIZE = 20
 MAX_PAGES = 10
 
 
+def _as_list(value: Any) -> list[Any]:
+    if value in (None, "", "None"):
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.startswith("["):
+        try:
+            parsed = json.loads(value.replace("'", '"'))
+            return parsed if isinstance(parsed, list) else [parsed]
+        except ValueError:
+            return [v.strip(" '\"") for v in value.strip("[]").split(",") if v.strip(" '\"")]
+    return [value]
+
+
+def _num(value: Any) -> float | None:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return v if v > 0 else None
+
+
+def _epoch_date(value: Any):
+    """Himalayas sends Unix seconds (as a number or a string); older payloads used ISO dates."""
+    if value in (None, "", "None"):
+        return None
+    text = str(value).strip()
+    if text.isdigit():
+        n = int(text)
+        return local_date(n * 1000 if n < 10**11 else n)
+    return local_date(text)
+
+
 class HimalayasConnector(BaseConnector):
     """Discovers remote listings via Himalayas official API."""
 
@@ -71,23 +104,26 @@ class HimalayasConnector(BaseConnector):
             if not title or not company:
                 continue
 
-            job_url = r.get("applicationUrl") or r.get("url") or f"https://himalayas.app/jobs/{ext_id}"
-            loc = r.get("location") or "Worldwide Remote"
-            pub_date_str = r.get("pubDate") or r.get("createdAt")
-            posted_at = None
-            if pub_date_str:
-                try:
-                    posted_at = local_date(str(pub_date_str)[:10])
-                except Exception:
-                    posted_at = None
+            job_url = r.get("applicationLink") or r.get("applicationUrl") or r.get("guid") or r.get("url") \
+                or f"https://himalayas.app/jobs/{ext_id}"
+            # Himalayas lists who may apply (countries); "Worldwide" only when it sets no restriction.
+            allowed = [str(x).strip() for x in _as_list(r.get("locationRestrictions")) if str(x).strip()]
+            loc = ("Remote - " + "; ".join(allowed)) if allowed else (r.get("location") or "Worldwide Remote")
+            posted_at = _epoch_date(r.get("pubDate") or r.get("createdAt"))
+            expires_at = _epoch_date(r.get("expiryDate"))
 
             raw_desc = r.get("description") or ""
             clean_desc = html_to_text(raw_desc) if "<" in raw_desc else raw_desc
 
-            min_sal = r.get("minSalary")
-            max_sal = r.get("maxSalary")
-            currency = r.get("salaryCurrency") or "USD"
-            salary_str = f"{currency} {min_sal} - {max_sal}" if (min_sal or max_sal) else None
+            min_sal, max_sal = _num(r.get("minSalary")), _num(r.get("maxSalary"))
+            currency = (r.get("currency") or r.get("salaryCurrency") or "").strip().upper() or None
+            period = {"annual": "year", "yearly": "year", "monthly": "month", "hourly": "hour", "weekly": "week",
+                      "daily": "day"}.get(str(r.get("salaryPeriod") or "").lower())
+            salary_str = None
+            if (min_sal or max_sal) and currency:
+                amount = f"{min_sal:g} - {max_sal:g}" if min_sal and max_sal else f"{(min_sal or max_sal):g}"
+                salary_str = f"{currency} {amount}" + (f" per {period}" if period else "")
+            seniority = _as_list(r.get("seniority"))
 
             job = NormalizedJob(
                 source="himalayas",
@@ -99,8 +135,10 @@ class HimalayasConnector(BaseConnector):
                 job_url=job_url,
                 application_url=job_url,
                 location=loc,
-                locations=[loc] if loc else [],
+                locations=allowed or ([loc] if loc else []),
                 work_mode="Remote",
+                expires_at=expires_at,
+                seniority=str(seniority[0]) if seniority else None,
                 employment_type=normalize_employment_type(r.get("employmentType")),
                 salary_range=salary_str,
                 description=clean_desc,

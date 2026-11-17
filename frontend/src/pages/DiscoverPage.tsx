@@ -43,6 +43,7 @@ export function JobWorkspace({ query, emptyTitle, emptyBody, toolbar, empty, ini
 
   const act = {
     onView: (j: UserJob) => setDetailId(j.user_job_id),
+    onViewId: (id: number) => setDetailId(id),
     onSave: (j: UserJob) => action.mutate({ id: j.user_job_id, action: j.is_saved ? "unsave" : "save" }, {
       onSuccess: () => toast.success(j.is_saved ? "Removed from saved" : "Saved"), onError: (e) => toast.error(errorMessage(e)),
     }),
@@ -107,7 +108,7 @@ export function JobWorkspace({ query, emptyTitle, emptyBody, toolbar, empty, ini
           ))}
         </div>
       )}
-      <JobDetailSheet userJobId={detailId} onOpenChange={(o) => !o && setDetailId(null)}
+      <JobDetailSheet userJobId={detailId} onOpenChange={(o) => !o && setDetailId(null)} onOpenJob={setDetailId}
                       onApply={(id) => { const it = items.find((x) => x.user_job_id === id); setDetailId(null); if (it) setApplyItem(it); }} />
       <ApplyDialog item={applyItem} onClose={() => setApplyItem(null)} />
     </>
@@ -260,7 +261,11 @@ export function DiscoverPage() {
                           options={[{ value: "score", label: "Best match" }, { value: "posted", label: "Newest posting" }, { value: "discovered", label: "Recently added" }]} />
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={!!draft.include_closed} onChange={(e) => set("include_closed", e.target.checked || undefined)} className="accent-primary" />
-              Show jobs no longer listed
+              Show closed and expired jobs
+            </label>
+            <label className="flex items-center gap-2 text-sm" title="By default the same role at the same company (other cities, re-posts) is shown once, with the rest listed on the card">
+              <input type="checkbox" checked={draft.group_similar === false} onChange={(e) => set("group_similar", e.target.checked ? false : undefined)} className="accent-primary" />
+              Show every listing separately
             </label>
             <label className="flex items-center gap-3 text-sm sm:col-span-2 lg:col-span-2">
               <span className="shrink-0">Min match: <strong>{draft.min_score ?? 0}%</strong></span>
