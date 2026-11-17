@@ -31,9 +31,9 @@ static const char *CLAIM =
     " RETURNING s.id, s.target_key, c.ats, c.board_token, coalesce(c.region, ''), coalesce(s.etag, ''),"
     "   coalesce(s.body_hash, ''), (s.last_success_at IS NOT NULL)";
 
-long jpf_db_claim(PGconn *c, const jpf_config *cfg, jpf_job **out, char *err, size_t n) {
+long jpf_db_claim(PGconn *c, const jpf_config *cfg, unsigned limit, jpf_jobs *out, char *err, size_t n) {
     char lim[16], lease[16];
-    snprintf(lim, sizeof lim, "%u", cfg->max_claim);
+    snprintf(lim, sizeof lim, "%u", limit);
     snprintf(lease, sizeof lease, "%u", cfg->lease_s);
     const char *params[2] = {lim, lease};
     PGresult *r = PQexecParams(c, CLAIM, 2, NULL, params, NULL, NULL, 0);
@@ -43,23 +43,21 @@ long jpf_db_claim(PGconn *c, const jpf_config *cfg, jpf_job **out, char *err, si
         return -1;
     }
     int rows = PQntuples(r);
-    jpf_job *jobs = rows ? calloc((size_t)rows, sizeof *jobs) : NULL;
-    if (rows && !jobs) { PQclear(r); snprintf(err, n, "out of memory"); return -1; }
     for (int i = 0; i < rows; i++) {
-        jpf_job *j = &jobs[i];
+        jpf_job *j = calloc(1, sizeof *j);
+        if (!j || !jpf_jobs_push(out, j)) { free(j); snprintf(err, n, "out of memory"); PQclear(r); return -1; }
         j->state_id = atoi(PQgetvalue(r, i, 0));
         snprintf(j->target_key, sizeof j->target_key, "%s", PQgetvalue(r, i, 1));
         j->ats = jpf_ats_from(PQgetvalue(r, i, 2));
         snprintf(j->token, sizeof j->token, "%s", PQgetvalue(r, i, 3));
         snprintf(j->region, sizeof j->region, "%s", PQgetvalue(r, i, 4));
-        bool has_snapshot = PQgetvalue(r, i, 7)[0] == 't';
-        if (has_snapshot) {  /* without a stored snapshot a 304 would leave nothing to serve */
+        if (PQgetvalue(r, i, 7)[0] == 't') {  /* without a stored snapshot a 304 would leave nothing to serve */
             snprintf(j->etag, sizeof j->etag, "%s", PQgetvalue(r, i, 5));
             snprintf(j->prev_body_hash, sizeof j->prev_body_hash, "%s", PQgetvalue(r, i, 6));
         }
+        jpf_job_prepare(j);
     }
     PQclear(r);
-    *out = jobs;
     return rows;
 }
 

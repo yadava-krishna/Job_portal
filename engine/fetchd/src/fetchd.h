@@ -60,14 +60,17 @@ typedef struct jpf_fetcher {
 void jpf_fetcher_init(jpf_fetcher *f, const jpf_config *cfg);
 void jpf_fetcher_free(jpf_fetcher *f);
 bool jpf_job_prepare(jpf_job *j);
-void jpf_fetch_all(jpf_fetcher *f, jpf_job *jobs, size_t n, double budget_s, void (*on_done)(jpf_job *, void *), void *ud,
-                   volatile int *stop);
+#define JPF_REFILL_S 10.0
+typedef struct { jpf_job **v; size_t n, cap; } jpf_jobs;
+bool jpf_jobs_push(jpf_jobs *js, jpf_job *j);
+void jpf_fetch_run(jpf_fetcher *f, jpf_jobs *js, double budget_s, void (*on_done)(jpf_job *, void *),
+                   size_t (*refill)(jpf_jobs *, void *), void *ud, volatile int *stop);
 void jpf_job_free(jpf_job *j);
 void jpf_job_body_hash(const jpf_job *j, char out[33]);
 
 /* db.c */
 #include <libpq-fe.h>
 PGconn *jpf_db_connect(const char *url, char *err, size_t n);
-long jpf_db_claim(PGconn *c, const jpf_config *cfg, jpf_job **out, char *err, size_t n);
+long jpf_db_claim(PGconn *c, const jpf_config *cfg, unsigned limit, jpf_jobs *out, char *err, size_t n);
 bool jpf_db_write(PGconn *c, jpf_job *j, char *err, size_t n);
 #endif

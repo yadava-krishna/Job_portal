@@ -1,5 +1,5 @@
 /* jp-fetchd main loop: claim due boards, fetch them all concurrently, write each result as it completes, sleep, repeat.
- * Configuration comes from the environment (no secrets in arguments). SIGTERM/SIGINT finish the current tick cleanly. */
+ * Configuration comes from the environment (no secrets in arguments). SIGTERM/SIGINT finish the current session cleanly. */
 #define _GNU_SOURCE
 #include <curl/curl.h>
 #include <signal.h>
@@ -19,38 +19,45 @@ static unsigned env_u(const char *k, unsigned d, unsigned lo, unsigned hi) {
     return x < lo ? lo : x > hi ? hi : (unsigned)x;
 }
 
-typedef struct { PGconn *db; unsigned written, failed; } tick_ctx;
+typedef struct { PGconn *db; const jpf_config *cfg; unsigned written, failed, claimed; } session_ctx;
 
 static void on_done(jpf_job *j, void *ud) {
-    tick_ctx *t = ud;
+    session_ctx *t = ud;
     char err[512] = "";
     if (jpf_db_write(t->db, j, err, sizeof err)) t->written++;
     else { t->failed++; fprintf(stderr, "level=error msg=\"write failed\" target=%s err=\"%s\"\n", j->target_key, err); }
-    /* free the board's memory now; the result is in the database */
-    free(j->body); j->body = NULL; j->body_cap = j->body_len = 0;
-    jpf_board_free(&j->board);
 }
 
-static int tick(const jpf_config *cfg) {
+static size_t refill(jpf_jobs *js, void *ud) {
+    session_ctx *t = ud;
+    unsigned room = t->cfg->max_claim > js->n ? t->cfg->max_claim - (unsigned)js->n : 0;
+    if (!room) return 0;
+    char err[512] = "";
+    long got = jpf_db_claim(t->db, t->cfg, room, js, err, sizeof err);
+    if (got < 0) { fprintf(stderr, "level=error msg=\"%s\"\n", err); return 0; }
+    t->claimed += (unsigned)got;
+    return (size_t)got;
+}
+
+/* One session: claim what is due, keep claiming as capacity frees up, until the budget ends. */
+static int session(const jpf_config *cfg) {
     char err[512] = "";
     PGconn *db = jpf_db_connect(cfg->database_url, err, sizeof err);
     if (!db) { fprintf(stderr, "level=error msg=\"database unavailable\" err=\"%s\"\n", strtok(err, "\n")); return -1; }
-    jpf_job *jobs = NULL;
-    long n = jpf_db_claim(db, cfg, &jobs, err, sizeof err);
-    if (n < 0) { fprintf(stderr, "level=error msg=\"%s\"\n", err); PQfinish(db); return -1; }
-    if (n > 0) {
-        for (long i = 0; i < n; i++) jpf_job_prepare(&jobs[i]);
+    session_ctx t = {.db = db, .cfg = cfg};
+    jpf_jobs js = {0};
+    refill(&js, &t);
+    if (js.n || !cfg->once) {
         jpf_fetcher f;
         jpf_fetcher_init(&f, cfg);
-        tick_ctx t = {.db = db};
-        jpf_fetch_all(&f, jobs, (size_t)n, cfg->budget_s, on_done, &t, &g_stop);
+        /* JPF_ONCE: claim once and finish (tests, benchmarks); otherwise keep refilling for the whole budget */
+        jpf_fetch_run(&f, &js, cfg->budget_s, on_done, cfg->once ? NULL : refill, &t, &g_stop);
         jpf_fetcher_free(&f);
-        fprintf(stderr, "level=info msg=tick claimed=%ld written=%u failed=%u\n", n, t.written, t.failed);
-        for (long i = 0; i < n; i++) jpf_job_free(&jobs[i]);
     }
-    free(jobs);
+    if (t.claimed) fprintf(stderr, "level=info msg=session claimed=%u written=%u failed=%u\n", t.claimed, t.written, t.failed);
+    free(js.v);
     PQfinish(db);
-    return (int)n;
+    return (int)t.claimed;
 }
 
 int main(void) {
@@ -78,7 +85,7 @@ int main(void) {
     if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) return 2;
     fprintf(stderr, "level=info msg=start version=%s global=%u per_host=%u\n", JPF_VERSION, cfg.global, cfg.per_host);
     do {
-        tick(&cfg);
+        session(&cfg);
         for (unsigned s = 0; !cfg.once && !g_stop && s < cfg.tick_s; s++) sleep(1);
     } while (!cfg.once && !g_stop);
     curl_global_cleanup();

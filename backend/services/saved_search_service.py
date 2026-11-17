@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from dataclasses import replace
 from datetime import timedelta, timezone
@@ -114,8 +115,31 @@ def list_for(db: Session, user: User) -> list[SavedSearch]:
 
 # ---- criteria -------------------------------------------------------------------------------------
 
+# Invisible characters that arrive with copy-pasted titles ("Devops Engineer\u200b") and would make a word never match.
+_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\u00ad"), None)
+# Several roles typed into one title field: "Associate/ Sr Associate/ Investment Specialist", "Analyst | Associate".
+# Commas and "&" are not separators: "FP&A" and "Order to Cash, Billing" are single titles.
+_TITLE_SPLIT = re.compile(r"\s*(?:/|\||;|\bor\b)\s*", re.IGNORECASE)
+PREFIX_MIN = 5  # a typed word of 5+ letters also matches longer words starting with it: "associat" -> "associate(s)"
+
+
+def split_titles(titles: Iterable[str]) -> list[str]:
+    out: list[str] = []
+    for t in titles:
+        for part in _TITLE_SPLIT.split((t or "").translate(_INVISIBLE)):
+            part = part.strip(" -,.")
+            if part and part.lower() not in (p.lower() for p in out):
+                out.append(part)
+    return out
+
+
 def _phrase_tokens(phrase: str) -> set[str]:
-    return {t for t in normalize_text(phrase).split() if t not in _STOPWORDS}
+    return {t for t in normalize_text(phrase.translate(_INVISIBLE)).split() if t not in _STOPWORDS}
+
+
+def _covers(wanted: set[str], tokens: set[str]) -> bool:
+    """Every wanted word is in the title, exactly or (5+ letters) as the start of a longer word."""
+    return all(w in tokens or (len(w) >= PREFIX_MIN and any(t.startswith(w) for t in tokens)) for w in wanted)
 
 
 class Criteria:
@@ -123,7 +147,7 @@ class Criteria:
 
     def __init__(self, c: SearchCriteria, fallback_titles: list[str], fallback_locations: list[str], domains: list[str] | None = None):
         self.c = c
-        self.titles = c.keywords or fallback_titles
+        self.titles = split_titles(c.keywords or fallback_titles)
         self.families = families_for(*self.titles, *(domains or [])) if c.related_titles else []
         self.title_sets = [s for s in (_phrase_tokens(t) for t in self.titles) if s]
         self.exclude_sets = [s for s in (_phrase_tokens(t) for t in c.exclude_keywords) if s]
@@ -139,7 +163,7 @@ class Criteria:
         tokens = set(normalize_text(title).split())
         if any(s <= tokens for s in self.exclude_sets):
             return False
-        return any(s <= tokens for s in self.title_sets) or (bool(self.families) and related_title(title, self.families) is not None)
+        return any(_covers(s, tokens) for s in self.title_sets) or (bool(self.families) and related_title(title, self.families) is not None)
 
     def location_ok(self, nj: NormalizedJob) -> bool:
         texts = nj.locations or [nj.location or ""]

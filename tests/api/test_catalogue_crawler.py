@@ -358,3 +358,19 @@ def test_a_slow_host_never_delays_other_hosts(client, boards, resume_bytes):
         assert finished["greenhouse"] < 1.0 and finished["ashby"] < 1.0 and finished["lever"] >= 1.5
     finally:
         db.close()
+
+
+def test_titles_typed_as_one_field_are_split_and_tolerate_cut_off_words():
+    """A user typed several roles into one title (with a typo); a copy-pasted title carried an invisible character."""
+    from backend.schemas.discovery import SearchCriteria
+    from backend.services.saved_search_service import Criteria, split_titles
+
+    assert split_titles(["Associat/ Sr Associate/ Investment Specialist"]) == ["Associat", "Sr Associate", "Investment Specialist"]
+    assert split_titles(["FP&A", "Order to Cash, Billing", "Analyst | Associate", "Analyst or Associate"]) == \
+        ["FP&A", "Order to Cash, Billing", "Analyst", "Associate"]
+    c = Criteria(SearchCriteria(related_titles=False), ["Associat/ Sr Associate/ Investment Specialist"], [])
+    assert c.title_ok("Senior Associate, Investments") and c.title_ok("Investment Specialist - Wealth")
+    assert not c.title_ok("Software Engineer")
+    assert not Criteria(SearchCriteria(related_titles=False), ["Payroll Specialist"], []).title_ok("Pay Specialist")  # short words stay exact
+    d = Criteria(SearchCriteria(related_titles=False), ["Devops Engineer​"], [])
+    assert d.title_ok("Senior DevOps Engineer") and not d.title_ok("DevOps Lead")

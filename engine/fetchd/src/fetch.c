@@ -273,37 +273,49 @@ bool jpf_job_prepare(jpf_job *j) {
     return true;
 }
 
-/* Runs every prepared job to completion (or until the deadline: then no new transfer starts, and transfers already
- * running finish; a job that never started is reported as ST_SKIPPED so it stays due). on_done is called as soon as
- * each job finishes, so results reach the database while other boards are still downloading. */
-void jpf_fetch_all(jpf_fetcher *f, jpf_job *jobs, size_t n, double budget_s, void (*on_done)(jpf_job *, void *), void *ud,
-                   volatile int *stop) {
-    double deadline = now_s() + budget_s;
-    size_t remaining = 0;
-    for (size_t i = 0; i < n; i++)
-        if (jobs[i].phase == JOB_WAITING) remaining++;
-        else if (jobs[i].phase == JOB_DONE && !jobs[i].reported) {
-            jobs[i].reported = true;
-            if (on_done) on_done(&jobs[i], ud);
-        }
-    while (remaining) {
+bool jpf_jobs_push(jpf_jobs *js, jpf_job *j) {
+    if (js->n == js->cap) {
+        size_t cap = js->cap ? js->cap * 2 : 64;
+        jpf_job **v = realloc(js->v, cap * sizeof *v);
+        if (!v) return false;
+        js->v = v;
+        js->cap = cap;
+    }
+    js->v[js->n++] = j;
+    return true;
+}
+
+/* The session loop. Jobs are pointers (curl keeps a pointer to each running job), so the pool can grow: every
+ * JPF_REFILL_S, while there is spare capacity, `refill` claims more due boards. A slow host therefore never holds up
+ * boards on other hosts, not even across rounds. Each finished job is reported (on_done), freed and dropped at once.
+ * At the deadline (or on SIGTERM) nothing new starts, transfers already running finish, and jobs never started are
+ * reported as ST_SKIPPED, which releases their lease so they are first in line next time. */
+void jpf_fetch_run(jpf_fetcher *f, jpf_jobs *js, double budget_s, void (*on_done)(jpf_job *, void *),
+                   size_t (*refill)(jpf_jobs *, void *), void *ud, volatile int *stop) {
+    double deadline = now_s() + budget_s, last_refill = now_s();
+    for (;;) {
         double t = now_s();
         bool closing = t > deadline || (stop && *stop);
-        for (size_t i = 0; i < n && !closing; i++) {
-            jpf_job *j = &jobs[i];
+        if (!closing && refill && f->inflight < f->cfg->global && t - last_refill >= JPF_REFILL_S) {
+            last_refill = t;
+            refill(js, ud);
+        }
+        for (size_t i = 0; i < js->n && !closing; i++) {
+            jpf_job *j = js->v[i];
             if (j->phase != JOB_WAITING || j->not_before > t || f->inflight >= f->cfg->global) continue;
             host_slot *h = host_get(&f->hosts, j->host);
             if (!h || (unsigned)h->inflight >= f->cfg->per_host || !host_take(h, t)) continue;
             if (!start(f, j)) { done(j, ST_ERROR, "Could not start the request."); }
             else { h->inflight++; f->inflight++; j->phase = JOB_RUNNING; }
         }
-        if (closing) {  /* nothing new; anything not yet running stays due for the next tick */
-            for (size_t i = 0; i < n; i++)
-                if (jobs[i].phase == JOB_WAITING) {
-                    jobs[i].phase = JOB_DONE;
-                    jobs[i].status = jobs[i].board.len ? ST_ERROR : ST_SKIPPED;  /* a half-read paginated board is not complete */
-                    if (jobs[i].board.len) snprintf(jobs[i].error, sizeof jobs[i].error, "Stopped before the last page.");
-                }
+        if (closing) {
+            for (size_t i = 0; i < js->n; i++) {
+                jpf_job *j = js->v[i];
+                if (j->phase != JOB_WAITING) continue;
+                j->phase = JOB_DONE;
+                j->status = j->board.len ? ST_ERROR : ST_SKIPPED;  /* a half-read paginated board is not complete */
+                if (j->board.len) snprintf(j->error, sizeof j->error, "Stopped before the last page.");
+            }
         }
         int running = 0;
         curl_multi_perform(f->multi, &running);
@@ -315,16 +327,16 @@ void jpf_fetch_all(jpf_fetcher *f, jpf_job *jobs, size_t n, double budget_s, voi
             curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (char **)&j);
             if (j) on_complete(f, j, msg->data.result);
         }
-        remaining = 0;
-        for (size_t i = 0; i < n; i++) {
-            jpf_job *j = &jobs[i];
-            if (j->phase == JOB_DONE && !j->reported) {
-                j->reported = true;
-                if (on_done) on_done(j, ud);
-            }
-            if (j->phase != JOB_DONE) remaining++;
+        for (size_t i = 0; i < js->n;) {  /* report, free and drop finished jobs */
+            jpf_job *j = js->v[i];
+            if (j->phase != JOB_DONE) { i++; continue; }
+            if (!j->reported) { j->reported = true; if (on_done) on_done(j, ud); }
+            jpf_job_free(j);
+            free(j);
+            js->v[i] = js->v[--js->n];
         }
-        if (remaining) curl_multi_poll(f->multi, NULL, 0, running ? 200 : 50, NULL);
+        if ((closing || !refill) && js->n == 0) break;  /* run-once mode ends when its claim is done */
+        curl_multi_poll(f->multi, NULL, 0, running ? 200 : (js->n ? 50 : 1000), NULL);
     }
 }
 
