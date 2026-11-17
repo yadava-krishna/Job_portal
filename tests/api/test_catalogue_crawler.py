@@ -374,3 +374,39 @@ def test_titles_typed_as_one_field_are_split_and_tolerate_cut_off_words():
     assert not Criteria(SearchCriteria(related_titles=False), ["Payroll Specialist"], []).title_ok("Pay Specialist")  # short words stay exact
     d = Criteria(SearchCriteria(related_titles=False), ["Devops Engineer​"], [])
     assert d.title_ok("Senior DevOps Engineer") and not d.title_ok("DevOps Lead")
+
+
+def test_catalogue_search_api_with_postgres_fallback(client, boards, resume_bytes, monkeypatch):
+    """The engine is not running in tests: the endpoint answers from the database with the same exact filters."""
+    monkeypatch.setenv("JPSE_SEARCH", "on")  # asks the engine first, then falls back
+    monkeypatch.setenv("JPSE_SEARCH_SOCKET", "/nonexistent/searchd.sock")
+    from backend.services import search_engine
+
+    monkeypatch.setattr(search_engine, "SOCKET", "/nonexistent/searchd.sock")
+    h, _ = _setup(client, resume_bytes)
+    db = _db()
+    try:
+        _crawl(db)
+    finally:
+        db.close()
+    r = client.get(f"{API}/catalogue/search", headers=h, params={"q": "receivable", "limit": 20})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["engine"] == "postgres" and body["items"]
+    assert all("receivable" in i["title"].lower() for i in body["items"])
+    everything = client.get(f"{API}/catalogue/search", headers=h, params={"limit": 100}).json()["items"]
+    assert any(i["title"] == "Senior Software Engineer" for i in everything)  # every posting, not only matches
+    assert client.get(f"{API}/catalogue/search", headers=h, params={"country": "ZZ"}).json()["items"] == []  # exact, never loosened
+    assert client.get(f"{API}/catalogue/search", params={"q": "x"}).status_code == 401
+
+
+def test_search_engine_query_building():
+    from backend.services.search_engine import Query
+
+    q = Query(terms=["AR analyst"], countries=["IN"], remote_open_to=["IN", "*"], work_modes=["Remote"], posted_within_days=7,
+              salary_currency="INR", salary_min=500000, limit=5000)
+    req = q.to_request()
+    assert req["filters"] == [["country:IN", "remote:IN", "remote:*"], ["mode:Remote"]]
+    assert req["limit"] == 2000 and req["salary"] == {"currency": "INR", "min": 500000, "unknown_ok": False}
+    assert isinstance(req["posted_after_day"], int)
+    assert Query().to_request() == {"method": "search", "limit": 50}

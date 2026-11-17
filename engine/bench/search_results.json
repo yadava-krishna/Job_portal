@@ -1,0 +1,142 @@
+{
+ "queries": 180,
+ "jp-searchd_c1": {
+  "p50": 0.21,
+  "p95": 0.33,
+  "p99": 0.38,
+  "max": 1.44,
+  "qps": 4584
+ },
+ "jp-searchd_c5": {
+  "p50": 0.65,
+  "p95": 1.17,
+  "p99": 1.78,
+  "max": 3.56,
+  "qps": 7110
+ },
+ "jp-searchd_c20": {
+  "p50": 2.43,
+  "p95": 5.46,
+  "p99": 7.94,
+  "max": 9.75,
+  "qps": 6641
+ },
+ "postgres_gin_c1": {
+  "p50": 2.15,
+  "p95": 12.86,
+  "p99": 19.88,
+  "max": 23.44,
+  "qps": 222
+ },
+ "postgres_gin_c5": {
+  "p50": 4.86,
+  "p95": 31.81,
+  "p99": 50.16,
+  "max": 84.91,
+  "qps": 504
+ },
+ "postgres_gin_c20": {
+  "p50": 12.36,
+  "p95": 54.88,
+  "p99": 118.77,
+  "max": 753.74,
+  "qps": 701
+ },
+ "filter_agreement": [
+  {
+   "filters": [
+    [
+     "country:IN",
+     "remote:IN",
+     "remote:*"
+    ]
+   ],
+   "posted_within_days": null,
+   "engine": 2000,
+   "postgres": 2000,
+   "identical": false,
+   "only_engine": [
+    20438,
+    20469
+   ],
+   "only_pg": [
+    14193,
+    18309
+   ]
+  },
+  {
+   "filters": [
+    [
+     "country:US"
+    ]
+   ],
+   "posted_within_days": null,
+   "engine": 2000,
+   "postgres": 2000,
+   "identical": false,
+   "only_engine": [
+    13393,
+    13435,
+    13568,
+    13576,
+    13582
+   ],
+   "only_pg": [
+    66,
+    909,
+    1370,
+    1421,
+    1496
+   ]
+  },
+  {
+   "filters": [
+    [
+     "mode:Remote"
+    ]
+   ],
+   "posted_within_days": null,
+   "engine": 2000,
+   "postgres": 2000,
+   "identical": false,
+   "only_engine": [
+    19488,
+    19500
+   ],
+   "only_pg": [
+    6538,
+    18319
+   ]
+  },
+  {
+   "filters": [
+    [
+     "country:IN"
+    ]
+   ],
+   "posted_within_days": 30,
+   "engine": 1231,
+   "postgres": 1231,
+   "identical": true,
+   "only_engine": [],
+   "only_pg": []
+  },
+  {
+   "filters": [
+    [
+     "country:GB",
+     "country:DE"
+    ],
+    [
+     "type:Full-time"
+    ]
+   ],
+   "posted_within_days": null,
+   "engine": 300,
+   "postgres": 300,
+   "identical": true,
+   "only_engine": [],
+   "only_pg": []
+  }
+ ]
+}

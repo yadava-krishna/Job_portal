@@ -326,8 +326,34 @@ Started: 2026-11-16. This is the working tracker for the JobPilot 2.0 overhaul. 
   - **After Discover answers,** the user's boards are re-checked in the background.
   - **Percolation:** a scheduled saved search whose boards changed re-runs from the catalogue, at most every 30 minutes, so new matches arrive without anyone clicking Discover.
   - **Tests:** `tests/api/test_catalogue_crawler.py` (11). The full suite passes. On PostgreSQL, migration 0012 goes up, down and up cleanly on a copy of live data, and the migration tests pass.
-- [ ] Phase 2: C crawler `jp-fetchd` (libcurl multi, yyjson, fuzzing).
-- [ ] Phase 3: C search server `jp-searchd`.
+- [x] Phase 2 (live 2026-11-17): C crawler `jp-fetchd` (`engine/fetchd`):
+  - **Technology:** libcurl multi, yyjson, xxHash and libpq COPY.
+  - **Safety:**
+    - the address check (SSRF guard) runs on every connection, and only permitted ATS hosts are fetched;
+    - LinkedIn, Naukri, Indeed and Glassdoor are refused;
+    - every input is bounded;
+    - ASan/UBSan unit tests and a 30 s libFuzzer run happen in every image build.
+  - **Continuous claiming:** boards are picked up every 10 s while capacity is free, so a slow host never blocks the others.
+  - **Data contract:** migration 0013 (`crawl_results`, `crawl_result_items`, `crawl_raw_items`). Python applies results with the same parsers.
+  - **Proof:** an end-to-end test shows an identical catalogue to the Python crawler.
+  - **Switch:** `JPSE_FETCHD`.
+- [x] Phase 3 (live in shadow mode, 2026-11-17): C search server `jp-searchd` (`engine/searchd`):
+  - **Index:** every open posting in memory, with an inverted index over title, skills, company, location and description (BM25F impacts), CRoaring filter bitmaps (country, remote scope, mode, type, seniority, source, company, currency), and date and pay columns.
+  - **Updates:** a full build through a cursor (26,348 postings in 4 s, about 135 MB), then index_outbox every 2 s with an overlap window; updates appear in about 0.1 s. Rebuild every 6 h, or when 30% of entries are dead.
+  - **Interface:** a Unix socket, with bounded JSON frames.
+  - **Tests:** ASan/UBSan, plus about 5 million libFuzzer runs per build.
+  - **Benchmark** (20,751 postings, 180 queries):
+
+    | Concurrent clients | jp-searchd p99 | PostgreSQL GIN p99 |
+    |---|---|---|
+    | 1 | 0.38 ms | 19.9 ms |
+    | 5 | 1.78 ms | 50.2 ms |
+    | 20 | 7.94 ms | 118.8 ms |
+
+    The target was p99 under 30 ms.
+  - **Exact filters:** 9 of 9 filter-only queries return the same postings in the same order as PostgreSQL.
+  - **API:** `GET /api/v1/catalogue/search`. `JPSE_SEARCH=off|shadow|on`, and PostgreSQL answers if the engine is unavailable.
+- [ ] Phase 3, not done yet: memory-mapped sealed segments on disk. The index is rebuilt from PostgreSQL at start, about 4 s today.
 - [ ] Phase 4: advanced retrieval.
 - [ ] Phase 5: shadow mode and rollout.
 

@@ -55,6 +55,10 @@ services:
       # JPSE Phase 2: jp-fetchd (the C crawler, service "fetchd") owns the employer boards. Set JPSE_FETCHD=0 in .env
       # and stop "fetchd" to hand the boards back to the Python crawler (nothing else changes).
       JPSE_FETCHD: ${JPSE_FETCHD:-1}
+      # JPSE Phase 3: jp-searchd (service "searchd"). off = PostgreSQL only; shadow = answer from PostgreSQL and compare
+      # with the engine in the logs; on = answer from the engine (PostgreSQL if it is unavailable).
+      JPSE_SEARCH: ${JPSE_SEARCH:-shadow}
+      JPSE_SEARCH_SOCKET: /run/jpse/searchd.sock
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
       REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-14}
       AUTH_RATE_LIMIT_PER_MINUTE: ${AUTH_RATE_LIMIT_PER_MINUTE:-10}
@@ -80,6 +84,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-JobPilot <no-reply@jobpilot.local>}
     volumes:
+      - jpse-run:/run/jpse
       - storage:/data        # resumes, Excel reports, logs (per user under /data/users/<id>)
       - ./backups:/backups:ro  # only to report the last backup's status on /api/health and the admin page
     ports:
@@ -130,6 +135,30 @@ services:
       resources:
         limits: { cpus: "1.0", memory: 256M }
     networks: [internal, edge]
+
+  # JPSE Phase 3: the native search server (engine/searchd, C17). Holds every open catalogue posting in memory, follows
+  # changes through index_outbox, and answers the backend on a Unix socket in a private volume. It needs the database
+  # only: no internet access (internal network).
+  searchd:
+    <<: *limits
+    build:
+      context: ./engine/searchd
+    image: jobpilot-searchd:latest
+    depends_on:
+      backend: { condition: service_healthy }
+    environment:
+      JPS_DATABASE_URL: "host=postgres port=5432 dbname=jobpilot user=jobpilot connect_timeout=10"
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      JPS_SOCKET: /run/jpse/searchd.sock
+    volumes:
+      - jpse-run:/run/jpse
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+    networks: [internal]
 
   # Daily backups (database + uploads) inside the stack, so no host crontab is needed. See deploy/backup/backup.sh.
   backup:
@@ -204,6 +233,7 @@ services:
 
 volumes:
   pgdata:
+  jpse-run:
   storage:
 
 networks:

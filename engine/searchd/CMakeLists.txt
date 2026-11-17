@@ -1,0 +1,37 @@
+cmake_minimum_required(VERSION 3.20)
+project(jp_searchd C)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+option(SPS_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+find_package(PkgConfig REQUIRED)
+find_package(Threads REQUIRED)
+pkg_check_modules(PQ REQUIRED libpq)
+pkg_check_modules(YYJSON REQUIRED yyjson)
+pkg_check_modules(XXHASH REQUIRED libxxhash)
+find_library(ROARING roaring REQUIRED)
+
+set(HARDEN -Wall -Wextra -Wformat=2 -Wshadow -Wvla -Werror=implicit-function-declaration -fstack-protector-strong
+           -fstack-clash-protection -D_FORTIFY_SOURCE=3 -fPIE)
+if(SPS_SANITIZE)
+  set(SAN -fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all)
+  string(REPLACE "-D_FORTIFY_SOURCE=3" "" HARDEN "${HARDEN}")
+endif()
+
+add_library(spscore STATIC src/text.c src/dict.c src/index.c src/proto.c)
+target_include_directories(spscore PUBLIC src ${YYJSON_INCLUDE_DIRS} ${XXHASH_INCLUDE_DIRS})
+target_compile_options(spscore PRIVATE -O2 ${HARDEN} ${SAN})
+target_link_libraries(spscore PUBLIC ${ROARING} ${YYJSON_LIBRARIES} ${XXHASH_LIBRARIES} m ${SAN})
+
+add_executable(jp-searchd src/main.c src/server.c src/sync.c)
+target_include_directories(jp-searchd PRIVATE ${PQ_INCLUDE_DIRS})
+target_compile_options(jp-searchd PRIVATE -O2 ${HARDEN} ${SAN})
+target_link_options(jp-searchd PRIVATE -pie -Wl,-z,relro,-z,now ${SAN})
+target_link_libraries(jp-searchd PRIVATE spscore ${PQ_LIBRARIES} Threads::Threads)
+
+enable_testing()
+add_executable(test_core tests/test_core.c)
+target_compile_options(test_core PRIVATE -O1 -g ${SAN})
+target_link_options(test_core PRIVATE ${SAN})
+target_link_libraries(test_core PRIVATE spscore)
+add_test(NAME core COMMAND test_core)
