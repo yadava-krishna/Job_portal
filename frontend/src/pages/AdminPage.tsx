@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { ShieldAlert, CheckCircle2, XCircle, Plus, Copy, Trash2, RefreshCw } from "lucide-react";
 import { BackgroundJobsPanel, ProductMetricsPanel, SystemPanel } from "@/features/growth/AdminOps";
+import { OpsHealthPanel } from "@/features/growth/OpsHealth";
 
-type Tab = "metrics" | "users" | "invites" | "audit" | "jobs" | "product" | "system";
+type Tab = "metrics" | "users" | "invites" | "audit" | "jobs" | "health" | "product" | "system";
 const TABS: { key: Tab; label: string }[] = [
   { key: "metrics", label: "Metrics" }, { key: "users", label: "Users" }, { key: "invites", label: "Invites" }, { key: "audit", label: "Audit" },
-  { key: "jobs", label: "Background jobs" }, { key: "product", label: "Product metrics" }, { key: "system", label: "System" },
+  { key: "jobs", label: "Background jobs" }, { key: "health", label: "Health" }, { key: "product", label: "Product metrics" },
+  { key: "system", label: "System" },
 ];
 const ROLES = [
   { value: "user", label: "Candidate" }, { value: "mentor", label: "Mentor" }, { value: "admin", label: "Admin" },
@@ -154,7 +156,7 @@ export function AdminPage() {
             <ShieldAlert className="h-6 w-6 text-primary" /> Admin Operations Center
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            System metrics, users, invites, audit log, background jobs, product metrics and server health.
+            System metrics, users, invites, audit log, background jobs, operational health, product metrics and server status.
           </p>
         </div>
 
@@ -423,6 +425,7 @@ export function AdminPage() {
       )}
 
       {tab === "jobs" && <BackgroundJobsPanel />}
+      {tab === "health" && <OpsHealthPanel />}
       {tab === "product" && <ProductMetricsPanel />}
       {tab === "system" && <SystemPanel />}
     </div>

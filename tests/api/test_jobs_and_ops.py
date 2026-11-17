@@ -26,7 +26,8 @@ def test_all_named_jobs_are_registered():
     assert set(jobs_registry.REGISTRY) == {
         "daily_discovery", "source_refresh", "job_normalisation", "job_deduplication", "job_matching", "gap_generation",
         "resume_feedback_generation", "resource_refresh", "notification_dispatch", "alert_email_ingestion", "report_generation",
-        "visa_source_check", "visa_change_detection", "analytics_rollup", "cleanup_and_retention", "job_link_check"}
+        "visa_source_check", "visa_change_detection", "analytics_rollup", "cleanup_and_retention", "job_link_check",
+        "notification_sweep"}
     assert all(n in jobs_registry.REGISTRY for n in jobs_registry.SCHEDULES)
 
 

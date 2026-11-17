@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { EmptyState, Field, PageHeader } from "@/components/app/common";
+import { EmptyState, Field, LoadingState, PageHeader } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -326,7 +326,7 @@ function NotesThread({ assignmentId }: { assignmentId: number }) {
   return (
     <div className="space-y-2 border-t pt-3">
       <p className="text-xs text-muted-foreground">Shared notes between you and this mentor.</p>
-      {notes.isLoading ? <Loader2 className="animate-spin" /> : <NotesList notes={notes.data ?? []} />}
+      {notes.isLoading ? <LoadingState /> : <NotesList notes={notes.data ?? []} />}
       <div className="flex gap-2">
         <Textarea aria-label="New note" rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a note…" />
         <Button size="sm" className="self-end" disabled={!body.trim() || add.isPending}

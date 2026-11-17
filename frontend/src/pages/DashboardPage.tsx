@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageHeader, PlatformBadge } from "@/components/app/common";
-import { TodayView } from "@/components/app/TodayView";
+import { ActionCentre } from "@/features/dashboard/ActionCentre";
+import { eventLabel } from "@/features/applications/events";
 import { useConnection } from "@/contexts/ConnectionContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatDate, statusLabels, timeAgo } from "@/lib/format";
+import { formatDate, timeAgo } from "@/lib/format";
 import { useActivity, useAnalytics, useSummary } from "@/services/queries";
 import { useCareerSnapshot } from "@/features/career/hooks";
 import { CareerSnapshotCard, WhatHappensNext } from "@/features/career/SnapshotCard";
@@ -51,8 +52,9 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={`Welcome${user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}`} description="Your job search at a glance."
+      <PageHeader title={`Welcome${user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}`} description="What needs doing next in your job search."
                   actions={<Button render={<Link to="/discover" />}><Search /> Discover jobs</Button>} />
+      <div className="mb-6"><ActionCentre /></div>
       <div className="mb-6">
         {snapshot.data ? <CareerSnapshotCard snapshot={snapshot.data} /> : snapshot.isLoading ? <Skeleton className="h-56" /> : null}
       </div>
@@ -63,9 +65,6 @@ export function DashboardPage() {
         </div>
       )}
       {showTracker && <>
-      <div className="mb-6">
-        <TodayView />
-      </div>
       {!s ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
       ) : (
@@ -142,7 +141,7 @@ export function DashboardPage() {
                   <li key={i} className="text-sm">
                     <div className="font-medium">{a.kind === "discovery" ? "Discovery run" : `${a.title} · ${a.company}`}</div>
                     <div className="text-xs text-muted-foreground">
-                      {a.kind === "discovery" ? a.details : statusLabels[a.to_status ?? ""] ?? a.event_type.replaceAll("_", " ").toLowerCase()} · {timeAgo(a.at)}
+                      {a.kind === "discovery" ? a.details : eventLabel({ id: i, event_type: a.event_type, from_status: null, to_status: a.to_status ?? null, details: null, created_at: a.at })} · {timeAgo(a.at)}
                     </div>
                   </li>
                 ))}

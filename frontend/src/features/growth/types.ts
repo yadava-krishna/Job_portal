@@ -181,3 +181,47 @@ export interface SystemStatus {
   disk: { used_percent: number; free_gb: number; level: "ok" | "warning" | "high" | "critical" | string };
   backup: { status: string; at?: string; label?: string; folder?: string; size_kb?: number; encrypted?: boolean; offhost?: string; error?: string; note?: string };
 }
+
+// GET /admin/ops-health (backend/services/ops_health_service.py). Each check may come back {available: false, note}.
+export type HealthLevel = "ok" | "warning" | "high" | "critical" | "unknown";
+export interface DiskHealth {
+  label: string; path: string; available: boolean; note?: string;
+  total_gb?: number; used_gb?: number; free_gb?: number; used_percent?: number; level?: HealthLevel;
+}
+export interface SourceRow {
+  key: string; name: string; kind: string | null; enabled: boolean; health: string;
+  state: "failing" | "stale" | "degraded" | "ok" | "idle" | "disabled";
+  last_run_at: string | null; last_success_at: string | null; hours_since_success: number | null; last_error: string | null;
+  runs_7d: number; failures_7d: number; last_failed_at: string | null; last_failure: string | null;
+}
+export interface OpsHealth {
+  generated_at: string;
+  attention: { level: "warning" | "critical"; text: string }[];
+  disks: DiskHealth[];
+  database: {
+    available: boolean; note?: string; dialect?: string; latency_ms?: number; migration?: string | null; size_bytes?: number | null;
+    connections?: number; server_version?: string; largest_tables?: { table: string; bytes: number; rows_estimate: number }[];
+  };
+  backups: {
+    available: boolean; note?: string; level: HealthLevel; count?: number; daily_count?: number; stale_after_hours?: number;
+    last_status?: string | null; newest?: { name: string; at: string; age_hours: number; size_bytes: number | null } | null;
+  };
+  background_jobs: {
+    failed_count: number; by_name: { name: string; failures: number; last_failed_at: string }[];
+    recent: { name: string; status: string; trigger: string; started_at: string; attempts: number; error: string | null }[];
+    stuck: { name: string; started_at: string; hours: number }[];
+  };
+  discovery: { by_status: Record<string, number>; failed: number; stuck_running: number; failure_types: { type: string; count: number }[] };
+  workflows: {
+    run_errors: { type: string; platform: string | null; count: number }[];
+    apply_failed: number; apply_uncertain: number; apply_needs_information: number;
+  };
+  sources: SourceRow[];
+  source_freshness: { source: string; open_jobs: number; newest_discovered_at: string | null; last_verified_at: string | null; hours_since_verified: number | null }[];
+  user_activity: Partial<Record<"accounts" | "active_accounts" | "signups_7d" | "logins_24h" | "logins_7d" | "logins_30d" | "active_users_7d"
+    | "discovery_runs_7d" | "applications_submitted_7d", number>> & { available?: boolean; note?: string };
+  extension: {
+    available?: boolean; note?: string; connected_devices?: number; used_24h?: number; used_7d?: number; unused_30d?: number;
+    expired?: number; bundled_version?: string | null; version_reporting?: boolean;
+  };
+}

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Field, NativeSelect, PageHeader } from "@/components/app/common";
+import { Field, LoadingState, NativeSelect, PageHeader } from "@/components/app/common";
 import { ConnectionSettingsDialog } from "@/components/app/ConnectionSettings";
 import { ExtensionSettings } from "@/components/app/ExtensionSettings";
 import { AnswerBank, NotificationSettings, ResumeVersions } from "@/components/app/ProfileExtras";
@@ -60,12 +60,12 @@ export function SettingsPage() {
           <ResumeVersions />
           <Card>
             <CardHeader><CardTitle>Candidate profile</CardTitle><CardDescription>Used for matching and for answering screening questions. Saving re-scores your open jobs.</CardDescription></CardHeader>
-            <CardContent>{profile.data ? <ProfileForm profile={profile.data} /> : <Loader2 className="animate-spin" />}</CardContent>
+            <CardContent>{profile.data ? <ProfileForm profile={profile.data} /> : <LoadingState />}</CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="preferences" className="pt-4">
-          <Card><CardContent className="pt-6">{prefs.data ? <PreferencesForm initial={prefs.data.is_configured ? prefs.data : undefined} /> : <Loader2 className="animate-spin" />}</CardContent></Card>
+          <Card><CardContent className="pt-6">{prefs.data ? <PreferencesForm initial={prefs.data.is_configured ? prefs.data : undefined} /> : <LoadingState />}</CardContent></Card>
         </TabsContent>
 
         <TabsContent value="career-goals" className="pt-4"><CareerGoalsForm /></TabsContent>

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
   BackgroundJob, CandidateListItem, CandidateSummary, ConsentRequired, Funnel, InterviewPrep, JobRunResult, MentorAction, MentorNote,
-  MentorPlan, MentorSession, MyMentors, Practice, ProductMetrics, Reflection, RejectionReason, RejectionResult, SystemStatus,
+  MentorPlan, MentorSession, MyMentors, OpsHealth, Practice, ProductMetrics, Reflection, RejectionReason, RejectionResult, SystemStatus,
 } from "./types";
 
 export const gk = {
@@ -21,6 +21,7 @@ export const gk = {
   adminJobs: ["admin-jobs"] as const,
   productMetrics: (days: number) => ["admin-product-metrics", days] as const,
   system: ["admin-system"] as const,
+  opsHealth: ["admin-ops-health"] as const,
 };
 
 /** The 403 body the backend sends when an action needs a consent the user hasn't given yet. */
@@ -209,6 +210,7 @@ export const useAdminJobs = () => useQuery({ queryKey: gk.adminJobs, queryFn: as
 export const useProductMetrics = (days: number) =>
   useQuery({ queryKey: gk.productMetrics(days), queryFn: async () => (await api.get<ProductMetrics>("/admin/product-metrics", { params: { days } })).data });
 export const useSystemStatus = () => useQuery({ queryKey: gk.system, queryFn: async () => (await api.get<SystemStatus>("/admin/system")).data });
+export const useOpsHealth = () => useQuery({ queryKey: gk.opsHealth, queryFn: async () => (await api.get<OpsHealth>("/admin/ops-health")).data });
 
 export function useRunJob() {
   const qc = useQueryClient();

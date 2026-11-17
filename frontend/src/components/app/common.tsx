@@ -1,8 +1,10 @@
 import { useState, type KeyboardEvent, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { AlertTriangle, Loader2, RotateCw, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/api";
 import { scoreTone, statusLabels, stageLabels, toneClasses, toneStroke } from "@/lib/format";
 
 export function ScoreRing({ score, size = 52, label = true }: { score: number | null | undefined; size?: number; label?: boolean }) {
@@ -90,6 +92,28 @@ export function EmptyState({ icon, title, children }: { icon?: ReactNode; title:
       {icon && <div className="mb-3 text-muted-foreground">{icon}</div>}
       <h3 className="font-medium">{title}</h3>
       {children && <div className="mt-1 max-w-md text-sm text-muted-foreground">{children}</div>}
+    </div>
+  );
+}
+
+/** Shared loading state: announced to screen readers, same look on every page. */
+export function LoadingState({ label = "Loading…", className }: { label?: string; className?: string }) {
+  return (
+    <div role="status" aria-live="polite" className={cn("flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground", className)}>
+      <Loader2 className="size-4 animate-spin" aria-hidden /> {label}
+    </div>
+  );
+}
+
+/** Shared error state: says what failed, why (from the server when it said), and offers a retry. */
+export function ErrorState({ title = "This couldn't be loaded", error, onRetry, className }: {
+  title?: string; error?: unknown; onRetry?: () => void; className?: string;
+}) {
+  return (
+    <div role="alert" className={cn("flex flex-col items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm", className)}>
+      <div className="flex items-center gap-2 font-medium text-destructive"><AlertTriangle className="size-4" aria-hidden /> {title}</div>
+      {error != null && <p className="text-muted-foreground">{errorMessage(error)}</p>}
+      {onRetry && <Button size="sm" variant="outline" onClick={onRetry}><RotateCw aria-hidden /> Try again</Button>}
     </div>
   );
 }

@@ -238,3 +238,12 @@ def admin_system(admin: CurrentAdmin, settings: SettingsDep) -> dict[str, Any]:
                                                "Backups still run; check them with deploy/backup.sh or the backup container logs."}
     return {"disk": {"used_percent": used, "free_gb": round(u.free / 1e9, 1), "level": level},
             "backup": backup or {"status": "unknown", "note": "No backup status file. Start the backup service (docker compose up -d backup)."}}
+
+
+@router.get("/ops-health")
+def admin_ops_health(admin: CurrentAdmin, db: DbSession, settings: SettingsDep) -> dict[str, Any]:
+    """Operational health: disks, database, backups, failed jobs and runs, sources, activity counts, extension.
+    Degrades to "not available" per check; never returns secrets, file contents or individual users' data."""
+    from backend.services import ops_health_service
+
+    return ops_health_service.overview(db, settings)

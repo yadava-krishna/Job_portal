@@ -37,6 +37,8 @@ export function JobWorkspace({ query, emptyTitle, emptyBody, toolbar, empty, ini
   const jobs = useJobs(query);
   const action = useJobAction();
   const [detailId, setDetailId] = useState<number | null>(initialDetailId);
+  const [seenLink, setSeenLink] = useState(initialDetailId);
+  if (initialDetailId !== seenLink) { setSeenLink(initialDetailId); if (initialDetailId != null) setDetailId(initialDetailId); }  // a new ?job= link while already here
   const [applyItem, setApplyItem] = useState<UserJob | null>(null);
   const [cursor, setCursor] = useState(0);
   const items = jobs.data?.items ?? [];
@@ -155,7 +157,7 @@ export function DiscoverPage() {
   const runDiscovery = () => discover.mutate(undefined, {
     onSuccess: async (run) => {
       setRunning("Connecting to sources…");
-      const done = await pollRun(run.id, (r) => setRunning(r.status === "running" ? r.summary ?? "Connecting to sources…" : null), 300_000);
+      const done = await pollRun(run.id, (r) => setRunning(r.status === "running" ? r.summary ?? "Connecting to sources…" : null), 900_000);  // a full run checks ~200 boards and can take 8 minutes
       setRunning(null);
       void invalidate();
       // Report what actually happened: a failure, a run that found nothing (and why), or the new jobs.

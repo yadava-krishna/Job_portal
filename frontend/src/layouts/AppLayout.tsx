@@ -1,7 +1,8 @@
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { BarChart3, Loader2, Bookmark, Briefcase, Compass, FileSpreadsheet, FileText, Globe, LayoutDashboard, LogOut, Menu, MessagesSquare, Radar, Search, Settings, Shield, Target, Users, X } from "lucide-react";
+import { BarChart3, Bookmark, Briefcase, Compass, FileSpreadsheet, FileText, Globe, LayoutDashboard, LogOut, Menu, MessagesSquare, Radar, Search, Settings, Shield, Target, Users, X } from "lucide-react";
 import { NotificationBell } from "@/components/app/discovery";
+import { LoadingState } from "@/components/app/common";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,6 +42,12 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  useEffect(() => {  // Escape closes the mobile menu, as with every other dialog
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   useHeartbeat(true);
 
@@ -51,12 +58,12 @@ export function AppLayout() {
   ];
 
   const links = (
-    <nav className="flex flex-col gap-1">
+    <nav aria-label="Main" className="flex flex-col gap-1">
       {navItems.map(({ to, label, icon: Icon }) => (
         <NavLink key={to} to={to} onClick={() => setOpen(false)}
-                 className={({ isActive }) => cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                 className={({ isActive }) => cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                    isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
-          <Icon className="size-4" /> {label}
+          <Icon className="size-4" aria-hidden /> {label}
         </NavLink>
       ))}
     </nav>
@@ -64,6 +71,7 @@ export function AppLayout() {
 
   return (
     <div className="min-h-dvh bg-muted/30">
+      <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-md focus:outline-2 focus:outline-ring">Skip to main content</a>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r bg-background p-4 lg:flex">
         <Brand />
         <div className="mt-6 flex-1">{links}</div>
@@ -71,7 +79,7 @@ export function AppLayout() {
       </aside>
 
       {open && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
           <aside className="absolute inset-y-0 left-0 flex w-64 flex-col bg-background p-4 shadow-xl">
             <div className="flex items-center justify-between"><Brand /><Button size="icon-sm" variant="ghost" onClick={() => setOpen(false)} aria-label="Close menu"><X /></Button></div>
@@ -93,9 +101,9 @@ export function AppLayout() {
             <BackendIndicator />
           </div>
         </header>
-        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        <main id="main" tabIndex={-1} className="mx-auto max-w-7xl px-4 py-6 outline-none sm:px-6">
           {/* Keeps the navigation visible while a page chunk loads. */}
-          <Suspense fallback={<div className="flex justify-center py-20 text-muted-foreground"><Loader2 className="animate-spin" /></div>}>
+          <Suspense fallback={<LoadingState className="py-20" label="Loading page…" />}>
             <Outlet />
           </Suspense>
         </main>

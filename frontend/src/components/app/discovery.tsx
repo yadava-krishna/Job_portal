@@ -185,7 +185,7 @@ export function NotificationBell() {
             <span className="text-sm font-semibold">Notifications</span>
             {unread > 0 && <Button size="sm" variant="ghost" onClick={() => mark.mutate(undefined)}>Mark all read</Button>}
           </div>
-          {!notes.data?.items.length ? <p className="px-2 py-4 text-sm text-muted-foreground">Nothing yet. New high matches from your searches appear here.</p> : (
+          {!notes.data?.items.length ? <p className="px-2 py-4 text-sm text-muted-foreground">Nothing yet. New matches, follow-up and interview reminders, and alerts about your saved jobs and searches appear here.</p> : (
             <ul className="max-h-96 overflow-y-auto">
               {notes.data.items.map((n) => (
                 <li key={n.id}>

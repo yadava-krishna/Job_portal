@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Loader2 } from "lucide-react";
+import { Check, FileText, Search, Send } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Brand } from "@/layouts/AppLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { qk, useOnboarding, usePlatforms, usePreferences, useProfile } from "@/services/queries";
 import { cn } from "@/lib/utils";
+import { LoadingState } from "@/components/app/common";
 
 const steps = ["Resume", "Review profile", "Job preferences", "Job portals", "Confirm"];
 
@@ -22,6 +23,13 @@ export function OnboardingPage() {
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [manual, setManual] = useState(false);
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const firstStep = useRef(true);
+  // Keyboard and screen-reader users land on the new step instead of staying on the button they pressed.
+  useEffect(() => {
+    if (firstStep.current) { firstStep.current = false; return; }
+    stepHeading.current?.focus();
+  }, [step]);
 
   useEffect(() => {
     const s = status.data;
@@ -46,17 +54,23 @@ export function OnboardingPage() {
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
         <h1 className="text-2xl font-semibold tracking-tight">Set up your job search</h1>
         <p className="mt-1 text-sm text-muted-foreground">A few minutes now makes every match score more accurate.</p>
-        <ol className="my-6 grid grid-cols-5 gap-2">
-          {steps.map((s, i) => (
-            <li key={s} className="flex flex-col items-center gap-1 text-center">
-              <button type="button" onClick={() => i <= step && setStep(i)} disabled={i > step}
-                      className={cn("flex size-8 items-center justify-center rounded-full border text-sm font-semibold", i < step ? "border-primary bg-primary text-primary-foreground" : i === step ? "border-primary text-primary" : "text-muted-foreground")}>
-                {i < step ? <Check className="size-4" /> : i + 1}
-              </button>
-              <span className={cn("hidden text-xs sm:block", i === step ? "font-medium" : "text-muted-foreground")}>{s}</span>
-            </li>
-          ))}
-        </ol>
+        <nav aria-label="Setup progress">
+          <ol className="my-6 grid grid-cols-5 gap-2">
+            {steps.map((s, i) => (
+              <li key={s} className="flex flex-col items-center gap-1 text-center">
+                <button type="button" onClick={() => i <= step && setStep(i)} disabled={i > step}
+                        aria-current={i === step ? "step" : undefined}
+                        aria-label={`Step ${i + 1}: ${s}${i < step ? " (done)" : i === step ? " (current)" : ""}`}
+                        className={cn("flex size-8 items-center justify-center rounded-full border text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                                      i < step ? "border-primary bg-primary text-primary-foreground" : i === step ? "border-primary text-primary" : "text-muted-foreground")}>
+                  {i < step ? <Check className="size-4" aria-hidden /> : i + 1}
+                </button>
+                <span className={cn("hidden text-xs sm:block", i === step ? "font-medium" : "text-muted-foreground")}>{s}</span>
+              </li>
+            ))}
+          </ol>
+        </nav>
+        <h2 ref={stepHeading} tabIndex={-1} className="mb-2 text-sm font-medium text-muted-foreground outline-none">Step {step + 1} of {steps.length}: {steps[step]}</h2>
 
         <Card>
           {step === 0 && (
@@ -78,7 +92,7 @@ export function OnboardingPage() {
           {step === 1 && (
             <>
               <CardHeader><CardTitle>{manual ? "Create your profile" : "Review your profile"}</CardTitle><CardDescription>{manual ? "Add what is true today: education, projects and skills count; you don't need work experience. Only what you enter here is used." : "Correct anything the parser got wrong. Only confirmed details are used for matching and screening answers."}</CardDescription></CardHeader>
-              <CardContent>{profile.data ? <ProfileForm profile={profile.data} manual={manual || !profile.data.has_resume} submitLabel="Confirm profile & continue" onSaved={() => setStep(2)} /> : <Loader2 className="animate-spin" />}</CardContent>
+              <CardContent>{profile.data ? <ProfileForm profile={profile.data} manual={manual || !profile.data.has_resume} submitLabel="Confirm profile & continue" onSaved={() => setStep(2)} /> : <LoadingState />}</CardContent>
             </>
           )}
           {step === 2 && (
@@ -104,6 +118,14 @@ export function OnboardingPage() {
                 <Summary label="Locations" value={prefs.data?.locations.join(", ")} />
                 <Summary label="Minimum match" value={prefs.data ? `${prefs.data.min_match_score}%` : undefined} />
                 <Summary label="Portals" value={platforms.data?.filter((p) => p.enabled).map((p) => p.platform).join(", ")} />
+                <div className="rounded-lg border bg-muted/40 p-3">
+                  <p className="mb-2 font-medium">What happens next</p>
+                  <ol className="space-y-1.5 text-muted-foreground">
+                    <li className="flex gap-2"><Search className="mt-0.5 size-4 shrink-0" aria-hidden /> JobPilot searches the job boards for you. The first search takes a few minutes; you can keep using the app.</li>
+                    <li className="flex gap-2"><FileText className="mt-0.5 size-4 shrink-0" aria-hidden /> Build a resume in Resume Studio from the profile you just confirmed.</li>
+                    <li className="flex gap-2"><Send className="mt-0.5 size-4 shrink-0" aria-hidden /> Apply: JobPilot fills in what it knows, and you review everything before anything is sent.</li>
+                  </ol>
+                </div>
                 <div className="flex justify-end pt-2"><Button onClick={finish} disabled={!status.data?.completed}>Start discovering jobs</Button></div>
                 {!status.data?.completed && <p className="text-right text-xs text-muted-foreground">Complete the earlier steps first.</p>}
               </CardContent>

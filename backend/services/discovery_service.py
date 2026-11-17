@@ -326,6 +326,15 @@ def summarize(run: DiscoveryRun) -> str | None:
     return head + (" " + " ".join(notes) if notes else "")
 
 
+def nothing_configured(run: DiscoveryRun) -> bool:
+    """True when the run had no source it could use at all (every one is "not_configured"), as opposed to sources that
+    were tried and failed. Such a run is recorded as failed, but it is a setup gap, not an outage, and is not alerted."""
+    results = run.source_results or {}
+    hard = [e for e in run.error_details or [] if isinstance(e, dict) and e.get("type") not in WARNING_ERRORS
+            and not str(e.get("type", "")).endswith("NOT_CONFIGURED")]
+    return bool(results) and all(e.get("status") == "not_configured" for e in results.values()) and not hard
+
+
 def finish_run(db: Session, run: DiscoveryRun, failed: bool = False) -> DiscoveryRun:
     run.completed_at = utcnow()
     results = run.source_results or {}

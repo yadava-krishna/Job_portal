@@ -231,11 +231,79 @@ Started: 2026-11-16. This is the working tracker for the JobPilot 2.0 overhaul. 
   - 35 new skills and many synonyms, including upper-case acronyms (O2C, P2P, R2R, DSO, ERP).
 - [ ] New sources (Adzuna is built; Jooble and Careerjet aren't). All three need API keys from the owner. Not started.
 
-### Phase 4: UI/UX
-- [ ] Design-system pass. Dashboard actions. Discovery details. A Kanban board for applications. Onboarding. Accessibility.
+### Phase 4: UI/UX. Done locally on 2026-11-17, not yet deployed
+- [x] Dashboard action centre (`GET /dashboard/overview`, `backend/services/overview_service.py`, `features/dashboard/`). Every line is built from real rows and links straight to its job or application:
+  - new matching jobs: the last 7 days, at or above the user's own minimum score, not opened yet;
+  - needs your attention;
+  - coming up;
+  - saved jobs (with a warning when a saved job is no longer open);
+  - recently submitted;
+  - resume status;
+  - discovery health.
+- [x] Fixed: the old Today panel showed a company line the API never sent (always blank). It is replaced by the action centre.
+- [x] Deep links: `#/applied?app=<id>` opens that application, and `#/discover?job=<id>` opens that job. Both also react to a new link while the page is open.
+- [x] Applications Kanban (`features/applications/PipelineBoard.tsx`):
+  - drag and drop between stages, plus a "Move to stage" menu on each card for keyboard and screen-reader users;
+  - each card shows days since applying, a follow-up-due flag and the match score;
+  - columns fill wide screens.
+- [x] Application history in plain words: "Moved to Interview" instead of "stage changed", and "You confirmed it in JobPilot" instead of `source=user_confirmed`. The dashboard's recent activity uses the same labels.
+- [x] Onboarding:
+  - an accessible stepper (`aria-current`, labelled steps, "Step N of 5" heading);
+  - focus moves to the new step;
+  - a "What happens next" box covers discover, then resume, then apply with review.
+- [x] Accessibility:
+  - a skip link;
+  - `main` landmark and labelled navigation;
+  - the mobile menu is a modal dialog and closes with Escape;
+  - focus outlines on navigation and links;
+  - a label on the contact delete button;
+  - shared `LoadingState` (announced to screen readers) and `ErrorState` (with retry) in `common.tsx`, used in place of 12 bare spinners.
+- [x] Fixed: Discover stopped following a run after 5 minutes, but full runs take about 7.5. It now follows a run for up to 15 minutes.
+- [x] Tests: `tests/api/test_dashboard_overview.py` (2) and `frontend/src/test/phase4.test.tsx` (5).
+- [x] Visual review (Playwright, throwaway SQLite stack): light and dark at 1366 px, and light at 390 px. No console errors.
+- [ ] Not done:
+  - a full design-token pass over every older page (Mentor, International, Interview prep);
+  - an automated axe accessibility check in CI (no axe package is installed; adding one needs approval of a new dependency).
 
-### Phase 5: Hardening
-- [ ] A stable endpoint (needs the owner's approval). CSP. Tunnel routed through nginx. Frontend bound to localhost. Security review. Full regression. Documentation.
+### Phase 5: Hardening. In progress (2026-11-17, local, not deployed)
+- [x] In-app notifications: the `notification_sweep` job runs hourly at :15 (`backend/services/notification_sweep.py`).
+  - What it alerts on:
+    - follow-up due;
+    - interview within 24 hours;
+    - an application left unfinished for more than 3 days, or one Smart Apply couldn't confirm;
+    - a saved or in-progress job that is no longer listed;
+    - a failed discovery run.
+  - Each alert has a stable dedupe key, and there are look-back limits.
+  - When one sweep would send a user more than 3 closed-listing alerts, they get one summary instead.
+  - `notification_dispatch` reuses the same functions, so no reminder is sent twice.
+  - Per-kind off switches are honoured. There is no Settings toggle for them yet.
+- [x] Runs where no source was set up are not "failed" (`discovery_service.nothing_configured`). Example: the daily connected-sources run when there's no alert mailbox and no Adzuna key.
+  - They are not alerted, and the dashboard says "not set up".
+  - This prevents a false alert every day for every user.
+- [x] Admin console Health tab (`GET /admin/ops-health`, `ops_health_service.py`, `features/growth/OpsHealth.tsx`) shows:
+  - what needs attention;
+  - disk for data and backups;
+  - database size, largest tables and connections;
+  - backup age, size and count (a warning after 26 h);
+  - failed jobs and runs over the last 7 days;
+  - per-source health and freshness;
+  - activity counts;
+  - extension tokens.
+
+  Each check degrades to "not available" instead of failing. Error text is redacted.
+- [x] Regression on 2026-11-17: backend 499 passed, 3 skipped; frontend 57 passed; typecheck clean.
+- [ ] Not done:
+  - **Stable endpoint:** needs the owner's free ngrok static domain in `NGROK_DOMAIN`, or the `url_watch` cron.
+  - **CSP** for Pages and nginx.
+  - **Tunnel through nginx.**
+  - **Frontend bound to localhost:** decide whether LAN or phone access is needed first.
+  - **Security review pass.**
+  - **Notification preference toggles in Settings.**
+  - **Extension version reporting.**
+  - **Postgres-only ops-health queries:** verify on the live database at deploy.
+
+### Discovery engine (JPSE)
+- [ ] Plan of record: `JOBPILOT_JPSE_BLUEPRINT.md` (owner-reviewed 2026-11-17). Its Phase 0 (instrumentation and baseline) and Phase 1 (background crawling, so that Discover never waits on the network) come first. Not started.
 
 ## Platform terms (checked 2026-11-16)
 

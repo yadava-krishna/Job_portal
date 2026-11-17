@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Calendar, ExternalLink, Loader2, MessageSquareText, Plus, Trash2, XCircle } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState, NativeSelect, PageHeader, PlatformBadge, ScoreBadge, StageBadge, StatusBadge } from "@/components/app/common";
+import { EmptyState, LoadingState, NativeSelect, PageHeader, PlatformBadge, ScoreBadge, StageBadge, StatusBadge } from "@/components/app/common";
 import { ApplyDialog } from "@/components/app/ApplyDialog";
 import { api, downloadFile, errorMessage } from "@/lib/api";
 import { formatDate, stageLabels, statusLabels } from "@/lib/format";
@@ -16,6 +17,8 @@ import { useApplication, useApplicationAction, useApplications, useUpdateTrackin
 import type { Application, ApplicationContact, Interview, Offer, Stage, UserJob } from "@/types/api";
 import { FunnelPanel, InterviewFeedbackDialog, RejectionDialog, RejectionLabel } from "@/features/growth/applications";
 import { useReasonLabels } from "@/features/growth/queries";
+import { PipelineBoard } from "@/features/applications/PipelineBoard";
+import { eventDetail, eventLabel } from "@/features/applications/events";
 import type { RejectionResult } from "@/features/growth/types";
 
 // The backend's interview fields (round_name, interviewers, location) and rejection fields, which the shared types don't list yet.
@@ -38,7 +41,15 @@ export function AppliedPage() {
   const apps = useApplications(filter === "all" ? undefined : [filter]);
   const all = useApplications();
   const action = useApplicationAction();
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const [params, setParams] = useSearchParams();
+  const linked = Number(params.get("app")) || null;  // /applied?app=12 opens that application (dashboard and notification links)
+  const [detailId, setDetailIdState] = useState<number | null>(linked);
+  const [seenLink, setSeenLink] = useState(linked);
+  if (linked !== seenLink) { setSeenLink(linked); if (linked != null) setDetailIdState(linked); }  // a new ?app= link while already here
+  const setDetailId = (id: number | null) => {
+    setDetailIdState(id);
+    if (id == null && params.has("app")) { params.delete("app"); setParams(params, { replace: true }); }
+  };
   const [resume, setResume] = useState<UserJob | null>(null);
   const [rejecting, setRejecting] = useState<RejectTarget | null>(null);
   const [rejections, setRejections] = useState<Record<number, RejectionResult>>({});
@@ -83,7 +94,7 @@ export function AppliedPage() {
             <span className="text-muted-foreground">Status</span>
             <NativeSelect ariaLabel="Filter by status" value={filter} onChange={setFilter} options={STATUS_FILTERS.map((s) => ({ value: s, label: s === "all" ? "All" : statusLabels[s] }))} />
           </div>
-          {apps.isLoading ? <Loader2 className="animate-spin" /> : !apps.data?.length ? (
+          {apps.isLoading ? <LoadingState /> : !apps.data?.length ? (
             <EmptyState title="No applications yet">Use Apply on a job to prepare one. It appears here once prepared and moves to Submitted after you confirm.</EmptyState>
           ) : (
             <Card className="overflow-x-auto p-0">
@@ -119,27 +130,8 @@ export function AppliedPage() {
 
         <TabsContent value="board" className="pt-4">
           {!submitted.length ? <EmptyState title="No submitted applications yet">After you confirm a submission it appears here. Move it along as you hear back.</EmptyState> : (
-            <div className="grid gap-4 overflow-x-auto md:grid-cols-3 xl:grid-cols-6">
-              {STAGES.map((stage) => {
-                const col = submitted.filter((a) => (a.stage ?? "applied") === stage);
-                return (
-                  <div key={stage} className="min-w-56 rounded-xl bg-muted/50 p-3">
-                    <div className="mb-3 flex items-center justify-between text-sm font-medium">{stageLabels[stage]}<span className="text-muted-foreground">{col.length}</span></div>
-                    <div className="space-y-2">
-                      {col.map((a) => (
-                        <Card key={a.id} className="gap-2 p-3">
-                          <button className="text-left text-sm font-medium hover:underline" onClick={() => setDetailId(a.id)}>{a.job.title}</button>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">{a.job.company} <PlatformBadge platform={a.job.platform} /></div>
-                          {rejectionOf(a).reason && <RejectionLabel {...rejectionOf(a)} labels={reasonLabels} />}
-                          <NativeSelect ariaLabel="Move to stage" value={a.stage ?? "applied"} onChange={(v) => moveStage(a, v as Stage)} className="h-7 w-full text-xs"
-                                        options={MOVE_TO.map((s) => ({ value: s, label: stageLabels[s] }))} />
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <PipelineBoard apps={submitted} stages={STAGES} moveTo={MOVE_TO} onMove={moveStage} onOpen={setDetailId}
+                           extra={(a) => rejectionOf(a).reason ? <RejectionLabel {...rejectionOf(a)} labels={reasonLabels} /> : null} />
           )}
         </TabsContent>
 
@@ -178,7 +170,7 @@ function ApplicationDetailDialog({ id, onClose, onReject, rejection, reasonLabel
   return (
     <Dialog open={id != null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
-        {!data ? <Loader2 className="animate-spin" /> : (
+        {!data ? <LoadingState /> : (
           <>
             <DialogHeader>
               <DialogTitle>{data.job.title}</DialogTitle>
@@ -209,7 +201,7 @@ function ApplicationDetailDialog({ id, onClose, onReject, rejection, reasonLabel
                   <h4 className="mb-2 text-sm font-medium">History</h4>
                   <ol className="space-y-1.5 border-l pl-4 text-sm">
                     {data.events.map((e) => (
-                      <li key={e.id}><span className="font-medium">{e.event_type.replaceAll("_", " ").toLowerCase()}</span> <span className="text-muted-foreground">· {formatDate(e.created_at, true)}</span>{e.details && <div className="text-xs text-muted-foreground">{e.details}</div>}</li>
+                      <li key={e.id}><span className="font-medium">{eventLabel(e)}</span> <span className="text-muted-foreground">· {formatDate(e.created_at, true)}</span>{eventDetail(e) && <div className="text-xs text-muted-foreground">{eventDetail(e)}</div>}</li>
                     ))}
                   </ol>
                 </div>
@@ -325,7 +317,7 @@ function InterviewsSection({ applicationId }: { applicationId: number }) {
 
   return (
     <div className="space-y-4">
-      {loading ? <Loader2 className="animate-spin" /> : items.length === 0 ? (
+      {loading ? <LoadingState /> : items.length === 0 ? (
         <p className="text-xs text-muted-foreground">No interviews scheduled yet for this application.</p>
       ) : (
         <div className="space-y-2">
@@ -555,7 +547,7 @@ function ContactsSection({ applicationId }: { applicationId: number }) {
 
   return (
     <div className="space-y-4">
-      {loading ? <Loader2 className="animate-spin" /> : items.length === 0 ? (
+      {loading ? <LoadingState /> : items.length === 0 ? (
         <p className="text-xs text-muted-foreground">No contacts saved yet for this application.</p>
       ) : (
         <div className="space-y-2">
@@ -571,7 +563,7 @@ function ContactsSection({ applicationId }: { applicationId: number }) {
                   </a>
                 )}
               </div>
-              <Button size="icon-xs" variant="ghost" onClick={() => handleDelete(c.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
+              <Button size="icon-xs" variant="ghost" aria-label={`Remove contact ${c.name}`} onClick={() => handleDelete(c.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
             </div>
           ))}
         </div>

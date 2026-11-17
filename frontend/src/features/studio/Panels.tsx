@@ -3,7 +3,7 @@ import { AlertCircle, AlertTriangle, ArrowRight, Check, CircleHelp, GitBranch, I
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Field, NativeSelect } from "@/components/app/common";
+import { Field, LoadingState, NativeSelect } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -44,7 +44,7 @@ export function DesignPanel({ templateKey, settings, readOnly, onTemplate, onSet
       <div className="space-y-1.5">
         <span className="text-sm font-medium">Template</span>
         <p className="text-xs text-muted-foreground">Switching template keeps all your content. Fonts, colour and headings reset to the new template's defaults.</p>
-        {templates.isLoading ? <Loader2 className="animate-spin" /> : <TemplatePicker templates={list} value={templateKey} onChange={onTemplate} disabled={readOnly} compact />}
+        {templates.isLoading ? <LoadingState /> : <TemplatePicker templates={list} value={templateKey} onChange={onTemplate} disabled={readOnly} compact />}
       </div>
 
       <div className="space-y-2">

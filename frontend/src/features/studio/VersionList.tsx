@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { EmptyState, Field, PageHeader } from "@/components/app/common";
+import { EmptyState, Field, LoadingState, PageHeader } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { timeAgo } from "@/lib/format";
 import { useCloneVersion, useCreateVersion, useDeleteVersion, useStudioTemplates, useStudioVersions, type TemplateKey, type VersionSummary } from "./api";
@@ -41,7 +41,7 @@ export function VersionList() {
     <>
       <PageHeader title="Resume Studio" description="Tailored resume versions built from your confirmed profile. Each version keeps its own content, template and history."
                   actions={<Button size="sm" onClick={() => setCreating(true)}><Plus /> New resume</Button>} />
-      {versions.isLoading ? <Loader2 className="animate-spin" /> : versions.isError ? (
+      {versions.isLoading ? <LoadingState /> : versions.isError ? (
         <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{errorMessage(versions.error, "Couldn't load your resume versions")}</p>
       ) : !list.length ? (
         <EmptyState icon={<FileText className="size-8" />} title="No resume versions yet">
@@ -125,7 +125,7 @@ export function NewResumeDialog({ open, onOpenChange, initialJob = null }: { ope
           </div>
           <div className="space-y-1.5">
             <span className="text-sm font-medium">Template</span>
-            {templates.isLoading ? <Loader2 className="animate-spin" /> : (
+            {templates.isLoading ? <LoadingState /> : (
               <TemplatePicker templates={Array.isArray(templates.data) ? templates.data : []} value={template} onChange={setTemplate} />
             )}
           </div>

@@ -32,7 +32,9 @@ JobPilot walks you through five short steps:
    history, education and skills. Correct anything that is wrong, and tick **current** next to your present job.
 3. **Choose what you are looking for.** Job titles, cities, remote or office work, type of job, experience and salary.
 4. **Choose the job sites you use.** For example LinkedIn, Indeed and Naukri.
-5. **Confirm.** JobPilot starts looking for jobs for you straight away.
+5. **Confirm.** JobPilot starts looking for jobs for you straight away. The first search takes a few minutes, and you
+   can keep using JobPilot while it runs. Next, build a resume in Resume Studio, then apply. JobPilot fills in what
+   it knows, and you check everything before anything is sent.
 
 ---
 
@@ -140,12 +142,31 @@ Open **Applications**:
 - **All applications:** every job you have prepared or applied to, with its status.
 - **Pipeline board:** move each application along as you hear back:
   Applied → Screening → Assessment → Interview → Offer → Rejected, or Archived.
+  Drag a card to another column, or use the **Move to stage** menu on the card (this also works from the keyboard).
+  Each card shows how long ago you applied, and an amber **Follow-up due** note when your reminder date has arrived.
 - **Pending:** applications you started but haven't confirmed yet. Click **Continue** to finish.
 
-Click any application to see when you applied, how you applied, its reference number and its full history. You can
-also add **notes** and a **follow-up date** to remind yourself when to chase it up.
+Click any application to see when you applied, how you applied, its reference number and its full history, written
+in plain words (for example "Moved to Interview"). You can also add **notes** and a **follow-up date** to remind
+yourself when to chase it up.
 
-**Dashboard** gives you a quick overview, and **Reports** lets you download a spreadsheet of your applications.
+**Reports** lets you download a spreadsheet of your applications.
+
+### Your dashboard
+
+The **Dashboard** opens with what you can act on now. Click any line to go straight to that job or application.
+
+- **New matching jobs:** jobs from the last 7 days that score at or above your minimum match score and that you
+  haven't opened yet. Change the minimum score in **Settings**.
+- **Needs your attention:** follow-ups that are due, applications you started but haven't confirmed as sent, and
+  jobs you saved more than 3 days ago.
+- **Coming up:** interviews and offer deadlines in the next 14 days.
+- **Saved jobs:** your saved jobs, with a warning if any of them are no longer open.
+- **Recently submitted:** your last five applications and the stage each one is at.
+- **Resume:** whether you have built a resume in Resume Studio and exported it.
+- **Discovery:** when JobPilot last searched for jobs, and which sources had problems.
+
+Your charts and totals are further down the page.
 
 ---
 

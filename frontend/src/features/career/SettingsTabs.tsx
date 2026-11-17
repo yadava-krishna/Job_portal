@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Field, NativeSelect, TagInput } from "@/components/app/common";
+import { Field, LoadingState, NativeSelect, TagInput } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -128,7 +128,7 @@ export function PrivacyConsents() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {consents.isLoading ? <Loader2 className="animate-spin" /> : consents.isError ? <p className="text-sm text-destructive">{errorMessage(consents.error)}</p> : (
+        {consents.isLoading ? <LoadingState /> : consents.isError ? <p className="text-sm text-destructive">{errorMessage(consents.error)}</p> : (
           <ul className="divide-y rounded-xl border">
             {(consents.data ?? []).map((c) => (
               <li key={c.kind} className="flex items-start justify-between gap-4 p-4">

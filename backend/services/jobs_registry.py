@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
 from backend.db import session_factory
-from backend.models import (AnalyticsDaily, AnalyticsEvent, Application, EmailIntegration, Interview, JobRun, MentorAction,
+from backend.models import (AnalyticsDaily, AnalyticsEvent, EmailIntegration, JobRun, MentorAction,
                             Notification, RefreshToken, User, utcnow)
 
 log = logging.getLogger(__name__)
@@ -198,14 +198,10 @@ def _notification_dispatch(db, settings):
         db.add(Notification(user_id=uid, kind=kind, title=title, body=body, link=link, dedupe_key=key))
         created += 1
 
-    for a in db.execute(select(Application).where(Application.follow_up_at.is_not(None), Application.follow_up_at <= now,
-                                                  Application.stage.notin_(("rejected", "withdrawn", "archived")))).unique().scalars():
-        notify(a.user_id, "follow_up_due", f"Follow up: {a.job.title} at {a.job.company}", "Your follow-up date has arrived.",
-               "/applied", f"followup:{a.id}:{a.follow_up_at.date().isoformat()}")
-    for iv in db.execute(select(Interview).where(Interview.scheduled_at >= now, Interview.scheduled_at <= now + timedelta(hours=24),
-                                                 Interview.outcome == "scheduled")).scalars():
-        notify(iv.user_id, "interview_upcoming", f"Interview soon: {iv.round_name or 'Interview'}",
-               f"Scheduled for {iv.scheduled_at:%d %b %H:%M} (UTC). Practise in Interview prep.", "/interview-prep", f"interview:{iv.id}")
+    # Follow-ups and interviews are time-sensitive, so they are checked here every 30 minutes as well as by the hourly
+    # notification_sweep. Both use notification_sweep's functions and dedupe keys, so nothing is sent twice.
+    from backend.services import notification_sweep
+    created += notification_sweep.follow_ups(db, now) + notification_sweep.interviews(db, now)
     for act in db.execute(select(MentorAction).where(MentorAction.completed_at.is_(None), MentorAction.dismissed_at.is_(None),
                                                      MentorAction.due_on.is_not(None), MentorAction.due_on <= now.date())).scalars():
         notify(act.user_id, "action_due", f"Action due: {act.title[:80]}", act.reason[:300], "/mentor", f"action:{act.id}:{today}")
@@ -221,6 +217,11 @@ def _notification_dispatch(db, settings):
                                                    "<br>".join(f"<b>{n.title}</b> {n.body or ''}" for n in unsent[:20])):
                 emailed += 1
     return {"in_app_created": created, "emails_sent": emailed, "email_channel": "on" if email_service.is_smtp_configured() else "not configured"}
+
+
+def _notification_sweep(db, settings):
+    from backend.services import notification_sweep
+    return notification_sweep.run(db)
 
 
 def _alert_email_ingestion(db, settings):
@@ -308,6 +309,9 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
     JobSpec("resume_feedback_generation", "daily 07:00", "resume studio", "Refresh ATS/readiness feedback for changed drafts.", _resume_feedback),
     JobSpec("resource_refresh", "weekly, Sunday 04:00", "learning", "Re-check learning resource links; hide broken ones.", _resource_refresh),
     JobSpec("notification_dispatch", "every 30 minutes", "notifications", "Follow-up, interview and action reminders; optional e-mail.", _notification_dispatch),
+    JobSpec("notification_sweep", "hourly at :15", "notifications",
+            "In-app alerts: follow-ups due, interviews in the next 24 hours, unfinished applications, closed or expired "
+            "saved jobs, failed job searches. Each alert is sent once.", _notification_sweep),
     JobSpec("alert_email_ingestion", "with daily discovery", "discovery", "Read job-alert e-mails from connected mailboxes.", _alert_email_ingestion, retries=0),
     JobSpec("report_generation", "daily 21:00", "reports", "Daily Excel application reports per user.", _report_generation),
     JobSpec("visa_source_check", "daily 03:00", "international", "Fetch official visa pages and record a fingerprint.", _visa_check),
@@ -320,7 +324,7 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
 SCHEDULES: dict[str, dict[str, Any]] = {
     "source_refresh": {"hour": 5, "minute": 0}, "job_link_check": {"hour": 4, "minute": 30}, "job_matching": {"hour": 6, "minute": 0}, "gap_generation": {"hour": 6, "minute": 30},
     "resume_feedback_generation": {"hour": 7, "minute": 0}, "resource_refresh": {"day_of_week": "sun", "hour": 4, "minute": 0},
-    "notification_dispatch": {"minute": "*/30"}, "report_generation": {"hour": 21, "minute": 0}, "visa_source_check": {"hour": 3, "minute": 0},
+    "notification_dispatch": {"minute": "*/30"}, "notification_sweep": {"minute": 15}, "report_generation": {"hour": 21, "minute": 0}, "visa_source_check": {"hour": 3, "minute": 0},
     "analytics_rollup": {"hour": 0, "minute": 30}, "cleanup_and_retention": {"hour": 1, "minute": 30},
 }
 
