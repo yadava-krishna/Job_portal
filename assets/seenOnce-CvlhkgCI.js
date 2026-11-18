@@ -1,0 +1,1 @@
+var e=new Map;function t(t){let n=Date.now(),r=e.get(t);return r===void 0?(e.set(t,n),!0):n-r<120}export{t};

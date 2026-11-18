@@ -1,0 +1,1 @@
+import{rn as e}from"./common-YRvY_HUd.js";var t={name:`chevron-up`,size:24,node:[[`path`,{d:`m18 15-6-6-6 6`,key:`153udz`}]]};t.node;var n=e(t),r={name:`chevrons-up`,size:24,node:[[`path`,{d:`m17 11-5-5-5 5`,key:`e8nh98`}],[`path`,{d:`m17 18-5-5-5 5`,key:`2avn1x`}]]};r.node;var i=e(r);export{n,i as t};
