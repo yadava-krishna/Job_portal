@@ -6,8 +6,11 @@ you install it unpacked. Works in Google Chrome, Microsoft Edge, Brave and other
 ## 1. Get the extension folder
 
 Either:
-- use the `extension/` folder of this repository, or
-- unzip `fill-with-jobpilot-2.0.0.zip` (from `npm run package` or the project owner) into a folder you will keep.
+- download it from JobPilot: **Settings → Browser extension → Download the extension (.zip)**
+  (https://yadava-krishna.github.io/Job_portal/downloads/jobpilot-smart-apply-2.0.0.zip) and unzip it, or
+- use the `extension/` folder of this repository, or `fill-with-jobpilot-2.0.0.zip` from `npm run package`.
+
+Unzip it into a folder you will keep.
   Chrome loads it from that folder every time, so don't delete it.
 
 ## 2. Load it

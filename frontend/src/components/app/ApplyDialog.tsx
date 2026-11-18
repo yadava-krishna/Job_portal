@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CircleHelp, Copy, ExternalLink, FileText, Loader2, Puzzle, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleHelp, Copy, Download, ExternalLink, FileText, Loader2, Puzzle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -162,6 +162,12 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
                   {(options.data.original_supported || hostedUrl) && (
                     <p className="mt-1 text-xs opacity-80">With the Smart Apply browser extension connected (Settings → Browser extension), open the form and click Fill. You review every answer before anything is submitted.</p>
                   )}
+                  <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="apply-extension-cta">
+                    <Button size="xs" variant="outline" render={<a href={`${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.0.0.zip`} download />}>
+                      <Download /> Get the Smart Apply extension
+                    </Button>
+                    <a href="#/settings?tab=extension" className="text-xs underline underline-offset-2" onClick={onClose}>How to set it up</a>
+                  </div>
                 </div>
               </section>
             )}

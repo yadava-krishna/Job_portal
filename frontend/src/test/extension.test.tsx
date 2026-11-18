@@ -71,3 +71,17 @@ describe("apply destinations", () => {
     expect(screen.queryByRole("button", { name: /Greenhouse application form/ })).toBeNull();
   });
 });
+
+
+describe("getting the extension from where you apply", () => {
+  it("the apply dialog offers the extension download and the setup steps", async () => {
+    api.get.mockImplementation(async (url: string) => url.includes("apply-options")
+      ? { data: { message: "Open the form on Greenhouse.", original_supported: true, hosted_url: null } }
+      : { data: {} });
+    api.post.mockResolvedValue({ data: app });
+    wrap(<ApplyDialog item={item} onClose={() => {}} />);
+    const cta = await screen.findByTestId("apply-extension-cta");
+    expect(cta.querySelector("a[download]")?.getAttribute("href")).toMatch(/downloads\/jobpilot-smart-apply-2\.0\.0\.zip$/);
+    expect(screen.getByText("How to set it up").getAttribute("href")).toBe("#/settings?tab=extension");
+  });
+});

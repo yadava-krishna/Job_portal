@@ -8,7 +8,11 @@ set -a; [ -f .env ] && . ./.env; set +a
 . ./deploy/_pages_checkout.sh
 keep=""
 [ -f "$PAGES_DIR/config.json" ] && keep=$(cat "$PAGES_DIR/config.json")
-find "$PAGES_DIR" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+# Keep earlier builds' hashed files under assets/ (a tab still running the previous version loads its page code from
+# there); drop ones older than 14 days. Everything else is replaced.
+find "$PAGES_DIR" -mindepth 1 -maxdepth 1 ! -name .git ! -name assets -exec rm -rf {} +
+mkdir -p "$PAGES_DIR/assets"
+find "$PAGES_DIR/assets" -type f -mtime +14 -delete
 cp -r frontend/dist/. "$PAGES_DIR/"
 touch "$PAGES_DIR/.nojekyll"
 if [ -n "$keep" ]; then printf '%s\n' "$keep" > "$PAGES_DIR/config.json"

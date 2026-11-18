@@ -24,7 +24,7 @@ function h(tag, attrs = {}, ...kids) {
 const note = (cls, ...kids) => h("div", { class: `note ${cls}` }, ...kids);
 const openWeb = (path = "") => chrome.tabs.create({ url: WEB_APP + (path ? `#/${path}` : "") });
 const linkTo = (text, path) => h("button", { type: "button", class: "link", onclick: () => openWeb(path) }, text);
-function show(...nodes) { app.replaceChildren(...nodes); }
+function show(...nodes) { app.replaceChildren(...nodes.filter((n) => n != null && n !== false)); }  // replaceChildren(null) would print "null"
 function busy(btn, text) { btn.disabled = true; const t = btn.textContent; btn.textContent = text; return () => { btn.disabled = false; btn.textContent = t; }; }
 
 // ---- connect -----------------------------------------------------------------------------------

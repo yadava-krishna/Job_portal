@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Copy, KeyRound, Loader2, Puzzle, Unplug } from "lucide-react";
+import { Copy, Download, KeyRound, Loader2, Puzzle, Unplug } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -44,10 +44,17 @@ export function ExtensionSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
-          <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
-            <li>Install the extension (see the installation guide in the extension folder).</li>
-            <li>Create a connection code below and type it into the extension within 5 minutes.</li>
-            <li>The code works once. The browser stays connected for 90 days, or until you disconnect it here.</li>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" render={<a href={`${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.0.0.zip`} download />}>
+              <Download /> Download the extension (.zip, 67 KB)
+            </Button>
+            <span className="text-xs text-muted-foreground">Version 2.0.0 · Chrome, Edge or Brave</span>
+          </div>
+          <ol className="list-decimal space-y-1 pl-5 text-muted-foreground" data-testid="extension-install-steps">
+            <li>Download the .zip above and unzip it into a folder you will keep (Chrome loads it from there every time).</li>
+            <li>Open <span className="font-mono text-foreground">chrome://extensions</span>, switch on <strong className="text-foreground">Developer mode</strong> (top right), click <strong className="text-foreground">Load unpacked</strong> and choose the unzipped folder.</li>
+            <li>Pin <strong className="text-foreground">JobPilot Smart Apply</strong> from the puzzle-piece menu.</li>
+            <li>Create a connection code below and type it into the extension within 5 minutes. The code works once; the browser stays connected for 90 days, or until you disconnect it here.</li>
           </ol>
           {code ? (
             <div className="rounded-xl border bg-muted/40 p-4 text-center">
