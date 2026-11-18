@@ -31,7 +31,7 @@ log = logging.getLogger(__name__)
 
 SOCKET = os.environ.get("JPSE_SEARCH_SOCKET", "/run/jpse/searchd.sock")
 DEADLINE_S = float(os.environ.get("JPSE_SEARCH_DEADLINE_MS", "250")) / 1000
-MAX_LIMIT = 2000
+MAX_LIMIT = 20000
 
 
 def mode() -> str:
@@ -53,6 +53,8 @@ class Query:
     salary_min: float | None = None
     salary_unknown_ok: bool = False
     all_terms: bool = False
+    title_only: bool = False   # candidate mode: terms are normalize_text words, matched against titles only
+    prefix: bool = False       # with title_only: 5+ letter words also match title words starting with them
     limit: int = 50
 
     def groups(self) -> list[list[str]]:
@@ -83,6 +85,10 @@ class Query:
             req["salary"] = {"currency": self.salary_currency, "min": self.salary_min, "unknown_ok": self.salary_unknown_ok}
         if self.all_terms:
             req["all_terms"] = True
+        if self.title_only:
+            req["title_only"] = True
+        if self.prefix:
+            req["prefix"] = True
         return req
 
 
@@ -136,16 +142,21 @@ def _recv_exact(s: socket.socket, n: int) -> bytes:
 def call(req: dict[str, Any]) -> dict[str, Any]:
     """One request/response on this thread's persistent connection; any failure drops the connection."""
     body = json.dumps(req, separators=(",", ":")).encode()
-    try:
-        s = _conn()
-        s.sendall(struct.pack(">I", len(body)) + body)
-        (n,) = struct.unpack(">I", _recv_exact(s, 4))
-        if n > 64 * 1024 * 1024:
-            raise EngineError("oversized response")
-        return json.loads(_recv_exact(s, n))
-    except (OSError, ValueError, EngineError) as exc:
-        _drop()
-        raise EngineError(str(exc) or type(exc).__name__) from None
+    for attempt in (1, 2):  # the server closes idle connections: a stale socket gets one fresh retry
+        reused = getattr(_local, "sock", None) is not None
+        try:
+            s = _conn()
+            s.sendall(struct.pack(">I", len(body)) + body)
+            (n,) = struct.unpack(">I", _recv_exact(s, 4))
+            if n > 64 * 1024 * 1024:
+                raise EngineError("oversized response")
+            return json.loads(_recv_exact(s, n))
+        except (OSError, ValueError, EngineError) as exc:
+            _drop()
+            if attempt == 1 and reused and not isinstance(exc, (socket.timeout, ValueError)):
+                continue
+            raise EngineError(str(exc) or type(exc).__name__) from None
+    raise EngineError("unreachable")
 
 
 def engine_search(q: Query) -> Result:

@@ -458,13 +458,33 @@ export function useResumeAction() {
   });
 }
 
-export interface NotificationPrefs { new_matches: boolean; delivery: "immediate" | "daily_digest"; min_score: number | null; sources: string[]; email: "off" }
+export const NOTIFICATION_KINDS = ["new_match", "follow_up_due", "interview_upcoming", "application_incomplete", "listing_closed", "discovery_failed"] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+export interface NotificationPrefs {
+  new_matches: boolean; delivery: "immediate" | "daily_digest"; min_score: number | null; sources: string[]; email: "off";
+  /** On/off per alert type. Missing when the server predates per-type switches. */
+  kinds?: Record<NotificationKind, boolean>;
+}
+export type NotificationPrefsPatch = Partial<Omit<NotificationPrefs, "kinds">> & { kinds?: Partial<Record<NotificationKind, boolean>> };
+const notificationPrefsKey = ["notification-prefs"];
 export const useNotificationPrefs = () =>
-  useQuery({ queryKey: ["notification-prefs"], queryFn: async () => (await api.get<NotificationPrefs>("/notifications/preferences")).data });
+  useQuery({ queryKey: notificationPrefsKey, queryFn: async () => (await api.get<NotificationPrefs>("/notifications/preferences")).data });
+/** Changes only the fields sent, so the alert-type switches and the new-job settings can be saved separately. */
 export function useSaveNotificationPrefs() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (p: NotificationPrefs) => (await api.put<NotificationPrefs>("/notifications/preferences", p)).data,
-    onSuccess: (d) => qc.setQueryData(["notification-prefs"], d),
+    mutationFn: async (p: NotificationPrefsPatch) => (await api.patch<NotificationPrefs>("/notifications/preferences", p)).data,
+    // Take from the reply only what this request changed: replies to quick successive saves can arrive out of order.
+    onSuccess: (d, sent) => qc.setQueryData<NotificationPrefs>(notificationPrefsKey, (old) => {
+      if (!old) return d;
+      const next: NotificationPrefs = { ...old, kinds: old.kinds && d.kinds ? { ...old.kinds } : d.kinds ?? old.kinds };
+      for (const k of Object.keys(sent) as (keyof NotificationPrefsPatch)[]) if (k !== "kinds") Object.assign(next, { [k]: d[k] });
+      for (const k of Object.keys(sent.kinds ?? {}) as NotificationKind[]) if (next.kinds && d.kinds) next.kinds[k] = d.kinds[k];
+      if ("new_matches" in sent || sent.kinds?.new_match !== undefined) {  // one switch, two names
+        next.new_matches = d.new_matches;
+        if (next.kinds && d.kinds) next.kinds.new_match = d.kinds.new_match;
+      }
+      return next;
+    }),
   });
 }

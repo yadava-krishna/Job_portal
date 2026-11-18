@@ -58,6 +58,9 @@ services:
       # JPSE Phase 3: jp-searchd (service "searchd"). off = PostgreSQL only; shadow = answer from PostgreSQL and compare
       # with the engine in the logs; on = answer from the engine (PostgreSQL if it is unavailable).
       JPSE_SEARCH: ${JPSE_SEARCH:-shadow}
+      # JPSE Phase 5: saved searches and Discover take their candidates from jp-searchd (exact rules still decide).
+      # Switched on 2026-11-18 after live shadow runs found every exact match in the engine's candidates.
+      JPSE_DISCOVER: ${JPSE_DISCOVER:-on}
       JPSE_SEARCH_SOCKET: /run/jpse/searchd.sock
       ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
       REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-14}
@@ -124,16 +127,18 @@ services:
     depends_on:
       backend: { condition: service_healthy }   # the backend applies migrations (0013) before the crawler starts
     environment:
-      JPF_DATABASE_URL: "host=postgres port=5432 dbname=jobpilot user=jobpilot connect_timeout=10"
-      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # least-privilege account (deploy/jpse_db_roles.sh): its queue and its results, nothing else
+      JPF_DATABASE_URL: "host=postgres port=5432 dbname=jobpilot user=jpse_fetchd connect_timeout=10"
+      PGPASSWORD: ${JPSE_FETCHD_DB_PASSWORD:?run ./deploy/jpse_db_roles.sh}
       JPF_TICK_S: "30"
       JPF_BUDGET_S: "300"
+      JPF_JSON_MEMORY_MB: "192"   # hard cap on the JSON parser: a hostile body fails to parse, it cannot exhaust memory
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     deploy:
       resources:
-        limits: { cpus: "1.0", memory: 256M }
+        limits: { cpus: "1.0", memory: 512M }
     networks: [internal, edge]
 
   # JPSE Phase 3: the native search server (engine/searchd, C17). Holds every open catalogue posting in memory, follows
@@ -147,8 +152,9 @@ services:
     depends_on:
       backend: { condition: service_healthy }
     environment:
-      JPS_DATABASE_URL: "host=postgres port=5432 dbname=jobpilot user=jobpilot connect_timeout=10"
-      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # read-only account (deploy/jpse_db_roles.sh): catalogue_postings and index_outbox only
+      JPS_DATABASE_URL: "host=postgres port=5432 dbname=jobpilot user=jpse_searchd connect_timeout=10"
+      PGPASSWORD: ${JPSE_SEARCHD_DB_PASSWORD:?run ./deploy/jpse_db_roles.sh}
       JPS_SOCKET: /run/jpse/searchd.sock
     volumes:
       - jpse-run:/run/jpse

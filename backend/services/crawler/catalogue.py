@@ -94,6 +94,20 @@ class ApplyResult:
         return bool(self.new or self.changed or self.closed or self.reopened)
 
 
+def _clean(nj: NormalizedJob) -> NormalizedJob:
+    """PostgreSQL text and jsonb cannot hold NUL; one such character must not stop a whole board from being stored."""
+    changes: dict[str, Any] = {}
+    for f in dataclasses.fields(nj):
+        v = getattr(nj, f.name)
+        if isinstance(v, str) and "\x00" in v:
+            changes[f.name] = v.replace("\x00", "")
+        elif isinstance(v, list) and any(isinstance(x, str) and "\x00" in x for x in v):
+            changes[f.name] = [x.replace("\x00", "") if isinstance(x, str) else x for x in v]
+    if nj.job_url and not nj.job_url.lower().startswith(("https://", "http://")):
+        changes["job_url"] = None  # only web links are ever shown or opened
+    return dataclasses.replace(nj, **changes) if changes else nj
+
+
 def apply_snapshot(db: Session, state: CrawlState, jobs: Iterable[NormalizedJob], *, closes: bool, now: datetime | None = None,
                    keep: frozenset[str] | set[str] = frozenset()) -> ApplyResult:
     """Upsert a complete snapshot of one target. The caller commits (one transaction per target).
@@ -104,6 +118,7 @@ def apply_snapshot(db: Session, state: CrawlState, jobs: Iterable[NormalizedJob]
     res = ApplyResult()
     incoming: dict[str, NormalizedJob] = {}
     for nj in jobs:
+        nj = _clean(nj)
         incoming.setdefault(nj.source_key, nj)  # a board listing one requisition twice keeps the first
     keep = set(keep) - set(incoming)
     existing = {p.source_key: p for p in db.execute(select(CataloguePosting).where(
@@ -208,11 +223,17 @@ def snapshot_keys(db: Session, state: CrawlState) -> set[str]:
     return set(db.execute(q).scalars())
 
 
-def board_result(db: Session, state: CrawlState, company: Company) -> tuple[BoardResult, list[int]]:
+def board_result(db: Session, state: CrawlState, company: Company, only: set[int] | None = None) -> tuple[BoardResult, list[int]]:
     """(BoardResult, posting ids in the same order), rebuilt from the catalogue in the shape ats.fetch_board returns,
     so every saved-search filter downstream runs unchanged. Descriptions are left out here and loaded by
     ``with_descriptions`` only for the postings a search keeps."""
-    rows = snapshot(db, state)
+    if only is not None:  # candidate postings from jp-searchd: load just those rows of the snapshot
+        q = select(CataloguePosting).where(CataloguePosting.target_key == state.target_key,
+                                           CataloguePosting.snapshot_seq == state.snapshot_seq, CataloguePosting.closed_at.is_(None),
+                                           CataloguePosting.id.in_(sorted(only))) if only else None
+        rows = list(db.execute(q.order_by(CataloguePosting.id)).scalars()) if q is not None else []
+    else:
+        rows = snapshot(db, state)
     res = BoardResult(company.ats, company.board_token, company.name)
     res.jobs = [from_payload(p.payload, None, state.last_success_at) for p in rows]
     return res, [p.id for p in rows]
@@ -230,3 +251,10 @@ def with_descriptions(db: Session, items: list[tuple[int, NormalizedJob]]) -> li
         desc.update(dict(db.execute(select(CataloguePosting.id, CataloguePosting.description)
                                     .where(CataloguePosting.id.in_(ids[i:i + 500]))).all()))
     return [dataclasses.replace(nj, description=desc.get(pid)) for pid, nj in items]
+
+
+def remember_description(db: Session, posting_id: int, description: str) -> None:
+    """A full job ad fetched on demand (SmartRecruiters lists postings without one). Stored only where none is held,
+    so it is fetched once per posting; the next changed snapshot of that posting replaces it as usual."""
+    db.execute(update(CataloguePosting).where(CataloguePosting.id == posting_id, CataloguePosting.description.is_(None))
+               .values(description=description).execution_options(synchronize_session=False))

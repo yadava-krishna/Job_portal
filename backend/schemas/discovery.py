@@ -136,12 +136,38 @@ class NotificationOut(BaseModel):
     created_at: datetime
 
 
+NotificationKind = Literal["new_match", "follow_up_due", "interview_upcoming", "application_incomplete", "listing_closed",
+                          "discovery_failed"]
+_KINDS_DOC = ("On/off per alert type. Responses list every type; a type missing from stored preferences is on. "
+              "In a request, omit it (or send null) to leave the switches unchanged; a partial map changes only the types "
+              "it names. kinds.new_match is the same switch as new_matches; when a request sets both, new_matches wins.")
+
+
 class NotificationPrefs(BaseModel):
     new_matches: bool = True
     delivery: Literal["immediate", "daily_digest"] = "immediate"
     min_score: float | None = Field(default=None, ge=0, le=100, description="Only notify at or above this score (default: each search's own threshold)")
     sources: list[str] = Field(default_factory=list, max_length=20, description="Only these sources (empty = all)")
     email: Literal["off"] = Field(default="off", description="E-mail delivery needs an SMTP server; not configured yet")
+    kinds: dict[NotificationKind, bool] | None = Field(default=None, description=_KINDS_DOC)
+
+
+class NotificationPrefsPatch(BaseModel):
+    """A partial update: only the fields sent are changed."""
+
+    new_matches: bool | None = None
+    delivery: Literal["immediate", "daily_digest"] | None = None
+    min_score: float | None = Field(default=None, ge=0, le=100)
+    sources: list[str] | None = Field(default=None, max_length=20)
+    email: Literal["off"] | None = None
+    kinds: dict[NotificationKind, bool] | None = Field(default=None, description=_KINDS_DOC)
+
+    @model_validator(mode="after")
+    def _no_null_for_required(self) -> "NotificationPrefsPatch":
+        for name in ("new_matches", "delivery", "sources", "email"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
+        return self
 
 
 class NotificationList(BaseModel):

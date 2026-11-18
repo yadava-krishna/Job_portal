@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import threading
 from dataclasses import replace
@@ -14,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.config import BackendSettings
-from backend.models import CandidateProfile, Company, CrawlState, DiscoveryRun, SavedSearch, User, UserCompany, utcnow
+from backend.models import CandidateProfile, CataloguePosting, Company, CrawlState, DiscoveryRun, SavedSearch, User, UserCompany, utcnow
 from backend.schemas.discovery import SavedSearchIn, SavedSearchOut, SearchCriteria
 from backend.services import discovery_service, preference_service, resume_service, source_registry
 from backend.services.adzuna import AdzunaClient, AdzunaError
@@ -243,6 +244,10 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
     today = timeutil.today()
     items: list[NormalizedJob] = []
     failures: dict[str, list[str]] = {}
+    mode = discover_mode()
+    cand_ids = _engine_candidates(crit, companies) if mode != "off" else None
+    by_board = _candidates_by_board(db, cand_ids) if mode == "on" and cand_ids is not None else None
+    missed: list[str] = []
     for n, company in enumerate(companies, 1):
         discovery_service.progress(db, run, f"Fetching job listings: {company.name} ({n} of {len(companies)} company boards)…")
         if company.id in seen_boards:
@@ -250,8 +255,9 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
         else:
             seen_boards.add(company.id)
             discovery_service.source_result(run, company.ats)
+            only = by_board.get(crawler.board_key(company), set()) if by_board is not None else None
             try:
-                result, posting_ids = _board_source(db, company)
+                result, posting_ids = _board_source(db, company, only)
             except AtsError as exc:
                 kind = "BOARD_NOT_FOUND" if exc.kind == "not_found" else "BOARD_FETCH_FAILED"
                 discovery_service._error(db, user, run, kind, f"{company.name} ({company.ats}): {exc}", platform=company.ats.title(),
@@ -260,19 +266,30 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
                 failures.setdefault(company.ats, []).append(f"{company.name} ({'board not found' if exc.kind == 'not_found' else 'unreachable'})")
                 continue
             discovery_service._stat(run, company.ats.title(), "boards_checked")
-            discovery_service.source_result(run, company.ats, boards_ok=1, listings_checked=len(result.jobs))
+            listed = len(result.jobs)
+            if only is not None and posting_ids is not None:  # candidates only were loaded; the board listed more
+                st = _catalogue_state(db, crawler.board_key(company))
+                listed = st.postings_open if st is not None else listed
+            discovery_service.source_result(run, company.ats, boards_ok=1, listings_checked=listed)
         if result is None:  # already fetched for another search in this run
+            only = by_board.get(crawler.board_key(company), set()) if by_board is not None else None
             try:
-                result, posting_ids = _board_source(db, company)
+                result, posting_ids = _board_source(db, company, only)
             except AtsError:
                 continue
         kept = [(posting_ids[i] if posting_ids else None, nj) for i, nj in enumerate(result.jobs)
                 if crit.title_ok(nj.title) and crit.location_ok(nj)]
+        if mode == "shadow" and cand_ids is not None and posting_ids:
+            missed += [nj.title for pid, nj in kept if pid not in cand_ids and not (nj.expires_at and nj.expires_at < today)]
         # Catalogue boards come without descriptions; load them only for the postings this search kept.
         kept_jobs = catalogue.with_descriptions(db, kept) if posting_ids else [nj for _, nj in kept]
-        for nj in kept_jobs:
+        kept_ids = [pid for pid, _ in kept]
+        for pid, nj in zip(kept_ids, kept_jobs):
             nj = _copy(nj, company)
+            had = bool(nj.description)
             smartrecruiters.complete(nj, company.board_token)  # full job ad, fetched only for postings this search kept
+            if pid and not had and nj.description:  # keep it in the catalogue: fetched once, not on every run
+                catalogue.remember_description(db, pid, nj.description)
             enrich(nj, analyzer)
             if crit.details_ok(nj, today):
                 items.append(nj)
@@ -280,6 +297,12 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
             discovery_service._error(db, user, run, "RUN_CAPPED", f"Stopped after {MAX_JOBS_PER_RUN} matching jobs; narrow the search.",
                                      recovery="NARROW_SEARCH")
             break
+    if mode == "shadow" and cand_ids is not None:
+        if missed:
+            log.warning("jpse discover shadow: run %s: the engine missed %d of the exact matches, e.g. %s", run.id, len(missed),
+                        "; ".join(missed[:5]))
+        else:
+            log.info("jpse discover shadow: run %s: engine candidates (%d) contain every exact match", run.id, len(cand_ids))
     for ats in ATS_SOURCES:
         entry = (run.source_results or {}).get(ats)
         if not entry:
@@ -303,6 +326,65 @@ def _board_items(db: Session, user: User, run: DiscoveryRun, crit: Criteria, ana
 CATALOGUE_MAX_AGE = timedelta(hours=24)
 
 
+def _candidates_by_board(db: Session, ids: set[int]) -> dict[str, set[int]]:
+    """One query: which board each candidate belongs to, so a board without candidates costs no query at all."""
+    out: dict[str, set[int]] = {}
+    ordered = sorted(ids)
+    for i in range(0, len(ordered), 5000):
+        for pid, key in db.execute(select(CataloguePosting.id, CataloguePosting.target_key)
+                                   .where(CataloguePosting.id.in_(ordered[i:i + 5000]))).all():
+            out.setdefault(key, set()).add(pid)
+    return out
+
+
+def discover_mode() -> str:
+    """JPSE_DISCOVER: off = scan every catalogued posting of each board (as before); shadow (default) = scan, and also
+    ask jp-searchd and log any match it would have missed; on = read only the engine's candidates."""
+    m = os.environ.get("JPSE_DISCOVER", "shadow").strip().lower()
+    return m if m in ("off", "shadow", "on") else "shadow"
+
+
+def engine_title_terms(crit: Criteria) -> list[str] | None:
+    """Every word that can make a title pass title_ok: the search's title words and the related-role phrases' words.
+    Any title title_ok accepts contains at least one of them (exactly, or by prefix for 5+ letter words), so the engine's
+    OR over them is a superset of the exact result. None if the list does not fit one request."""
+    from backend.services.role_families import FAMILIES
+
+    words: set[str] = set()
+    for t in crit.title_sets:
+        words |= t
+    for fam in crit.families:
+        for phrase in FAMILIES[fam][1]:
+            words |= set(normalize_text(phrase).split())
+    out, cur = [], ""
+    for w in sorted(words):
+        if len(cur) + len(w) + 1 > 190:
+            out.append(cur)
+            cur = ""
+        cur = f"{cur} {w}".strip()
+    if cur:
+        out.append(cur)
+    return out if 0 < len(out) <= 64 else None
+
+
+def _engine_candidates(crit: Criteria, companies: list[Company]) -> set[int] | None:
+    """Candidate posting ids from jp-searchd, or None (engine off, unavailable or result truncated: scan instead)."""
+    from backend.services import search_engine
+
+    terms = engine_title_terms(crit)
+    if not terms or len(companies) > 500:
+        return None
+    try:
+        res = search_engine.engine_search(search_engine.Query(terms=terms, title_only=True, prefix=True,
+                                                              company_ids=[c.id for c in companies], limit=search_engine.MAX_LIMIT))
+    except search_engine.EngineError as exc:
+        log.info("jp-searchd candidates unavailable (%s); scanning the catalogue", exc)
+        return None
+    if len(res.ids) >= search_engine.MAX_LIMIT:
+        return None  # possibly truncated: never risk a partial candidate set
+    return set(res.ids)
+
+
 def _catalogue_state(db: Session, key: str) -> CrawlState | None:
     return db.execute(select(CrawlState).where(CrawlState.target_key == key)).scalar_one_or_none()
 
@@ -315,13 +397,13 @@ def _fresh(state: CrawlState | None) -> bool:
     return utcnow() - seen <= CATALOGUE_MAX_AGE
 
 
-def _board_source(db: Session, company: Company) -> tuple[BoardResult, list[int] | None]:
+def _board_source(db: Session, company: Company, only: set[int] | None = None) -> tuple[BoardResult, list[int] | None]:
     """A board's listings for a saved-search run: from the crawl catalogue when the background crawler has a recent
     complete snapshot (no network wait), otherwise fetched live as before and stored, so the next run is offline.
     Returns (result, catalogue posting ids or None for a live result)."""
     state = _catalogue_state(db, crawler.board_key(company))
     if _fresh(state):
-        return catalogue.board_result(db, state, company)
+        return catalogue.board_result(db, state, company, only)
     if state is not None and state.last_status == "not_found" and state.last_success_at is None:
         raise AtsError("not_found", "Job board not found (the company may have moved or renamed its board).")
     result = refresh_board(db, company)

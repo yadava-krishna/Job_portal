@@ -57,11 +57,22 @@ static bool push(jpf_board *b, const char *id, char *json, size_t len) {
     return true;
 }
 
+static yyjson_alc g_alc;
+static bool g_alc_on = false;
+
+bool jpf_split_memory_limit(size_t bytes) {
+    if (!bytes) { g_alc_on = false; return true; }
+    void *buf = malloc(bytes);  /* address space only: pages are touched as the parser uses them */
+    if (!buf || !yyjson_alc_pool_init(&g_alc, buf, bytes)) { free(buf); return false; }
+    g_alc_on = true;
+    return true;
+}
+
 long jpf_split(jpf_ats ats, const char *body, size_t len, jpf_board *b) {
     b->error[0] = 0;
     if (!body || len == 0 || len > JPF_MAX_BODY_BYTES) { snprintf(b->error, sizeof b->error, "empty or oversized body"); return -1; }
     yyjson_read_err err;
-    yyjson_doc *doc = yyjson_read_opts((char *)body, len, YYJSON_READ_NOFLAG, NULL, &err);
+    yyjson_doc *doc = yyjson_read_opts((char *)body, len, YYJSON_READ_NOFLAG, g_alc_on ? &g_alc : NULL, &err);
     if (!doc) { snprintf(b->error, sizeof b->error, "not JSON (%s at %zu)", err.msg, err.pos); return -1; }
     yyjson_val *root = yyjson_doc_get_root(doc), *arr = NULL;
     switch (ats) {
@@ -82,6 +93,7 @@ long jpf_split(jpf_ats ats, const char *body, size_t len, jpf_board *b) {
         yyjson_doc_free(doc);
         return -1;
     }
+    b->last_page_len = yyjson_arr_size(arr);
     long added = 0;
     size_t idx, max;
     yyjson_val *item;

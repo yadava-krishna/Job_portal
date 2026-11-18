@@ -1,5 +1,5 @@
 /* jp-searchd: load the index, keep it in sync in a background thread, serve searches on a Unix socket. */
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 #include <math.h>
 #include <pthread.h>
 #include <signal.h>
@@ -85,7 +85,10 @@ int main(void) {
     const char *sock = getenv("JPS_SOCKET");
     if (!sock || !*sock) sock = "/run/jpse/searchd.sock";
     static sps_state st;
-    pthread_rwlock_init(&st.lock, NULL);
+    pthread_rwlockattr_t la;  /* writers first: a steady stream of searches must not starve index updates */
+    pthread_rwlockattr_init(&la);
+    pthread_rwlockattr_setkind_np(&la, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+    pthread_rwlock_init(&st.lock, &la);
     static sync_cfg cfg;
     cfg.st = &st;
     snprintf(cfg.url, sizeof cfg.url, "%s", url);

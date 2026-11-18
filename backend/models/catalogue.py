@@ -99,7 +99,7 @@ class CataloguePosting(Base):
 
 class IndexOutbox(Base):
     __tablename__ = "index_outbox"
-    __table_args__ = (Index("ix_index_outbox_pending", "state", "id"),)
+    __table_args__ = (Index("ix_index_outbox_pending", "state", "id"), Index("ix_index_outbox_created", "created_at"))
 
     id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
     posting_id: Mapped[int] = mapped_column(ForeignKey("catalogue_postings.id", ondelete="CASCADE"), nullable=False)

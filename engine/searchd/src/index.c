@@ -5,6 +5,7 @@
  * full rebuild (sync.c), like segment merging. */
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "sps.h"
 
@@ -135,6 +136,20 @@ static bool plist_push(sps_plist *l, uint32_t doc, float imp) {
     return true;
 }
 
+typedef struct { sps_index *ix; uint32_t doc; sps_strmap seen; bool oom; } tctx;
+
+static void on_title_word(const char *w, size_t n, void *ud) {
+    tctx *c = ud;
+    char key[SPS_MAX_TOKEN + 3] = "t:";
+    memcpy(key + 2, w, n);
+    key[n + 2] = 0;
+    uint32_t dummy;
+    if (sps_strmap_get(&c->seen, key, n + 2, &dummy)) return;
+    sps_strmap_put(&c->seen, key, n + 2, 1);
+    uint32_t t = term_id(c->ix, key, n + 2);
+    if (t == UINT32_MAX || !plist_push(&c->ix->lists[t], c->doc, 1.0f)) c->oom = true;
+}
+
 bool sps_index_upsert(sps_index *ix, const sps_doc *d) {
     uint32_t old;
     bool had = sps_idmap_get(&ix->byid, d->id, &old);
@@ -161,6 +176,14 @@ bool sps_index_upsert(sps_index *ix, const sps_doc *d) {
     }
     free(c.v);
     sps_strmap_free(&c.local);
+    if (ok) {  /* title words, normalised exactly like JobPilot's title matching, for candidate retrieval */
+        tctx tc = {.ix = ix, .doc = doc};
+        sps_strmap_init(&tc.seen, 16);
+        const char *t = d->text[F_TITLE] ? d->text[F_TITLE] : "";
+        sps_norm_ascii(t, strlen(t), on_title_word, &tc);
+        sps_strmap_free(&tc.seen);
+        ok = !tc.oom;
+    }
     if (!ok) return false;  /* partially pushed entries point at a doc that never becomes live: harmless */
     ix->pid[doc] = d->id;
     ix->rev[doc] = d->revision;
@@ -240,13 +263,72 @@ static int by_score_desc(const void *a, const void *b) {
     return x->id < y->id ? -1 : x->id > y->id;  /* deterministic order for equal scores */
 }
 
-typedef struct { const sps_index *ix; uint32_t term[SPS_MAX_QUERY_TOKENS]; size_t n; bool missing; } qtok;
+#define QTERMS 4096  /* after prefix expansion; never silently truncated below what the index can hold */
+typedef struct { const sps_index *ix; uint32_t term[QTERMS]; size_t n; bool missing, overflow; } qtok;
 static void on_qtoken(const char *tok, size_t n, void *ud) {
     qtok *q = ud;
     uint32_t id;
     if (!sps_strmap_get(&q->ix->terms, tok, n, &id)) { q->missing = true; return; }
     for (size_t i = 0; i < q->n; i++) if (q->term[i] == id) return;
-    if (q->n < SPS_MAX_QUERY_TOKENS) q->term[q->n++] = id;
+    if (q->n < QTERMS) q->term[q->n++] = id; else q->overflow = true;
+}
+
+static void add_term(qtok *q, uint32_t id) {
+    for (size_t i = 0; i < q->n; i++) if (q->term[i] == id) return;
+    if (q->n < QTERMS) q->term[q->n++] = id; else q->overflow = true;
+}
+
+/* Candidate-mode words: space-separated, already normalised; "t:" namespace; optional prefix expansion. */
+static void title_terms(const sps_index *ix, const char *s, bool prefix, qtok *q) {
+    size_t len = strlen(s);
+    for (size_t i = 0; i < len;) {
+        while (i < len && s[i] == ' ') i++;
+        size_t st = i;
+        while (i < len && s[i] != ' ') i++;
+        size_t n = i - st;
+        if (!n || n > SPS_MAX_TOKEN) continue;
+        char key[SPS_MAX_TOKEN + 3] = "t:";
+        memcpy(key + 2, s + st, n);
+        key[n + 2] = 0;
+        uint32_t id;
+        bool found = sps_strmap_get(&ix->terms, key, n + 2, &id);
+        if (found) add_term(q, id);
+        if (prefix && n >= 5) {  /* every title word starting with it */
+            for (size_t k = 0; k < ix->terms.cap; k++) {
+                const char *t = ix->terms.keys[k];
+                if (t && strncmp(t, key, n + 2) == 0 && t[n + 2]) add_term(q, ix->terms.vals[k]);
+            }
+        } else if (!found) {
+            q->missing = true;
+        }
+    }
+}
+
+size_t sps_suggest(const sps_index *ix, const char *prefix, char out[][SPS_MAX_TOKEN + 1], size_t max) {
+    char key[SPS_MAX_TOKEN + 3] = "t:";
+    size_t n = 0;
+    for (const char *p = prefix; *p && n < SPS_MAX_TOKEN; p++) {
+        char c = *p >= 'A' && *p <= 'Z' ? (char)(*p + 32) : *p;
+        if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) key[2 + n++] = c;
+    }
+    key[2 + n] = 0;
+    if (n < 2 || !max) return 0;
+    uint32_t best_df[32] = {0};
+    const char *best[32];
+    size_t cnt = 0, lim = max < 32 ? max : 32;
+    for (size_t k = 0; k < ix->terms.cap; k++) {
+        const char *t = ix->terms.keys[k];
+        if (!t || strncmp(t, key, n + 2) != 0) continue;
+        uint32_t df = ix->lists[ix->terms.vals[k]].n;
+        size_t pos = cnt < lim ? cnt++ : lim;
+        if (pos == lim && df <= best_df[lim - 1]) continue;
+        if (pos == lim) pos = lim - 1;
+        while (pos > 0 && best_df[pos - 1] < df) { best_df[pos] = best_df[pos - 1]; best[pos] = best[pos - 1]; pos--; }
+        best_df[pos] = df;
+        best[pos] = t;
+    }
+    for (size_t i = 0; i < cnt; i++) snprintf(out[i], SPS_MAX_TOKEN + 1, "%s", best[i] + 2);
+    return cnt;
 }
 
 bool sps_search(const sps_index *ix, const sps_query *q, int32_t today, sps_result *out) {
@@ -288,7 +370,15 @@ bool sps_search(const sps_index *ix, const sps_query *q, int32_t today, sps_resu
     uint32_t hn = 0;
     if (!heap) { free(bs.w); return false; }
     qtok qt = {.ix = ix};
-    for (size_t i = 0; i < q->nterms; i++) sps_tokenize(q->terms[i], strlen(q->terms[i]), 0, false, on_qtoken, &qt);
+    for (size_t i = 0; i < q->nterms; i++) {
+        if (q->title_only) title_terms(ix, q->terms[i], q->prefix, &qt);
+        else sps_tokenize(q->terms[i], strlen(q->terms[i]), 0, false, on_qtoken, &qt);
+    }
+    if (qt.overflow) {  /* more distinct words than QTERMS: refuse rather than return an incomplete candidate set */
+        free(heap);
+        free(bs.w);
+        return false;
+    }
     if (q->nterms == 0) {
         /* 2a. no words: newest first among the candidates */
         for (uint32_t d = 0; d < ix->ndocs; d++)

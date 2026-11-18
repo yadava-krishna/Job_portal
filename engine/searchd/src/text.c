@@ -33,3 +33,21 @@ size_t sps_tokenize(const char *s, size_t len, size_t max_tokens, bool drop_sing
     }
     return emitted;
 }
+
+size_t sps_norm_ascii(const char *s, size_t len, sps_token_fn fn, void *ud) {
+    char buf[SPS_MAX_TOKEN + 1];
+    size_t n = 0, emitted = 0;
+    for (size_t i = 0; i <= len; i++) {
+        unsigned char c = i < len ? (unsigned char)s[i] : 0;
+        bool word = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+        if (word) {
+            if (n < SPS_MAX_TOKEN) buf[n] = (char)tolower(c);
+            n++;
+            continue;
+        }
+        if (n && n <= SPS_MAX_TOKEN) { buf[n] = 0; fn(buf, n, ud); emitted++; }
+        n = 0;
+        if (c == '&') { fn("and", 3, ud); emitted++; }
+    }
+    return emitted;
+}

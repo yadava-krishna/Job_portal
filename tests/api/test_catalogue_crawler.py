@@ -404,9 +404,9 @@ def test_search_engine_query_building():
     from backend.services.search_engine import Query
 
     q = Query(terms=["AR analyst"], countries=["IN"], remote_open_to=["IN", "*"], work_modes=["Remote"], posted_within_days=7,
-              salary_currency="INR", salary_min=500000, limit=5000)
+              salary_currency="INR", salary_min=500000, limit=50000)
     req = q.to_request()
     assert req["filters"] == [["country:IN", "remote:IN", "remote:*"], ["mode:Remote"]]
-    assert req["limit"] == 2000 and req["salary"] == {"currency": "INR", "min": 500000, "unknown_ok": False}
+    assert req["limit"] == 20000 and req["salary"] == {"currency": "INR", "min": 500000, "unknown_ok": False}
     assert isinstance(req["posted_after_day"], int)
     assert Query().to_request() == {"method": "search", "limit": 50}

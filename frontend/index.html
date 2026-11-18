@@ -2,6 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      Content Security Policy. GitHub Pages can't send headers, so it lives here; nginx adds frame-ancestors and the
+      other headers (frontend/security-headers.conf). It is removed in `vite dev` only (vite.config.ts), whose hot
+      reload needs an inline script. Keep it in sync with what the app loads:
+        connect-src  the backend is picked at run time (src/lib/config.ts): same origin, an ngrok address, the
+                     Cloudflare quick-tunnel fallback, or a backend on this computer.
+        frame-src    blob: is the resume preview (a PDF made in the browser, shown in an iframe).
+        style-src    no inline <style>: sonner's CSS is bundled instead of injected (vite.config.ts) and Base UI's
+                     style elements are off (CSPProvider in src/main.tsx). React's style props are set through
+                     the DOM, which a CSP does not restrict.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://*.ngrok-free.dev https://*.ngrok-free.app https://*.trycloudflare.com http://localhost:* http://127.0.0.1:*; frame-src blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JobPilot · Job application portal</title>

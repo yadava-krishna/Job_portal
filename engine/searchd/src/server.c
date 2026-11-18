@@ -79,8 +79,15 @@ static char *respond(sps_state *st, const char *req, size_t len, size_t *out_len
             yyjson_mut_obj_add_uint(d, o, "terms", ix->nterms);
             yyjson_mut_obj_add_uint(d, o, "filter_keys", ix->nf);
             yyjson_mut_obj_add_uint(d, o, "rebuilds", st->rebuilds);
-            yyjson_mut_obj_add_uint(d, o, "outbox_high_water", (uint64_t)st->high_water);
+            yyjson_mut_obj_add_uint(d, o, "outbox_high_water", (uint64_t)atomic_load(&st->high_water));
         }
+    } else if (kind == REQ_SUGGEST) {
+        char words[20][SPS_MAX_TOKEN + 1];
+        size_t cnt = sps_suggest(ix, q.terms[0], words, q.limit);
+        yyjson_mut_obj_add_bool(d, o, "ok", true);
+        yyjson_mut_val *arr = yyjson_mut_arr(d);
+        for (size_t i = 0; i < cnt; i++) yyjson_mut_arr_add_strcpy(d, arr, words[i]);
+        yyjson_mut_obj_add_val(d, o, "suggestions", arr);
     } else {
         sps_result r;
         int32_t today = (int32_t)(time(NULL) / 86400);
@@ -116,8 +123,9 @@ typedef struct { sps_state *st; int fd; } conn_arg;
 static void *serve_conn(void *p) {
     conn_arg *a = p;
     char *buf = malloc(SPS_MAX_FRAME);
-    struct timeval tv = {.tv_sec = 60};
+    struct timeval tv = {.tv_sec = 60}, wtv = {.tv_sec = 10};
     setsockopt(a->fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    setsockopt(a->fd, SOL_SOCKET, SO_SNDTIMEO, &wtv, sizeof wtv);
     while (buf) {
         uint32_t be;
         if (!read_full(a->fd, &be, 4)) break;
@@ -144,7 +152,11 @@ int sps_serve(sps_state *st, const char *path, volatile int *stop) {
     int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0) return -1;
     unlink(path);
-    if (bind(fd, (struct sockaddr *)&addr, sizeof addr) < 0 || listen(fd, 128) < 0) { close(fd); return -1; }
+    if (bind(fd, (struct sockaddr *)&addr, sizeof addr) < 0 || listen(fd, 128) < 0) {
+        fprintf(stderr, "level=error msg=\"cannot listen on the socket\" socket=%s err=\"%s\"\n", path, strerror(errno));
+        close(fd);
+        return -1;
+    }
     chmod(path, 0666);  /* the socket lives in a volume shared only with the backend container */
     struct timeval atv = {.tv_sec = 1};  /* accept() wakes every second to notice SIGTERM */
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &atv, sizeof atv);

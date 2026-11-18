@@ -122,8 +122,18 @@ def request_refresh(db: Session, company_ids: list[int]) -> int:
     after errors is not hit sooner because someone asked."""
     if not company_ids:
         return 0
-    n = db.execute(update(CrawlState).where(CrawlState.company_id.in_(company_ids), CrawlState.enabled.is_(True))
-                   .values(priority=1, next_due_at=utcnow()).execution_options(synchronize_session=False)).rowcount
+    from sqlalchemy import exists, or_
+
+    from backend.models import CrawlResult
+
+    recent = utcnow() - timedelta(seconds=MIN_INTERVAL)
+    # Never sooner than the minimum interval (politeness), never while jp-fetchd holds the board (it stamps
+    # last_attempt_at when it claims), never while a result waits to be applied.
+    n = db.execute(update(CrawlState).where(
+        CrawlState.company_id.in_(company_ids), CrawlState.enabled.is_(True),
+        or_(CrawlState.last_attempt_at.is_(None), CrawlState.last_attempt_at < recent),
+        ~exists().where(CrawlResult.state_id == CrawlState.id, CrawlResult.state == "pending"),
+    ).values(priority=1, next_due_at=utcnow()).execution_options(synchronize_session=False)).rowcount
     db.commit()
     return n or 0
 
@@ -286,6 +296,11 @@ def apply_outcome(db: Session, state: CrawlState, out: Outcome, watched: bool, n
     _schedule(state, now, next_interval(state.interval_s, res.any_change and not first_snapshot, watched))
     if out.before_commit:
         out.before_commit()
+    elif state.kind == "board":  # written by the Python crawler or a live fetch: jp-fetchd's hashes no longer describe it
+        from sqlalchemy import delete
+
+        from backend.models import CrawlRawItem
+        db.execute(delete(CrawlRawItem).where(CrawlRawItem.target_key == state.target_key))
     db.commit()
     report.update(new=res.new, changed=res.changed, closed=res.closed, reopened=res.reopened, listed=len(out.jobs) + len(out.keep))
     return report

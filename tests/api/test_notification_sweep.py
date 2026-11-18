@@ -247,6 +247,45 @@ def test_preferences_and_inactive_users_are_respected(client):
     assert _notes(gone) == []
 
 
+def test_kinds_switched_off_in_settings_are_not_created(client):
+    """Every sweep kind, switched off through the preferences API, is skipped; another user still gets it."""
+    from backend.db import session_factory
+    from backend.models import DiscoveryRun, Interview
+
+    kinds = ("follow_up_due", "interview_upcoming", "application_incomplete", "listing_closed", "discovery_failed")
+    h = auth(register(client, "kinds-off@example.com"))
+    r = client.patch(f"{API}/notifications/preferences", headers=h, json={"kinds": dict.fromkeys(kinds, False)})
+    assert r.status_code == 200 and not any(r.json()["kinds"][k] for k in kinds) and r.json()["kinds"]["new_match"]
+    with session_factory()() as db:
+        from backend.models import User
+        off = db.execute(select(User.id).where(User.email == "kinds-off@example.com")).scalar_one()
+    on = _user(client, "kinds-on@example.com")
+    with session_factory()() as db:
+        for uid in (off, on):
+            _app(db, uid, _job(db), follow_up_at=_now() - timedelta(hours=1))
+            iv_app = _app(db, uid, _job(db))
+            db.add(Interview(user_id=uid, application_id=iv_app.id, scheduled_at=_now() + timedelta(hours=3), outcome="scheduled"))
+            _app(db, uid, _job(db), status="PREPARED", updated_at=_now() - timedelta(days=5))
+            _user_job(db, uid, _job(db, closed_at=_now()), is_saved=True)
+            db.add(DiscoveryRun(user_id=uid, trigger="manual", status="failed", summary="Boom.", started_at=_now()))
+        db.commit()
+    _sweep()
+    assert _notes(off) == []
+    assert sorted({n.kind for n in _notes(on)}) == sorted(kinds)
+
+    # notification_dispatch (every 30 minutes) shares the follow-up and interview reminders: it must skip them too.
+    from backend.services import jobs_registry
+    from backend.config import get_settings
+    with session_factory()() as db:
+        jobs_registry._notification_dispatch(db, get_settings())
+    assert _notes(off) == []
+
+    # Switching a kind back on lets the next sweep create it.
+    client.patch(f"{API}/notifications/preferences", headers=h, json={"kinds": {"follow_up_due": True}})
+    _sweep()
+    assert [n.kind for n in _notes(off)] == ["follow_up_due"]
+
+
 def test_sweep_runs_as_a_named_job_and_shows_in_the_bell(client):
     from backend.db import session_factory
     from backend.models import User

@@ -18,8 +18,8 @@
 #define SPS_MAX_DESC_TOKENS 400      /* description tokens indexed per posting */
 #define SPS_MAX_QUERY_TOKENS 64
 #define SPS_MAX_FILTER_GROUPS 16
-#define SPS_MAX_FILTER_KEYS 64
-#define SPS_MAX_LIMIT 2000
+#define SPS_MAX_FILTER_KEYS 512     /* a saved search can cover up to 250 boards plus feeds */
+#define SPS_MAX_LIMIT 20000         /* candidate retrieval for saved searches asks for every match */
 #define SPS_MAX_FRAME (256 * 1024)   /* request frames; responses are bounded by SPS_MAX_LIMIT */
 
 enum { F_TITLE, F_SKILLS, F_COMPANY, F_LOCATION, F_DESC, SPS_NFIELDS };
@@ -99,8 +99,17 @@ typedef struct {
     double salary_min;
     bool salary_unknown_ok;
     bool require_all_terms;
+    /* Candidate mode for saved searches: terms are words already normalised exactly like JobPilot's normalize_text
+     * (lower-case ASCII letters and digits, separated by spaces), matched against the title only; with `prefix`, a
+     * word of 5+ letters also matches every title word that starts with it ("associat" -> "associate"). */
+    bool title_only, prefix;
     uint32_t limit;
 } sps_query;
+
+/* Words for type-ahead: title words starting with `prefix` (normalised like titles), most frequent first. */
+size_t sps_suggest(const sps_index *ix, const char *prefix, char out[][SPS_MAX_TOKEN + 1], size_t max);
+/* normalize_text (core/skills.py): lower-case; '&' -> " and "; anything but a-z0-9 separates words. */
+size_t sps_norm_ascii(const char *s, size_t len, sps_token_fn fn, void *ud);
 
 typedef struct { int64_t id; float score; } sps_hit;
 typedef struct { sps_hit *hits; uint32_t n; uint32_t candidates; } sps_result;

@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Field, LoadingState, NativeSelect, PageHeader } from "@/components/app/common";
 import { ConnectionSettingsDialog } from "@/components/app/ConnectionSettings";
 import { ExtensionSettings } from "@/components/app/ExtensionSettings";
-import { AnswerBank, NotificationSettings, ResumeVersions } from "@/components/app/ProfileExtras";
+import { AnswerBank, NotificationSettings, NotificationTypeSettings, ResumeVersions } from "@/components/app/ProfileExtras";
 import { ClipperCard, PlatformsForm, PreferencesForm, ProfileForm, ResumeUpload } from "@/components/app/forms";
 import { useAuth } from "@/contexts/AuthContext";
 import { CareerGoalsForm, PrivacyConsents } from "@/features/career/SettingsTabs";
@@ -78,7 +78,7 @@ export function SettingsPage() {
         <TabsContent value="answers" className="pt-4"><FactsForm facts={profile.data?.verified_facts} /></TabsContent>
         <TabsContent value="email" className="pt-4"><EmailForm /></TabsContent>
         <TabsContent value="extension" className="pt-4"><ExtensionSettings /></TabsContent>
-        <TabsContent value="notifications" className="pt-4"><NotificationSettings /></TabsContent>
+        <TabsContent value="notifications" className="space-y-6 pt-4"><NotificationTypeSettings /><NotificationSettings /></TabsContent>
         <TabsContent value="privacy" className="pt-4"><PrivacyConsents /></TabsContent>
         <TabsContent value="account" className="pt-4"><AccountCard /></TabsContent>
       </Tabs>

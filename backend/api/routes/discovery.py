@@ -18,6 +18,7 @@ from backend.schemas.discovery import (
     DirectoryCompany,
     NotificationList,
     NotificationPrefs,
+    NotificationPrefsPatch,
     NotificationOut,
     SavedSearchIn,
     SavedSearchOut,
@@ -147,9 +148,26 @@ def get_notification_prefs(user: CurrentUser, db: DbSession) -> NotificationPref
     return NotificationPrefs(**notification_service.prefs(db, user))
 
 
+def _pref_values(body: NotificationPrefs | NotificationPrefsPatch, *, partial: bool) -> dict:
+    values = body.model_dump(exclude_unset=partial)
+    if values.get("kinds") is None:
+        values.pop("kinds", None)  # null or absent: leave the per-type switches as they are
+    if "new_matches" not in body.model_fields_set and body.kinds and "new_match" in body.kinds:
+        values["new_matches"] = body.kinds["new_match"]  # sent only as kinds.new_match: that is the switch
+    return values
+
+
 @notifications.put("/preferences", response_model=NotificationPrefs)
 def put_notification_prefs(body: NotificationPrefs, user: CurrentUser, db: DbSession) -> NotificationPrefs:
-    return NotificationPrefs(**notification_service.save_prefs(db, user, body.model_dump()))
+    """Replace the new-match settings (fields left out get their defaults, as before). `kinds`, if sent, changes only
+    the alert types it names."""
+    return NotificationPrefs(**notification_service.save_prefs(db, user, _pref_values(body, partial=False)))
+
+
+@notifications.patch("/preferences", response_model=NotificationPrefs)
+def patch_notification_prefs(body: NotificationPrefsPatch, user: CurrentUser, db: DbSession) -> NotificationPrefs:
+    """Change only the fields sent, e.g. {"kinds": {"listing_closed": false}}."""
+    return NotificationPrefs(**notification_service.save_prefs(db, user, _pref_values(body, partial=True)))
 
 
 @notifications.get("", response_model=NotificationList)

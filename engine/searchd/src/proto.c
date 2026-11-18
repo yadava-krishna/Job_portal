@@ -22,6 +22,15 @@ int sps_parse_request(const char *buf, size_t len, yyjson_doc **doc_out, sps_que
     if (!m) { snprintf(err, n, "missing method"); return REQ_BAD; }
     if (!strcmp(m, "health")) return REQ_HEALTH;
     if (!strcmp(m, "stats")) return REQ_STATS;
+    if (!strcmp(m, "suggest")) {
+        yyjson_val *pv = yyjson_obj_get(root, "prefix");
+        if (!str_ok(pv, SPS_MAX_TOKEN)) { snprintf(err, n, "suggest: prefix of 1-%d bytes", SPS_MAX_TOKEN); return REQ_BAD; }
+        q->terms[0] = yyjson_get_str(pv);
+        q->nterms = 1;
+        yyjson_val *lv = yyjson_obj_get(root, "limit");
+        q->limit = yyjson_is_int(lv) && yyjson_get_sint(lv) >= 1 && yyjson_get_sint(lv) <= 20 ? (uint32_t)yyjson_get_sint(lv) : 10;
+        return REQ_SUGGEST;
+    }
     if (strcmp(m, "search")) { snprintf(err, n, "unknown method"); return REQ_BAD; }
 
     yyjson_val *terms = yyjson_obj_get(root, "terms"), *v;
@@ -59,6 +68,10 @@ int sps_parse_request(const char *buf, size_t len, yyjson_doc **doc_out, sps_que
     }
     v = yyjson_obj_get(root, "all_terms");
     if (v) { if (!yyjson_is_bool(v)) { snprintf(err, n, "all_terms: boolean"); return REQ_BAD; } q->require_all_terms = yyjson_get_bool(v); }
+    v = yyjson_obj_get(root, "title_only");
+    if (v) { if (!yyjson_is_bool(v)) { snprintf(err, n, "title_only: boolean"); return REQ_BAD; } q->title_only = yyjson_get_bool(v); }
+    v = yyjson_obj_get(root, "prefix");
+    if (v) { if (!yyjson_is_bool(v)) { snprintf(err, n, "prefix: boolean"); return REQ_BAD; } q->prefix = yyjson_get_bool(v); }
     v = yyjson_obj_get(root, "limit");
     if (v) { if (!yyjson_is_int(v) || yyjson_get_sint(v) < 1 || yyjson_get_sint(v) > SPS_MAX_LIMIT) { snprintf(err, n, "limit: 1-%d", SPS_MAX_LIMIT); return REQ_BAD; } q->limit = (uint32_t)yyjson_get_sint(v); }
     return REQ_SEARCH;

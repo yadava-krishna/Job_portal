@@ -353,7 +353,43 @@ Started: 2026-11-16. This is the working tracker for the JobPilot 2.0 overhaul. 
     The target was p99 under 30 ms.
   - **Exact filters:** 9 of 9 filter-only queries return the same postings in the same order as PostgreSQL.
   - **API:** `GET /api/v1/catalogue/search`. `JPSE_SEARCH=off|shadow|on`, and PostgreSQL answers if the engine is unavailable.
-- [ ] Phase 3, not done yet: memory-mapped sealed segments on disk. The index is rebuilt from PostgreSQL at start, about 4 s today.
+- [ ] Phase 3, not done yet: memory-mapped sealed segments on disk. The index is rebuilt from PostgreSQL at start, about 5 s today.
+- [x] Phase 4 (2026-11-18): retrieval for saved searches:
+  - **Candidate mode:** title words are indexed with exactly JobPilot's `normalize_text`, prefix expansion for words of 5+ letters, a cap of 4,096 expanded words that refuses rather than truncates, and type-ahead suggestions.
+  - **Quality gate:** `engine/bench/recall_eval.py` shows 100% recall on every real saved search (with related roles, typos and prefixes).
+  - **Speed fixes:**
+    - the skill matcher checks an alias's first word before running its pattern (identical results, about 300 fewer regex scans per text);
+    - candidates are grouped by board with one query;
+    - SmartRecruiters full ads are stored in the catalogue after the first fetch.
+- [x] Phase 5 (2026-11-18): Discover and saved searches use engine candidates (`JPSE_DISCOVER=on`). Live shadow runs for all four users found every exact match in the candidates; with the switch on, the same jobs are found:
+
+  | User | Jobs found | Time (shadow, then on) |
+  |---|---|---|
+  | 3 | 63 | 10.9 s, then 6.5 s |
+  | 16 | 304 | 17.9 s, then 14.5 s |
+  | 19 | 16 | 4.8 s, then 2.3 s |
+  | 27 | 88 | 7.3 s, then 4.3 s |
+
+  Before JPSE, a run took about 7.5 min. The exact filters and scoring still decide every result. The catalogue search API stays in shadow mode (`JPSE_SEARCH`) until its ranking is compared with match scores.
+- [x] Security review of the engines and crawler (2026-11-18), with fixes deployed:
+  - **SmartRecruiters paging:** decided on page items, as in Python. Before, it could close live jobs.
+  - **Failed applies:** they back off; NUL characters are stripped.
+  - **Raw-item hashes:** recorded only for open postings, and cleared when the Python crawler writes a board.
+  - **Stale results:** skipped.
+  - **Discover refresh:** limited to once per 15 minutes per board, never while jp-fetchd holds the board.
+  - **jp-searchd sync:**
+    - an outbox event is marked seen only after it is applied;
+    - the overlap is by count and 15 minutes (migration 0014 index);
+    - atomics, and a writer-preferring lock.
+  - **jp-fetchd:**
+    - redirects are followed by hand, with every hop's host checked first;
+    - IPv6 forms that embed IPv4 and 198.18/15 are refused;
+    - ETags must be printable;
+    - the JSON parser has a 192 MB pool cap.
+  - **Database accounts:** least privilege, `jpse_fetchd` and `jpse_searchd` (`deploy/jpse_db_roles.sh`).
+  - **Links:** job links must be http(s).
+- [x] Alert switches per type in Settings (`PATCH /notifications/preferences`), and CORS now allows PATCH (this also fixes the mentor screens across origins).
+- [x] CSP (`<meta>` in index.html: no unsafe-inline or unsafe-eval) and nginx security headers (frame-ancestors, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy). Fixed: the app page and assets used to get no security headers. Checked on the live Pages site: 0 console errors.
 - [ ] Phase 4: advanced retrieval.
 - [ ] Phase 5: shadow mode and rollout.
 

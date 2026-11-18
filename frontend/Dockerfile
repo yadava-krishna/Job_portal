@@ -11,6 +11,7 @@ RUN npm run build
 
 FROM nginx:1.27-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /src/dist /usr/share/nginx/html
 # The local build talks to its own origin; no published ngrok address is needed.
 RUN printf '{\n  "apiBaseUrl": ""\n}\n' > /usr/share/nginx/html/config.json

@@ -30,8 +30,8 @@ static void test_shapes(void) {
     jpf_board_free(&b);
 
     jpf_board_init(&b);
-    CHECK(split_str(ATS_SMARTRECRUITERS, "{\"offset\":0,\"limit\":100,\"totalFound\":250,\"content\":[{\"id\":\"744\"}]}", &b) == 1);
-    CHECK(b.total_found == 250);
+    CHECK(split_str(ATS_SMARTRECRUITERS, "{\"offset\":0,\"limit\":100,\"totalFound\":250,\"content\":[{\"id\":\"744\"},{\"id\":\"744\"},{\"x\":1}]}", &b) == 1);
+    CHECK(b.total_found == 250 && b.last_page_len == 3);  /* paging looks at the page's items, not the new ones */
     jpf_board_free(&b);
 
     jpf_board_init(&b);
@@ -103,6 +103,10 @@ static void test_policy(void) {
     struct sockaddr_in6 v6 = {.sin6_family = AF_INET6};
     const char *bad6[] = {"::1", "fe80::1", "fd00::1", "::ffff:10.0.0.1", "::", NULL};
     for (int i = 0; bad6[i]; i++) { inet_pton(AF_INET6, bad6[i], &v6.sin6_addr); CHECK(jpf_ip_forbidden((struct sockaddr *)&v6, false)); }
+    const char *bad6b[] = {"64:ff9b::a00:1", "64:ff9b:1::1", "2002:a00:1::1", "2001::1", "100::1", "::ffff:0:a00:1", NULL};
+    for (int i = 0; bad6b[i]; i++) { inet_pton(AF_INET6, bad6b[i], &v6.sin6_addr); CHECK(jpf_ip_forbidden((struct sockaddr *)&v6, false)); }
+    inet_pton(AF_INET, "198.19.1.1", &v4.sin_addr);
+    CHECK(jpf_ip_forbidden((struct sockaddr *)&v4, false));
     inet_pton(AF_INET6, "2606:4700::6810:e684", &v6.sin6_addr);
     CHECK(!jpf_ip_forbidden((struct sockaddr *)&v6, false));
 }

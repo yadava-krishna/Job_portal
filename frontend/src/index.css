@@ -128,3 +128,7 @@
     @apply font-sans;
     }
 }
+/* Base UI's hidden-scrollbar rule (ScrollArea, Select). Base UI would add it as an inline <style>, which the CSP
+   blocks, so it is switched off in main.tsx (CSPProvider disableStyleElements) and defined here instead. */
+.base-ui-disable-scrollbar { scrollbar-width: none; }
+.base-ui-disable-scrollbar::-webkit-scrollbar { display: none; }

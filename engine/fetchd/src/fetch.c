@@ -70,6 +70,7 @@ static size_t on_body(char *p, size_t sz, size_t n, void *ud) {
     memcpy(j->body + j->body_len, p, len);
     j->body_len += len;
     j->bytes += len;
+    j->page_bytes += len;
     return len;
 }
 
@@ -81,7 +82,9 @@ static size_t on_header(char *p, size_t sz, size_t n, void *ud) {
         while (s < len && (p[s] == ' ' || p[s] == '\t')) s++;
         size_t e = len;
         while (e > s && (p[e - 1] == '\r' || p[e - 1] == '\n' || p[e - 1] == ' ')) e--;
-        if (e > s && e - s < sizeof j->etag_out) {
+        bool clean = e > s && e - s < sizeof j->etag_out;
+        for (size_t k = s; clean && k < e; k++) clean = p[k] >= 0x21 && p[k] <= 0x7e;  /* printable ASCII only */
+        if (clean) {
             memcpy(j->etag_out, p + s, e - s);
             j->etag_out[e - s] = 0;
         }
@@ -115,8 +118,10 @@ static bool url_host(const char *url, char *host, size_t n) {
 
 static bool start(jpf_fetcher *f, jpf_job *j) {
     char url[JPF_MAX_URL_LEN + 1], eff[JPF_MAX_URL_LEN + 300];
-    if (!jpf_board_url(j->ats, j->token, j->region, j->offset, url, sizeof url)) return false;
+    if (j->redirect_url[0]) snprintf(url, sizeof url, "%s", j->redirect_url);  /* already checked: https + permitted host */
+    else if (!jpf_board_url(j->ats, j->token, j->region, j->offset, url, sizeof url)) return false;
     effective_url(f->cfg, url, eff, sizeof eff);
+    j->page_bytes = 0;
     CURL *e = curl_easy_init();
     if (!e) return false;
     j->body_len = 0;
@@ -125,8 +130,8 @@ static bool start(jpf_fetcher *f, jpf_job *j) {
     curl_easy_setopt(e, CURLOPT_PRIVATE, j);
     curl_easy_setopt(e, CURLOPT_USERAGENT, JPF_USER_AGENT);
     curl_easy_setopt(e, CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(e, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(e, CURLOPT_MAXREDIRS, 5L);
+    /* Redirects are followed by hand (on_complete): every hop's host is checked BEFORE it is requested. */
+    curl_easy_setopt(e, CURLOPT_FOLLOWLOCATION, 0L);
     const char *protos = f->cfg->test_origin[0] ? "http,https" : "https";
     curl_easy_setopt(e, CURLOPT_PROTOCOLS_STR, protos);
     curl_easy_setopt(e, CURLOPT_REDIR_PROTOCOLS_STR, protos);
@@ -178,6 +183,8 @@ static void done(jpf_job *j, jpf_status st, const char *err) {
 
 static void retry_or_fail(jpf_job *j, const char *why) {
     static const double DELAYS[] = {2.0, 6.0};
+    j->bytes -= j->page_bytes < j->bytes ? j->page_bytes : j->bytes;  /* a failed attempt does not count towards the limit */
+    j->page_bytes = 0;
     if (j->attempt < 2) {
         j->not_before = now_s() + DELAYS[j->attempt++];
         j->phase = JOB_WAITING;
@@ -187,12 +194,14 @@ static void retry_or_fail(jpf_job *j, const char *why) {
 }
 
 static void on_complete(jpf_fetcher *f, jpf_job *j, CURLcode rc) {
-    char *final_url = NULL, final_host[256] = "";
+    char *redir = NULL, next[JPF_MAX_URL_LEN + 1] = "", host[256] = "";
     long code = 0;
     curl_easy_getinfo(j->easy, CURLINFO_RESPONSE_CODE, &code);
-    curl_easy_getinfo(j->easy, CURLINFO_EFFECTIVE_URL, &final_url);
-    bool host_ok = true;
-    if (!f->cfg->test_origin[0] && final_url) host_ok = url_host(final_url, final_host, sizeof final_host) && jpf_host_allowed(final_host);
+    curl_easy_getinfo(j->easy, CURLINFO_REDIRECT_URL, &redir);
+    bool is_redirect = rc == CURLE_OK && (code == 301 || code == 302 || code == 303 || code == 307 || code == 308);
+    bool redirect_ok = is_redirect && redir && strlen(redir) <= JPF_MAX_URL_LEN && !strncmp(redir, "https://", 8) &&
+                       url_host(redir, host, sizeof host) && jpf_host_allowed(host);
+    if (redirect_ok) snprintf(next, sizeof next, "%s", redir);  /* copy before the handle (and redir) is freed */
     finish_transfer(f, j);
     j->http_status = code;
     if (rc != CURLE_OK) {
@@ -210,7 +219,16 @@ static void on_complete(jpf_fetcher *f, jpf_job *j, CURLcode rc) {
         done(j, ST_ERROR, m);
         return;
     }
-    if (!host_ok) { done(j, ST_ERROR, "Redirected away from the job board's API host; refused."); return; }
+    if (is_redirect) {
+        if (!redirect_ok) { done(j, ST_ERROR, "Redirected away from the job board's API host; refused."); return; }
+        if (++j->redirects > 5) { done(j, ST_ERROR, "Too many redirects."); return; }
+        snprintf(j->redirect_url, sizeof j->redirect_url, "%s", next);
+        j->bytes -= j->page_bytes < j->bytes ? j->page_bytes : j->bytes;
+        j->phase = JOB_WAITING;
+        j->not_before = 0;
+        return;
+    }
+    j->redirect_url[0] = 0;
     if (code == 304 && j->sent_etag) { done(j, ST_NOT_MODIFIED, NULL); return; }
     if (code == 404) { done(j, ST_NOT_FOUND, "Job board not found (the company may have moved or renamed its board)."); return; }
     if (code == 429 || code >= 500) {
@@ -233,8 +251,12 @@ static void on_complete(jpf_fetcher *f, jpf_job *j, CURLcode rc) {
         done(j, ST_ERROR, m);
         return;
     }
-    if (j->ats == ATS_SMARTRECRUITERS && (size_t)added == JPF_SR_PAGE && j->offset + JPF_SR_PAGE < JPF_SR_MAX &&
-        (j->board.total_found == 0 || j->board.len < j->board.total_found)) {
+    /* Same rule as backend/services/ats/smartrecruiters.py: keep paging while the page was not empty and the next
+     * offset is below both totalFound and the 1,000-posting window. Decided on the page's item count, never on how
+     * many new postings it added (a posting published mid-paging repeats one item across pages). */
+    size_t next_offset = j->offset + JPF_SR_PAGE;
+    if (j->ats == ATS_SMARTRECRUITERS && j->board.last_page_len > 0 && next_offset < JPF_SR_MAX &&
+        (j->board.total_found ? next_offset < j->board.total_found : j->board.last_page_len == JPF_SR_PAGE)) {
         j->offset += JPF_SR_PAGE;  /* next page, same politeness rules */
         j->attempt = 0;
         j->phase = JOB_WAITING;
@@ -260,6 +282,7 @@ void jpf_fetcher_free(jpf_fetcher *f) {
 
 bool jpf_job_prepare(jpf_job *j) {
     char url[JPF_MAX_URL_LEN + 1];
+    j->started = now_s();  /* first, so even a refused board reports a sane duration */
     if (!jpf_board_url(j->ats, j->token, j->region, 0, url, sizeof url) || !url_host(url, j->host, sizeof j->host) ||
         !jpf_host_allowed(j->host)) {
         done(j, ST_ERROR, "Not a permitted job-board API host; refused.");

@@ -26,7 +26,7 @@ static const char *CLAIM =
     "    AND c.ats IN ('greenhouse','lever','ashby','smartrecruiters','recruitee')"
     "    AND NOT EXISTS (SELECT 1 FROM crawl_results r WHERE r.state_id = cs.id AND r.state = 'pending')"
     "  ORDER BY cs.priority DESC, cs.next_due_at LIMIT $1::int FOR UPDATE OF cs SKIP LOCKED)"
-    " UPDATE crawl_state s SET next_due_at = now() + make_interval(secs => $2::int)"  /* the lease */
+    " UPDATE crawl_state s SET next_due_at = now() + make_interval(secs => $2::int), last_attempt_at = now()"  /* the lease */
     " FROM due, companies c WHERE s.id = due.id AND c.id = s.company_id"
     " RETURNING s.id, s.target_key, c.ats, c.board_token, coalesce(c.region, ''), coalesce(s.etag, ''),"
     "   coalesce(s.body_hash, ''), (s.last_success_at IS NOT NULL)";

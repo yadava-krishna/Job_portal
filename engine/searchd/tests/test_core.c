@@ -150,7 +150,31 @@ static void test_parse(void) {
     yyjson_doc_free(d);
 }
 
+static void test_title_candidates(void) {
+    sps_index *ix = sps_index_new(NULL);
+    sps_doc a = doc(1, 1, "FP&A Analyst", "IN", "Remote", 19000, NAN, NAN, "");
+    sps_doc b = doc(2, 1, "Associate Director, Finance", "IN", "Remote", 19000, NAN, NAN, "");
+    sps_doc c = doc(3, 1, "Développeur C++", "FR", "Remote", 19000, NAN, NAN, "");
+    sps_doc e = doc(4, 1, "Accounts Receivable Specialist", "IN", "Remote", 19000, NAN, NAN, "");
+    e.text[F_DESC] = "Work with our associate team";  /* "associate" only in the description: not a title match */
+    sps_index_upsert(ix, &a); sps_index_upsert(ix, &b); sps_index_upsert(ix, &c); sps_index_upsert(ix, &e);
+    sps_query q = {.terms = {"fp and a"}, .nterms = 1, .title_only = true, .posted_after_day = -1, .limit = 10};
+    CHECK(run(ix, &q) == 1 && ids[0] == 1);                     /* "FP&A" normalised like JobPilot: fp and a */
+    sps_query p = {.terms = {"associat"}, .nterms = 1, .title_only = true, .prefix = true, .posted_after_day = -1, .limit = 10};
+    CHECK(run(ix, &p) == 1 && ids[0] == 2);                     /* prefix in titles only, never descriptions */
+    p.prefix = false;
+    CHECK(run(ix, &p) == 0);
+    sps_query u = {.terms = {"d veloppeur"}, .nterms = 1, .title_only = true, .posted_after_day = -1, .limit = 10};
+    CHECK(run(ix, &u) == 1 && ids[0] == 3);                     /* non-ASCII letters separate words, as in normalize_text */
+    char words[10][SPS_MAX_TOKEN + 1];
+    size_t n = sps_suggest(ix, "Ac", words, 10);
+    CHECK(n == 1 && !strcmp(words[0], "accounts"));
+    CHECK(sps_suggest(ix, "a", words, 10) == 0);                  /* at least two letters */
+    sps_index_free(ix);
+}
+
 int main(void) {
+    test_title_candidates();
     test_tokenizer();
     test_search();
     test_idmap();

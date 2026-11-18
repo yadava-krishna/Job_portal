@@ -83,6 +83,8 @@ int main(void) {
     signal(SIGINT, on_signal);
     signal(SIGPIPE, SIG_IGN);
     if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) return 2;
+    unsigned json_mb = env_u("JPF_JSON_MEMORY_MB", 192, 32, 2048);
+    if (!jpf_split_memory_limit((size_t)json_mb << 20)) { fprintf(stderr, "level=error msg=\"cannot reserve JSON memory\"\n"); return 2; }
     fprintf(stderr, "level=info msg=start version=%s global=%u per_host=%u\n", JPF_VERSION, cfg.global, cfg.per_host);
     do {
         session(&cfg);

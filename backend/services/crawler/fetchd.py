@@ -21,7 +21,7 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from backend.models import Company, CrawlRawItem, CrawlResult, CrawlResultItem, CrawlState, utcnow
+from backend.models import CataloguePosting, Company, CrawlRawItem, CrawlResult, CrawlResultItem, CrawlState, utcnow
 from backend.services.ats import ashby, greenhouse, lever, recruitee, smartrecruiters
 from backend.services.crawler import service as crawler
 
@@ -62,8 +62,14 @@ def _outcome(db: Session, r: CrawlResult, state: CrawlState, company: Company) -
             out.jobs.append(nj)
 
     def record_hashes() -> None:
+        # Only postings that are open in the catalogue after this apply: a posting whose parse failed, or that the
+        # parser skips, gets no hash, so jp-fetchd sends it in full again next time (a parser fix then takes effect).
+        open_keys = set(db.execute(select(CataloguePosting.source_key).where(
+            CataloguePosting.target_key == state.target_key, CataloguePosting.closed_at.is_(None))).scalars())
+        prefix = f"{company.ats}:{token.lower()}:"
         db.execute(delete(CrawlRawItem).where(CrawlRawItem.target_key == state.target_key))
-        db.add_all([CrawlRawItem(target_key=state.target_key, raw_id=i[0][:200], raw_hash=i[1]) for i in items])
+        db.add_all([CrawlRawItem(target_key=state.target_key, raw_id=i[0][:200], raw_hash=i[1]) for i in items
+                    if prefix + i[0] in open_keys])
 
     out.before_commit = record_hashes
     return out
@@ -84,6 +90,14 @@ def apply_pending(db: Session, *, limit: int = 100) -> dict[str, Any]:
             continue
         state = db.get(CrawlState, r.state_id)
         company = db.get(Company, state.company_id) if state and state.company_id else None
+        seen = crawler._aware(state.last_success_at) if state is not None else None
+        if seen is not None and crawler._aware(r.created_at) <= seen:
+            # A newer snapshot of this board was applied after this result was fetched (e.g. a live fetch by a saved
+            # search, or the switch was off for a while): applying it would turn the catalogue back in time.
+            r.state, r.apply_error, r.applied_at = "stale", "A newer snapshot was already applied.", utcnow()
+            db.commit()
+            totals["stale"] = totals.get("stale", 0) + 1
+            continue
         if state is None or company is None or company.ats not in PARSERS:
             r.state, r.apply_error, r.applied_at = "failed", "Unknown target or job-board type.", utcnow()
             db.commit()
@@ -106,8 +120,8 @@ def apply_pending(db: Session, *, limit: int = 100) -> dict[str, Any]:
             r.apply_error = f"{type(exc).__name__}: {exc}"[:500]
             if r.attempts >= MAX_ATTEMPTS:
                 r.state, r.applied_at = "failed", utcnow()
-                # the board is due again so jp-fetchd fetches it afresh
-                db.get(CrawlState, r.state_id).next_due_at = utcnow()
+                # back off like a fetch error (5 min, doubling to 6 h): a board that cannot be applied is not hammered
+                crawler._fail(db.get(CrawlState, r.state_id), utcnow(), "error", f"Could not apply: {r.apply_error}")
             db.commit()
             totals["failed"] += 1
     return totals
@@ -117,6 +131,11 @@ def prune(db: Session, *, keep_days: int = 3) -> int:
     """Applied and failed results are kept 3 days for diagnosis; their items go with them (ON DELETE CASCADE)."""
     from datetime import timedelta
 
+    from sqlalchemy import update
+
+    # Results nobody applied for a day (the switch was off) are stale: a fresh fetch replaces them.
+    db.execute(update(CrawlResult).where(CrawlResult.state == "pending", CrawlResult.created_at < utcnow() - timedelta(days=1))
+               .values(state="stale", apply_error="Not applied within a day.").execution_options(synchronize_session=False))
     cutoff = utcnow() - timedelta(days=keep_days)
     rows = db.execute(select(CrawlResult.id).where(CrawlResult.state != "pending", CrawlResult.created_at < cutoff)).scalars().all()
     for i in range(0, len(rows), 500):

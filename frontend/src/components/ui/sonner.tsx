@@ -2,6 +2,8 @@
 
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
+// Bundled as a stylesheet: the build stops sonner injecting it as an inline <style>, which the CSP blocks (vite.config.ts).
+import "sonner/dist/styles.css"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {

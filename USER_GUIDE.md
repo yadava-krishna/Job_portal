@@ -54,8 +54,10 @@ Go to **Settings**. The more you fill in, the more JobPilot can help.
     working from the office five days a week?"
   - JobPilot **never guesses** these answers. If you leave one empty, it will tell you that the question needs your
     answer.
-- **Notifications:** choose whether to be told about new matching jobs, one alert per job or one summary a day, and
-  how good a match must be before you are told.
+- **Notifications:** switch each type of alert on or off: new matching jobs, follow-up reminders, interview
+  reminders, unfinished applications, jobs that have closed, and job searches that couldn't run. Each switch saves
+  straight away. For new matching jobs you can also choose one alert per job or one summary a day, and how good a
+  match must be before you are told.
 - **Alert emails (optional):** connect the e-mail inbox where you receive job alerts from LinkedIn, Indeed or
   Naukri, and JobPilot will collect those jobs for you.
 - **Browser extension:** connect the Smart Apply helper (see section 7).

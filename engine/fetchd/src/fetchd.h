@@ -36,6 +36,9 @@ typedef struct jpf_job {
     unsigned requests;
     size_t bytes;
     char etag_out[301];
+    char redirect_url[JPF_MAX_URL_LEN + 1];   /* set while following a checked redirect by hand */
+    unsigned redirects;
+    size_t page_bytes;                       /* bytes of the current request, taken back out of `bytes` on a retry */
     char error[300];
     /* transfer */
     CURL *easy;

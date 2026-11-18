@@ -60,6 +60,7 @@ typedef struct {
     jpf_posting *items;
     size_t len, cap;
     size_t total_found;      /* SmartRecruiters: totalFound, to know whether another page exists */
+    size_t last_page_len;    /* items in the last page's array (not only new ones): what pagination is decided on */
     jpf_map seen;            /* ids already taken from this board (across pages) */
     char error[160];         /* why the body was rejected, if it was */
 } jpf_board;
@@ -71,5 +72,8 @@ void jpf_board_free(jpf_board *b);
 long jpf_split(jpf_ats ats, const char *body, size_t len, jpf_board *b);
 
 void jpf_hex(const uint8_t *in, size_t n, char *out);       /* out needs 2n+1 */
+/* Caps the JSON parser's memory with a fixed pool (0 = the system allocator). A hostile body such as [0,0,0,...]
+ * then fails to parse with an error instead of exhausting the container's memory. Call once, before any split. */
+bool jpf_split_memory_limit(size_t bytes);
 
 #endif

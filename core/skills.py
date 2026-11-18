@@ -20,10 +20,15 @@ class SkillHit:
 class SkillTaxonomy:
     def __init__(self, mapping: dict[str, list[str]]):
         self.mapping = {canonical: list(dict.fromkeys([canonical, *aliases])) for canonical, aliases in mapping.items()}
-        self._patterns: list[tuple[str, str, re.Pattern[str]]] = []
+        # (canonical, alias, pattern, prefilter, case_sensitive). The prefilter is the alias's first word: a pattern can
+        # only match text that contains it literally (case-folded unless the alias is a short exact-case acronym), so
+        # skipping patterns whose first word is absent never changes the result; it just avoids ~300 regex scans per text.
+        self._patterns: list[tuple[str, str, re.Pattern[str], str, bool]] = []
         for canonical, aliases in self.mapping.items():
             for alias in sorted(aliases, key=len, reverse=True):
-                self._patterns.append((canonical, alias, _alias_pattern(alias)))
+                exact = len(alias) <= 3
+                first = alias.split()[0] if alias.split() else alias
+                self._patterns.append((canonical, alias, _alias_pattern(alias), first if exact else first.lower(), exact))
         self._lookup = {a.lower(): c for c, al in self.mapping.items() for a in al}
 
     @classmethod
@@ -43,7 +48,10 @@ class SkillTaxonomy:
         if not text:
             return []
         found: dict[str, tuple[int, SkillHit]] = {}
-        for canonical, alias, pattern in self._patterns:
+        lower = text.lower()
+        for canonical, alias, pattern, first, exact in self._patterns:
+            if first not in (text if exact else lower):
+                continue
             m = pattern.search(text)
             if not m:
                 continue

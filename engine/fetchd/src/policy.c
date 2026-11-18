@@ -89,6 +89,7 @@ bool jpf_ip_forbidden(const struct sockaddr *sa, bool allow_loopback) {
         if (o1 == 172 && (o2 & 0xf0) == 16) return true;            /* 172.16/12 (Docker networks too) */
         if (o1 == 192 && o2 == 168) return true;
         if (o1 == 192 && o2 == 0 && ((a >> 8) & 0xff) == 0) return true;
+        if (o1 == 198 && (o2 & 0xfe) == 18) return true;            /* 198.18/15 benchmarking */
         if (o1 >= 224) return true;                                 /* multicast, reserved, broadcast */
         return false;
     }
@@ -98,9 +99,18 @@ bool jpf_ip_forbidden(const struct sockaddr *sa, bool allow_loopback) {
         if (IN6_IS_ADDR_UNSPECIFIED(a6) || IN6_IS_ADDR_LINKLOCAL(a6) || IN6_IS_ADDR_SITELOCAL(a6) || IN6_IS_ADDR_MULTICAST(a6))
             return true;
         if ((a6->s6_addr[0] & 0xfe) == 0xfc) return true;           /* unique local fc00::/7 */
-        if (IN6_IS_ADDR_V4MAPPED(a6) || IN6_IS_ADDR_V4COMPAT(a6)) {
+        const uint8_t *b = a6->s6_addr;
+        static const uint8_t nat64[12] = {0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0};
+        static const uint8_t siit[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0};
+        int embedded = -1;  /* offset of an IPv4 address carried inside this IPv6 one */
+        if (IN6_IS_ADDR_V4MAPPED(a6) || IN6_IS_ADDR_V4COMPAT(a6) || !memcmp(b, nat64, 12) || !memcmp(b, siit, 12)) embedded = 12;
+        else if (b[0] == 0x20 && b[1] == 0x02) embedded = 2;                          /* 6to4 2002::/16 */
+        if (b[0] == 0x00 && b[1] == 0x64 && b[2] == 0xff && b[3] == 0x9b && b[4] == 0 && b[5] == 1) return true;  /* 64:ff9b:1::/48 */
+        if (b[0] == 0x20 && b[1] == 0x01 && b[2] == 0 && b[3] == 0) return true;     /* Teredo 2001::/32 */
+        if (b[0] == 0x01 && b[1] == 0 && !b[2] && !b[3] && !b[4] && !b[5] && !b[6] && !b[7]) return true;  /* discard 100::/64 */
+        if (embedded >= 0) {
             struct sockaddr_in v4 = {.sin_family = AF_INET};
-            memcpy(&v4.sin_addr, &a6->s6_addr[12], 4);
+            memcpy(&v4.sin_addr, &b[embedded], 4);
             return jpf_ip_forbidden((const struct sockaddr *)&v4, allow_loopback);
         }
         return false;

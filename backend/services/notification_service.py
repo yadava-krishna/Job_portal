@@ -11,19 +11,68 @@ from core import timeutil
 
 DEFAULT_PREFS = {"new_matches": True, "delivery": "immediate", "min_score": None, "sources": []}
 
+# Every kind a user can switch off. new_match comes from discovery; the rest from notification_sweep.
+SWITCHABLE_KINDS = ("new_match", "follow_up_due", "interview_upcoming", "application_incomplete", "listing_closed",
+                    "discovery_failed")
+
+
+def kind_enabled(kinds: dict | None, kind: str) -> bool:
+    """Is `kind` switched on in a stored `notification_prefs.kinds` map? Missing means on.
+
+    Stored shapes that mean off: `false`, `{"in_app": false}`, and for new_match also `{"new_matches": false}`
+    (the shape the preferences API has always written)."""
+    raw = (kinds or {}).get(kind)
+    if raw is False:
+        return False
+    if isinstance(raw, dict):
+        if raw.get("in_app") is False:
+            return False
+        if kind == "new_match" and raw.get("new_matches") is False:
+            return False
+    return True
+
+
+def _row(db: Session, user: User) -> NotificationPref | None:
+    return db.execute(select(NotificationPref).where(NotificationPref.user_id == user.id)).scalar_one_or_none()
+
 
 def prefs(db: Session, user: User) -> dict:
-    row = db.execute(select(NotificationPref).where(NotificationPref.user_id == user.id)).scalar_one_or_none()
-    stored = (row.kinds or {}).get("new_match", {}) if row else {}
-    return {**DEFAULT_PREFS, **{k: v for k, v in stored.items() if k in DEFAULT_PREFS}}
+    row = _row(db, user)
+    kinds = (row.kinds if row else None) or {}
+    stored = kinds.get("new_match")
+    out = {**DEFAULT_PREFS, **{k: v for k, v in (stored if isinstance(stored, dict) else {}).items() if k in DEFAULT_PREFS}}
+    out["new_matches"] = kind_enabled(kinds, "new_match")
+    out["kinds"] = {k: kind_enabled(kinds, k) for k in SWITCHABLE_KINDS}
+    return out
 
 
 def save_prefs(db: Session, user: User, values: dict) -> dict:
-    row = db.execute(select(NotificationPref).where(NotificationPref.user_id == user.id)).scalar_one_or_none()
+    """Save the keys present in `values`; anything left out keeps its stored value.
+
+    `values` may hold the new-match settings (DEFAULT_PREFS keys) and `kinds`, a partial {kind: on/off} map.
+    `new_matches` and `kinds["new_match"]` are the same switch; when both are given, `new_matches` wins."""
+    row = _row(db, user)
     if row is None:
         row = NotificationPref(user_id=user.id, kinds={}, email_digest="off")
         db.add(row)
-    row.kinds = {**(row.kinds or {}), "new_match": {k: values[k] for k in DEFAULT_PREFS if k in values}}
+    switches = {k: bool(v) for k, v in (values.get("kinds") or {}).items() if k in SWITCHABLE_KINDS}
+    if "new_matches" in values:
+        switches["new_match"] = bool(values["new_matches"])
+    kinds = dict(row.kinds or {})
+    old = kinds.get("new_match")
+    new_match = dict(old) if isinstance(old, dict) else {}
+    new_match.update({k: values[k] for k in DEFAULT_PREFS if k in values and k != "new_matches"})
+    if "new_match" in switches:
+        new_match["new_matches"] = switches["new_match"]
+        new_match.pop("in_app", None)  # an older {"in_app": false} must not override the switch just set
+    elif old is False:
+        new_match["new_matches"] = False  # keep a stored `false` off while other new-match settings change
+    kinds["new_match"] = new_match
+    for kind, on in switches.items():
+        if kind != "new_match":
+            prev = kinds.get(kind)
+            kinds[kind] = {**(prev if isinstance(prev, dict) else {}), "in_app": on}
+    row.kinds = kinds  # a new dict, so the JSON column is marked dirty
     db.commit()
     return prefs(db, user)
 

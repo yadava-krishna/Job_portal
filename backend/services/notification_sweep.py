@@ -13,7 +13,8 @@ Kinds (each with a stable dedupe key, so a sweep can run any number of times wit
                             or expired (see services/freshness.py)
     discovery_failed        one of the user's discovery runs failed                          discovery_failed:<run>
 
-A user can switch a kind off in `notification_prefs.kinds`: {"<kind>": {"in_app": false}}. Nothing here sends e-mail;
+A user can switch a kind off in Settings > Notifications, stored in `notification_prefs.kinds` as {"<kind>": {"in_app": false}}
+(see notification_service.kind_enabled; a missing kind is on). Nothing here sends e-mail;
 notification_dispatch e-mails unread notifications only when SMTP is configured and the user has consented.
 """
 
@@ -27,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from backend.models import Application, DiscoveryRun, Interview, Job, Notification, NotificationPref, User, UserJob, utcnow
 from backend.services import discovery_service, freshness
-from backend.services.notification_service import notify
+from backend.services.notification_service import kind_enabled, notify
 from core import timeutil
 
 KINDS = ("follow_up_due", "interview_upcoming", "application_incomplete", "listing_closed", "discovery_failed")
@@ -66,12 +67,7 @@ class _Ctx:
         self.kinds = {p.user_id: (p.kinds or {}) for p in db.execute(select(NotificationPref)).scalars()}
 
     def wants(self, user_id: int, kind: str) -> bool:
-        if user_id not in self.users:
-            return False
-        pref = self.kinds.get(user_id, {}).get(kind)
-        if pref is False or (isinstance(pref, dict) and pref.get("in_app") is False):
-            return False
-        return True
+        return user_id in self.users and kind_enabled(self.kinds.get(user_id), kind)
 
     def notify(self, user_id: int, kind: str, title: str, body: str | None, link: str | None, key: str) -> Notification | None:
         if not self.wants(user_id, kind):

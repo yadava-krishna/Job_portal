@@ -103,7 +103,9 @@ long sps_refresh(PGconn *c, sps_state *st, sps_idmap *seen, char *err, size_t n)
     char from[32];
     snprintf(from, sizeof from, "%lld", (long long)(st->high_water > OVERLAP ? st->high_water - OVERLAP : 0));
     const char *p1[1] = {from};
-    PGresult *ev = PQexecParams(c, "SELECT id, posting_id FROM index_outbox WHERE id > $1::bigint ORDER BY id LIMIT 20000", 1, NULL, p1, NULL, NULL, 0);
+    /* Overlap by count AND by time: a long transaction can take its ids early and commit late (blueprint §4). */
+    PGresult *ev = PQexecParams(c, "SELECT id, posting_id FROM index_outbox WHERE id > $1::bigint"
+                                   " OR created_at > now() - interval '15 minutes' ORDER BY id LIMIT 50000", 1, NULL, p1, NULL, NULL, 0);
     if (PQresultStatus(ev) != PGRES_TUPLES_OK) { snprintf(err, n, "outbox: %s", PQerrorMessage(c)); PQclear(ev); return -1; }
     /* posting ids of unseen events, as a Postgres array literal */
     size_t cap = 64, len = 1;
@@ -112,15 +114,18 @@ long sps_refresh(PGconn *c, sps_state *st, sps_idmap *seen, char *err, size_t n)
     arr[0] = '{';
     long fresh = 0;
     int64_t hw = st->high_water;
+    int64_t *pending = malloc(((size_t)PQntuples(ev) + 1) * sizeof *pending);  /* marked seen only once applied */
+    size_t npending = 0;
+    if (!pending) { free(arr); PQclear(ev); return -1; }
     for (int i = 0; i < PQntuples(ev); i++) {
         int64_t eid = strtoll(PQgetvalue(ev, i, 0), NULL, 10);
         uint32_t dummy;
         if (eid > hw) hw = eid;
         if (sps_idmap_get(seen, eid, &dummy)) continue;
-        sps_idmap_put(seen, eid, 1);
+        pending[npending++] = eid;
         const char *pid = PQgetvalue(ev, i, 1);
         size_t pl = strlen(pid);
-        if (len + pl + 3 > cap) { while (len + pl + 3 > cap) cap *= 2; char *a = realloc(arr, cap); if (!a) { free(arr); PQclear(ev); return -1; } arr = a; }
+        if (len + pl + 3 > cap) { while (len + pl + 3 > cap) cap *= 2; char *a = realloc(arr, cap); if (!a) { free(arr); free(pending); PQclear(ev); return -1; } arr = a; }
         if (fresh++) arr[len++] = ',';
         memcpy(arr + len, pid, pl);
         len += pl;
@@ -132,7 +137,7 @@ long sps_refresh(PGconn *c, sps_state *st, sps_idmap *seen, char *err, size_t n)
     if (fresh) {
         const char *p2[1] = {arr};
         PGresult *r = PQexecParams(c, "SELECT " COLS " FROM catalogue_postings WHERE id = ANY($1::bigint[])", 1, NULL, p2, NULL, NULL, 0);
-        if (PQresultStatus(r) != PGRES_TUPLES_OK) { snprintf(err, n, "postings: %s", PQerrorMessage(c)); PQclear(r); free(arr); return -1; }
+        if (PQresultStatus(r) != PGRES_TUPLES_OK) { snprintf(err, n, "postings: %s", PQerrorMessage(c)); PQclear(r); free(arr); free(pending); return -1; }
         pthread_rwlock_wrlock(&st->lock);
         for (int i = 0; i < PQntuples(r); i++) {
             sps_doc d;
@@ -147,6 +152,9 @@ long sps_refresh(PGconn *c, sps_state *st, sps_idmap *seen, char *err, size_t n)
         PQclear(r);
     }
     free(arr);
+    for (size_t i = 0; i < npending; i++) sps_idmap_put(seen, pending[i], 1);  /* only now: a failed read is retried */
+    free(pending);
+    if (seen->len > 200000) { sps_idmap_free(seen); sps_idmap_init(seen, 4096); }  /* bounded; re-applying is idempotent */
     st->high_water = hw;
     st->last_sync = mono();
     return applied;
