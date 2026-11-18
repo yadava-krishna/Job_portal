@@ -3,9 +3,9 @@ import { cn } from "@/lib/utils";
 import type { BreakdownItem, MatchBreakdown as Breakdown } from "@/features/growth/types";
 
 const groups = [
-  { key: "matched", title: "What matches", Icon: Check, tone: "text-emerald-700 dark:text-emerald-300" },
-  { key: "partial", title: "Partly matches", Icon: Minus, tone: "text-amber-700 dark:text-amber-300" },
-  { key: "not_matched", title: "Doesn't match", Icon: X, tone: "text-rose-700 dark:text-rose-300" },
+  { key: "matched", title: "What matches", Icon: Check, tone: "text-route" },
+  { key: "partial", title: "Partly matches", Icon: Minus, tone: "text-caution" },
+  { key: "not_matched", title: "Doesn't match", Icon: X, tone: "text-destructive" },
   { key: "not_evaluated", title: "Couldn't be checked", Icon: CircleHelp, tone: "text-muted-foreground" },
 ] as const;
 

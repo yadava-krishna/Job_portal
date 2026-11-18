@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JobPilot redesign research</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@500,700,900&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 16mm 15mm 18mm; }
+  :root {
+    --bg:#F6F6F9; --s:#FFFFFF; --t1:#14151B; --t2:#5A5E6B; --b:#E1E2E9; --b2:#C9CBD6;
+    --p:#B8175F; --ptint:#FBEAF2; --sec:#1E2240; --acc:#0B7A90; --acctint:#E3F3F6;
+    --ok:#177246; --warn:#8F5A00; --err:#C4352B;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; color: var(--t1); font: 10pt/1.5 "Hanken Grotesk", system-ui, sans-serif; background: #fff; }
+  h1, h2, h3, .display { font-family: "Satoshi", "Hanken Grotesk", sans-serif; letter-spacing: -0.015em; }
+  h1 { font-size: 30pt; line-height: 1.05; margin: 0 0 8pt; font-weight: 700; }
+  h2 { font-size: 17pt; line-height: 1.15; margin: 0 0 6pt; font-weight: 700; }
+  h3 { font-size: 11.5pt; margin: 14pt 0 4pt; font-weight: 700; }
+  p { margin: 0 0 7pt; }
+  a { color: var(--p); text-decoration: none; word-break: break-all; }
+  .mono, code { font-family: "IBM Plex Mono", monospace; font-size: 8.5pt; }
+  .eyebrow { font: 500 8pt/1 "IBM Plex Mono", monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--t2); margin-bottom: 8pt; }
+  .lede { font-size: 11.5pt; color: var(--t2); max-width: 150mm; }
+  section.page { page-break-before: always; }
+  .muted { color: var(--t2); }
+  .small { font-size: 8.5pt; }
+  ul { margin: 0 0 8pt; padding-left: 14pt; } li { margin: 0 0 2.5pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 8.6pt; margin: 6pt 0 10pt; }
+  th { text-align: left; font: 600 7.6pt/1.3 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .04em; color: var(--t2); border-bottom: 1.2pt solid var(--t1); padding: 4pt 5pt; }
+  td { border-bottom: 0.6pt solid var(--b); padding: 4pt 5pt; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  .note { border-left: 2.5pt solid var(--warn); background: #FBF5EA; padding: 7pt 10pt; margin: 8pt 0 10pt; font-size: 9pt; }
+  .callout { border-left: 2.5pt solid var(--p); background: var(--ptint); padding: 7pt 10pt; margin: 8pt 0 10pt; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt 16pt; }
+  .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10pt; }
+  .route { display: flex; align-items: center; gap: 0; margin: 14pt 0 6pt; }
+  .route span { font: 500 7.5pt "IBM Plex Mono", monospace; color: var(--t2); white-space: nowrap; }
+  .route i { flex: 1; height: 2pt; background: var(--p); margin: 0 5pt; min-width: 10pt; }
+  .route b { width: 7pt; height: 7pt; border-radius: 50%; background: var(--p); flex: none; }
+  /* cover */
+  .cover { height: 255mm; display: flex; flex-direction: column; justify-content: space-between; }
+  .cover h1 { font-size: 40pt; max-width: 150mm; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1.2pt solid var(--t1); }
+  .facts div { padding: 8pt 8pt 0 0; }
+  .facts b { display: block; font: 500 20pt "IBM Plex Mono", monospace; letter-spacing: -0.02em; }
+  .facts span { font-size: 8.5pt; color: var(--t2); }
+  /* reference cards */
+  .ref { border: 0.8pt solid var(--b2); border-radius: 6pt; padding: 9pt 11pt 6pt; margin: 0 0 9pt; page-break-inside: avoid; }
+  .ref .hd { display: flex; justify-content: space-between; gap: 10pt; align-items: baseline; }
+  .ref .hd h3 { margin: 0; }
+  .ref .num { font: 500 8pt "IBM Plex Mono", monospace; color: var(--p); }
+  .ref .url { font: 7.4pt/1.3 "IBM Plex Mono", monospace; margin: 2pt 0 6pt; }
+  .ref dl { display: grid; grid-template-columns: 26mm 1fr; gap: 2pt 8pt; margin: 0; font-size: 8.6pt; }
+  .ref dt { font: 500 7.4pt/1.6 "IBM Plex Mono", monospace; color: var(--t2); text-transform: uppercase; letter-spacing: .03em; }
+  .ref dd { margin: 0; }
+  .ref dd.fix { color: var(--t1); font-weight: 600; }
+  /* sketches */
+  .sk { border: 0.8pt solid var(--b); border-radius: 6pt; padding: 8pt; page-break-inside: avoid; background: var(--bg); }
+  .sk svg { width: 100%; height: auto; display: block; background: #fff; border-radius: 4pt; }
+  .sk figcaption { font-size: 8.4pt; margin-top: 6pt; }
+  .sk figcaption b { font-family: "Satoshi", sans-serif; font-size: 9.5pt; display: block; }
+  figure { margin: 0; }
+  img.full { width: 100%; border: 0.8pt solid var(--b); border-radius: 5pt; display: block; margin: 6pt 0 8pt; }
+  .swatches { display: flex; gap: 4pt; margin: 6pt 0; }
+  .swatches div { flex: 1; height: 14mm; border-radius: 3pt; padding: 3pt; font: 6.6pt/1.2 "IBM Plex Mono", monospace; display: flex; align-items: flex-end; }
+  .pill { display: inline-block; font: 600 7.6pt/1 "Hanken Grotesk"; padding: 2.5pt 6pt; border-radius: 99pt; }
+  .gate { border: 1.5pt solid var(--p); border-radius: 8pt; padding: 14pt 16pt; margin-top: 12pt; }
+  .gate h2 { color: var(--p); }
+  .tag { font: 500 7.2pt "IBM Plex Mono", monospace; padding: 1.5pt 5pt; border-radius: 3pt; background: var(--acctint); color: var(--acc); }
+  /* svg shared */
+  svg text { font-family: "Hanken Grotesk", sans-serif; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<section class="cover">
+  <div>
+    <div class="eyebrow">JobPilot · Redesign · Phase 1–3 research and audit · 18 Nov 2026</div>
+    <h1>Making JobPilot feel like one product, from first search to signed offer</h1>
+    <p class="lede">Design research on Refero, an audit of the current JobPilot web app, three visual directions, a simpler information architecture and a plan for local prototypes. Nothing in the app has been changed. This document is for review and a decision.</p>
+    <div class="route"><span>Research</span><i></i><b></b><i></i><span>Audit</span><i></i><b></b><i></i><span>Directions</span><i></i><b></b><i style="background:var(--b2)"></i><span>Your choice</span><i style="background:var(--b2)"></i><span>Prototype</span></div>
+  </div>
+  <div>
+    <div class="callout"><b>Recommendation.</b> Direction C, <b>Magenta Line</b>: each job's journey drawn as a route (found → saved → applied → interview → offer). It borrows the keyboard and command layer from direction B and the document-style job reading from direction A. The reasons are in section 9.</div>
+    <div class="facts">
+      <div><b>18</b><span>reference flows studied on Refero, from 13 products</span></div>
+      <div><b>9</b><span>distinct end-to-end flow types covered</span></div>
+      <div><b>12 → 4</b><span>primary navigation items proposed, plus a footer group</span></div>
+      <div><b>0</b><span>lines of app code changed; nothing committed or deployed</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONTENTS + METHOD ============ -->
+<section class="page">
+  <div class="eyebrow">Contents</div>
+  <table>
+    <tr><td class="mono">1</td><td>How the research was done, and its limits</td></tr>
+    <tr><td class="mono">2</td><td>Refero research report: 18 references, each with link, flow, techniques and the JobPilot problem it solves</td></tr>
+    <tr><td class="mono">3</td><td>Patterns worth keeping, sketched (my own drawings, not copies of the products)</td></tr>
+    <tr><td class="mono">4</td><td>JobPilot UX audit: issues, root causes, recommended changes, features that must survive</td></tr>
+    <tr><td class="mono">5</td><td>Three design directions: palettes with exact tokens, type, layout, motion, signature</td></tr>
+    <tr><td class="mono">6</td><td>Type study, status and match-score colours</td></tr>
+    <tr><td class="mono">7</td><td>Proposed information architecture, with every current page mapped</td></tr>
+    <tr><td class="mono">8</td><td>Flow redesign plan, motion system, technical constraints</td></tr>
+    <tr><td class="mono">9</td><td>Local preview plan and approval gate</td></tr>
+  </table>
+
+  <h2 style="margin-top:16pt">1 · How the research was done</h2>
+  <p>I browsed <a href="https://refero.design/">refero.design</a> in Chrome without an account, opened each flow and stepped through its frames one by one. For each flow I noted the layout, navigation, states, copy and interaction patterns visible in the frames. I then read the JobPilot frontend source (routing, gates, tokens, fonts, Content Security Policy, state handling, keyboard shortcuts) and the Smart Apply state machine in the backend, without changing anything.</p>
+  <p>Fonts and colours were rendered, not guessed. A local lab page (<code>design-lab/research/type-and-color.html</code>) renders the same JobPilot content in eight font pairings and draws each palette on a Discover layout. It computes WCAG contrast live, and the images in section 6 come from it.</p>
+
+  <div class="note">
+    <b>Limits you should know about</b>
+    <ul style="margin-top:4pt">
+      <li><b>Free access shows about 3% of Refero</b>, as its own banner says. Without signing in you get 8 screens and 8 flows per product, and opening a single screen needs an account. I did not create an account, because that needs your approval. With your Refero login I could cover much more.</li>
+      <li><b>Not in Refero as a product</b> (searched, no product entry): Wellfound, Ramp, Superhuman, Notion. <b>In Refero but no flows:</b> Attio, Vercel (marketing screens only). <b>Not reached in this pass:</b> Otta / Welcome to the Jungle, Indeed, Greenhouse and Lever as job boards, Read.cv, Arc, Figma, Canva, Revolut, Raycast, Framer. LinkedIn screens exist but open only when signed in.</li>
+      <li><b>Motion could not be observed.</b> Refero shows static frames, so no claim in this document says a product animates in a particular way. The motion system in section 8 is my proposal, to be tested in the prototype.</li>
+      <li><b>Responsive behaviour could not be observed.</b> All the flows studied were desktop web captures.</li>
+      <li><b>No third-party screenshots are reproduced here.</b> They belong to the products and to Refero. Every reference has its Refero link instead, and the patterns are redrawn as my own sketches.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ REFERENCES ============ -->
+<section class="page">
+  <div class="eyebrow">Section 2 · Refero research report</div>
+  <h2>18 references across 9 flow types</h2>
+  <table>
+    <tr><th>#</th><th>Product</th><th>Flow studied</th><th>Flow type</th><th>Solves for JobPilot</th></tr>
+    <tr><td class="mono">01</td><td>Linear</td><td>Assigning teammate to issue</td><td>Create with properties</td><td>Apply package as editable pills</td></tr>
+    <tr><td class="mono">02</td><td>Linear</td><td>Searching for shortcut keys</td><td>Command and navigation</td><td>Discoverable shortcuts</td></tr>
+    <tr><td class="mono">03</td><td>Missive</td><td>Searching for commands</td><td>Command and navigation</td><td>⌘K instead of 12 menu items</td></tr>
+    <tr><td class="mono">04</td><td>Contra</td><td>Signing up and onboarding</td><td>Onboarding</td><td>Live profile preview while typing</td></tr>
+    <tr><td class="mono">05</td><td>Intercom</td><td>Signing up and onboarding</td><td>Onboarding</td><td>One question per screen, inline validation</td></tr>
+    <tr><td class="mono">06</td><td>Teal</td><td>Signing up and onboarding</td><td>Onboarding / upload</td><td>Choose how to add your history</td></tr>
+    <tr><td class="mono">07</td><td>Stripe</td><td>Activating payments</td><td>Guided setup</td><td>Time estimate, saved progress, stepper</td></tr>
+    <tr><td class="mono">08</td><td>Stripe</td><td>Installing app</td><td>Integration install</td><td>Explicit "installed" end state</td></tr>
+    <tr><td class="mono">09</td><td>Mercury</td><td>Creating and applying a filter</td><td>Search and filter</td><td>Filters + saved views (merges Searches)</td></tr>
+    <tr><td class="mono">10</td><td>Mercury</td><td>Feedback on insight trends</td><td>Dashboard / insights</td><td>Reports that answer one question</td></tr>
+    <tr><td class="mono">11</td><td>Handshake</td><td>Submitting job application</td><td>Apply</td><td>Status lives on the job afterwards</td></tr>
+    <tr><td class="mono">12</td><td>Contra</td><td>Applying to job post</td><td>Job detail / apply</td><td>Grouped nav, sticky apply card</td></tr>
+    <tr><td class="mono">13</td><td>ElevenLabs (Ashby form)</td><td>Applying for open position</td><td>Employer form</td><td>What Smart Apply fills and detects</td></tr>
+    <tr><td class="mono">14</td><td>Teal</td><td>Managing the job tracker</td><td>Tracking pipeline</td><td>Stage strip, JD keyword highlights</td></tr>
+    <tr><td class="mono">15</td><td>Teal</td><td>Reordering resume sections</td><td>Document editing</td><td>Studio: edit beside live preview</td></tr>
+    <tr><td class="mono">16</td><td>Teal</td><td>Resume builder tour</td><td>First-run</td><td>Counter-example: 10-step tour</td></tr>
+    <tr><td class="mono">17</td><td>Parallel</td><td>Searching jobs</td><td>Job discovery</td><td>Counter-example: empty first view</td></tr>
+    <tr><td class="mono">18</td><td>Craft</td><td>Exporting PDF file</td><td>Document export</td><td>Inspector panel, inline export state</td></tr>
+  </table>
+  <p class="small muted">"Typography" below is what can be seen in the frames. Where a face can't be named with confidence, the entry says so. Motion and responsive behaviour are marked not observable for every entry (see limits).</p>
+</section>
+
+<section class="page">
+  <div class="ref"><div class="hd"><h3>Linear · Assigning teammate to issue</h3><span class="num">01</span></div>
+    <div class="url"><a href="https://refero.design/flows/6647/832cf4ec-26ae-4165-add7-e75008276a0e">refero.design/flows/6647/832cf4ec-26ae-4165-add7-e75008276a0e</a></div>
+    <dl><dt>Why it works</dt><dd>Creating an issue is one compact dialog. Status, priority, assignee and label sit in a single row of pills, each editable in place through a popover. The assignee popover has search, grouped "Team members", an "Invite and assign" escape hatch and a hover card with the person's details.</dd>
+    <dt>Type</dt><dd>Neutral grotesque UI sans at small sizes, medium weight for the title field. Exact face not confirmed.</dd>
+    <dt>Colour</dt><dd>Near-white surfaces and grey chips. The only saturated colour is the indigo "Create issue" button.</dd>
+    <dt>Layout / nav</dt><dd>Sidebar grouped into Workspace / Your teams / Try, with collapsible headers. The dialog is centred over the list.</dd>
+    <dt>Interaction</dt><dd>Properties editable in place, a keyboard hint on the primary button (C), a "Create more" toggle for repeat entry.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable (static frames).</dd>
+    <dt>Accessibility</dt><dd>Every pill carries a text label as well as an icon, so priority and status are not shown by colour alone.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: replace the 3-step Apply dialog with one panel where resume, cover letter and screening answers are pills you can change in place.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Linear · Searching for shortcut keys</h3><span class="num">02</span></div>
+    <div class="url"><a href="https://refero.design/search/flows?query=command%20menu%20keyboard%20shortcuts">refero.design/search/flows?query=command menu keyboard shortcuts</a> (second result)</div>
+    <dl><dt>Why it works</dt><dd>Search opens with recent searches and scope tabs (All, Issues, Projects, Documents). Keyboard shortcuts live in a searchable side panel, and an empty search says plainly "No matching shortcuts found".</dd>
+    <dt>Type · colour</dt><dd>Same system as 01. The search panel is white on a dimmed workspace.</dd>
+    <dt>Layout / nav</dt><dd>The right side panel overlays the workspace without leaving the page.</dd>
+    <dt>Interaction</dt><dd>Shortcut discovery is searchable rather than a static cheat sheet.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>The empty result is stated in text, and back navigation is visible in the panel header.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: Discover's j/k/o/s/a/d shortcuts exist but nobody can find them. Add a "?" shortcut panel and scoped search.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Missive · Searching for commands</h3><span class="num">03</span></div>
+    <div class="url"><a href="https://refero.design/flows/6280/d6cb1bb5-c7ad-40ce-b7b4-57944e5fa4a6">refero.design/flows/6280/d6cb1bb5-c7ad-40ce-b7b4-57944e5fa4a6</a></div>
+    <dl><dt>Why it works</dt><dd>One palette mixes actions (New draft, New task) with numbered shortcuts ⌘1 to ⌘9, deep settings as breadcrumb paths ("Settings → Rules → Create new rule") and scoped searches ("Search 'new' in contacts"). A footer legend teaches ↑↓, Return and Escape.</dd>
+    <dt>Type · colour</dt><dd>Compact sans. The selected row is solid blue with white text, and everything else is neutral.</dd>
+    <dt>Layout / nav</dt><dd>A centred floating palette over a three-pane mail layout.</dd>
+    <dt>Interaction</dt><dd>Typing filters actions, settings and search scopes together, and every result shows its shortcut.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Fully keyboard-driven, and the instructions are visible in the palette itself.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: a ⌘K palette makes every page, settings tab and action (run discovery, add a job by link, Smart Apply setup) reachable without 12 menu items.</dd></dl></div>
+</section>
+
+<section class="page">
+  <div class="ref"><div class="hd"><h3>Contra · Signing up and onboarding</h3><span class="num">04</span></div>
+    <div class="url"><a href="https://refero.design/flows/4811/2d0efa35-9de4-44e4-a20b-142e95ca4865">refero.design/flows/4811/2d0efa35-9de4-44e4-a20b-142e95ca4865</a></div>
+    <dl><dt>Why it works</dt><dd>It asks "What brings you to Contra?" with two illustrated role cards, then "Build your profile · Step 1/2". The form sits on the left, and on the right a <b>live profile card fills in as you type</b>: name, skills, location, links. Counters (0/60 characters, 0/3 skills) show limits before you hit them, and photo upload opens a crop dialog.</dd>
+    <dt>Type</dt><dd>A large friendly sans headline over a compact form sans.</dd>
+    <dt>Colour</dt><dd>White, with a soft lavender gradient behind the testimonial panel and a black primary button.</dd>
+    <dt>Layout / nav</dt><dd>Split screen. Sign-up pairs a form with a testimonial, and the profile step pairs a form with a preview.</dd>
+    <dt>Interaction</dt><dd>Immediate preview, step count, counters, and a crop-on-upload dialog.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Visible labels and helper text sit under every field.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: the "Review your profile" step should show the match profile employers and our scoring will see, updating live as you edit.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Intercom · Signing up and onboarding</h3><span class="num">05</span></div>
+    <div class="url"><a href="https://refero.design/flows/673/578ad030-b344-4f56-8b68-008e2e341596">refero.design/flows/673/578ad030-b344-4f56-8b68-008e2e341596</a></div>
+    <dl><dt>Why it works</dt><dd>One question per screen ("Your full name", "Create your password"), with an example under the field ("Example: Jordan Quinn") and a thin progress line along the top edge. Inline validation reads "Password must be at least 10 characters", and Continue stays disabled until the field is valid.</dd>
+    <dt>Type</dt><dd>A plain sans with large field labels.</dd>
+    <dt>Colour</dt><dd>White form half and a full-bleed landscape painting on the other half. Black buttons, red only for errors.</dd>
+    <dt>Layout / nav</dt><dd>A 50/50 split, with Sign in top right as the only exit.</dd>
+    <dt>Interaction</dt><dd>Progressive: each answer unlocks the next screen.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>The error is in text right under the field, not shown by colour alone.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: registration and job preferences feel lighter at one decision per screen, with a visible progress line.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Teal · Signing up and onboarding</h3><span class="num">06</span></div>
+    <div class="url"><a href="https://refero.design/flows/2682/f4b16cf1-5083-4194-9906-03b7ee90dfea">refero.design/flows/2682/f4b16cf1-5083-4194-9906-03b7ee90dfea</a></div>
+    <dl><dt>Why it works</dt><dd>After sign-up, a single dialog asks "Choose how to add your career" with three tabs: Resume file, LinkedIn URL, Paste history. The drop zone states formats and size ("doc, docx or pdf, up to 10 MB"), and "Skip, add later" is always there.</dd>
+    <dt>Type · colour</dt><dd>A bold headline sans with a deep green brand field and a yellow primary button.</dd>
+    <dt>Layout / nav</dt><dd>A centred dialog on a full brand-colour background, so there is nothing else to click.</dd>
+    <dt>Interaction</dt><dd>Several equal ways to give the same information, and a skip that doesn't feel like failure.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>File constraints are stated before upload, not after a failure.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: the resume step offers Upload or Paste text alongside "Start without a resume". We would <u>not</u> add LinkedIn import, because LinkedIn scraping is off-limits.</dd></dl></div>
+</section>
+
+<section class="page">
+  <div class="ref"><div class="hd"><h3>Stripe · Activating payments</h3><span class="num">07</span></div>
+    <div class="url"><a href="https://refero.design/flows/1313/8de4de48-6f51-4fe8-bc12-98f065ddf84a">refero.design/flows/1313/8de4de48-6f51-4fe8-bc12-98f065ddf84a</a></div>
+    <dl><dt>Why it works</dt><dd>An intro card answers the two questions people actually have, "What information will I need?" and "How long does it take? 5–10 minutes", and promises "Any progress you make will be saved". "Skip for now" sits next to the main button. The task itself opens in a full-screen focus mode with a vertical stepper (5 steps, sub-steps under the active one) and an "In progress" badge.</dd>
+    <dt>Type</dt><dd>Stripe's own sans: large semibold headings, comfortable body.</dd>
+    <dt>Colour</dt><dd>White and pale grey with Stripe indigo for active steps and buttons. Diagonal colour bands decorate the intro only.</dd>
+    <dt>Layout / nav</dt><dd>Stepper on the left, a single form column on the right, and a close button that keeps progress.</dd>
+    <dt>Interaction</dt><dd>Expectations set before starting, resumable, with sub-steps revealed only for the current step.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>The stepper shows numbers and labels, not dots only.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: onboarding and Smart Apply setup open with "what you'll need · about 3 minutes · progress is saved", then a labelled stepper.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Stripe · Installing app</h3><span class="num">08</span></div>
+    <div class="url"><a href="https://refero.design/flows/1316/fd2ef85a-7858-46f4-9003-cab1e2e06e5f">refero.design/flows/1316/fd2ef85a-7858-46f4-9003-cab1e2e06e5f</a></div>
+    <dl><dt>Why it works</dt><dd>An app page with a metadata column (Visible on, Works with, Pricing, Supported languages, Support) and one "Install app" button. Installing happens in a right-hand side sheet that ends on an unmistakable <b>"Installation complete"</b> state with a large check.</dd>
+    <dt>Type · colour</dt><dd>Stripe sans, indigo action, a green success check.</dd>
+    <dt>Layout / nav</dt><dd>A side sheet over the page, so you never lose where you came from.</dd>
+    <dt>Interaction</dt><dd>Install, then confirmation, in place.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Success is stated in words, not only by the icon.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: Smart Apply setup ends on a verified "Connected · version 2.1.0" state. The app already checks this by pinging the extension.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Mercury · Creating and applying a filter to transactions</h3><span class="num">09</span></div>
+    <div class="url"><a href="https://refero.design/flows/11055/bab28f53-21a9-4ad9-ac3f-ac2b216de165">refero.design/flows/11055/bab28f53-21a9-4ad9-ac3f-ac2b216de165</a></div>
+    <dl><dt>Why it works</dt><dd>Common filters are one click away (Date, Keyword, Amount). Everything else is behind "Filters": a two-pane menu with facets on the left and searchable checkbox values on the right. Active filters become chips ("This week ×", "+2 more") with Reset, and <b>"Create view" saves the combination as a named Data View</b>. The summary numbers above the table follow the filter ("Net change this week").</dd>
+    <dt>Type</dt><dd>A neutral sans. Money uses smaller superscript cents, which keeps columns calm.</dd>
+    <dt>Colour</dt><dd>White and grey with an indigo accent for chips and buttons, green for incoming amounts, a red "Failed" tag.</dd>
+    <dt>Layout / nav</dt><dd>A labelled sidebar (Home, Tasks with a count badge, Transactions, Insights…) and a full-width table with sticky filters.</dd>
+    <dt>Interaction</dt><dd>Progressive disclosure: quick filters, then the full menu, then a saved view.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Status tags carry text ("Failed"), and filter counts are written out ("Filters (2)").</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: Discover keeps 3 quick filters visible and moves the rest behind "Filters". "Searches" becomes saved views inside Discover rather than a separate page.</dd></dl></div>
+</section>
+
+<section class="page">
+  <div class="ref"><div class="hd"><h3>Mercury · Providing feedback on insight trends</h3><span class="num">10</span></div>
+    <div class="url"><a href="https://refero.design/search/flows?query=insights%20dashboard%20activity%20feed">refero.design/search/flows?query=insights dashboard activity feed</a> (third result)</div>
+    <dl><dt>Why it works</dt><dd>Insights has three segments (Overview, Money in, Money out) and a date range with a mini timeline you can brush. Below that are one big number ($1.9M), its monthly average, and a single-series bar chart with the average drawn as a reference line. Written insight cards under the chart each have thumbs up and down.</dd>
+    <dt>Type · colour</dt><dd>Large tabular figures. Pale indigo bars and a dark average line, so only one thing is highlighted.</dd>
+    <dt>Layout / nav</dt><dd>The chart is the page, and the explanations sit right under it.</dd>
+    <dt>Interaction</dt><dd>Segment and date range are the only controls.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>The key number is also written as text and doesn't need reading off the chart.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: Reports becomes "Outcomes": one question per view (Are my applications getting replies?), one big number, one chart and plain-language notes.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Handshake · Submitting job application</h3><span class="num">11</span></div>
+    <div class="url"><a href="https://refero.design/flows/8788/48666c1f-2a4a-4b48-a619-4b64b01d3084">refero.design/flows/8788/48666c1f-2a4a-4b48-a619-4b64b01d3084</a></div>
+    <dl><dt>Why it works</dt><dd>The job page leads with <b>"At a glance"</b> (pay, remote, job type with dates, "US work authorization not required") before the description. "Apply to DesignLabs" lists the required documents and shows each attached one as a green confirmed row with "Preview document", plus a required work-authorization question. Afterwards the job page carries a persistent banner, <b>"Applied on November 29, 2025 · Withdraw application"</b>, and Apply is disabled.</dd>
+    <dt>Type · colour</dt><dd>A clean sans, black primary, green only for confirmed states.</dd>
+    <dt>Layout / nav</dt><dd>A narrow left nav (Explore, Feed, Inbox / Jobs, Events, Employers) and a single reading column.</dd>
+    <dt>Interaction</dt><dd>A short modal, with the result shown where you'll look next time.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>The success state is a sentence with a date, not just a colour.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: eligibility facts go at the top of every job. After applying, the job shows its application state (Submitted · confirmed / Needs your confirmation) wherever it appears.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Contra · Applying to job post</h3><span class="num">12</span></div>
+    <div class="url"><a href="https://refero.design/flows/4887/23e425ea-389e-4a44-bae4-39ce0e9b9ecd">refero.design/flows/4887/23e425ea-389e-4a44-bae4-39ce0e9b9ecd</a></div>
+    <dl><dt>Why it works</dt><dd>The job page has a sticky "Details" card on the right (budget, delivery time, Apply, tags, additional info) next to the description. The sidebar groups many destinations under small labels: Identity, Leads, Projects &amp; payments. Applying asks you to pick at most 3 work samples ("quality over quantity", 0/3 selected).</dd>
+    <dt>Type · colour</dt><dd>A large bold job title, quiet body, black buttons, a soft gradient on the promo card only.</dd>
+    <dt>Layout / nav</dt><dd>Grouped sidebar, reading column, sticky action card.</dd>
+    <dt>Interaction</dt><dd>A selection limit with a live counter, and Back kept beside the main action.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Group labels give the nav structure for screen readers if they're marked up as headings.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: a grouped sidebar (short labels over 3–4 items each), a sticky apply card on job detail, and the resume picker as a small visual choice.</dd></dl></div>
+</section>
+
+<section class="page">
+  <div class="ref"><div class="hd"><h3>ElevenLabs careers, hosted by Ashby · Applying for open position</h3><span class="num">13</span></div>
+    <div class="url"><a href="https://refero.design/flows/8620/c160b01f-7806-470b-8961-54bbc2e1661a">refero.design/flows/8620/c160b01f-7806-470b-8961-54bbc2e1661a</a></div>
+    <dl><dt>Why it works</dt><dd>This is the employer side of our product. The Ashby form has "About the role" and "Application" tabs, and an <b>"Autofill from resume"</b> upload at the top. After submitting, a green "Success · Thank you for applying" banner appears, and the page says "Powered by Ashby".</dd>
+    <dt>Type · colour</dt><dd>The employer's brand on top of Ashby's neutral form system.</dd>
+    <dt>Layout / nav</dt><dd>A single column with breadcrumbs (Careers › Automations Engineer).</dd>
+    <dt>Interaction</dt><dd>Upload to prefill, then edit, then submit, then an in-page confirmation.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Required fields are marked with *, and success is written in words.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: our extension fills exactly this form and detects that confirmation. The redesign shows "Submitted · confirmed by the employer's page" differently from "You said you submitted".</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Teal · Managing the job tracker</h3><span class="num">14</span></div>
+    <div class="url"><a href="https://refero.design/flows/2723/7e948e81-a772-436d-9bc6-2e4a6dd5d9f0">refero.design/flows/2723/7e948e81-a772-436d-9bc6-2e4a6dd5d9f0</a></div>
+    <dl><dt>Why it works</dt><dd>A chevron <b>stage strip with counts</b> (Bookmarked 3 → Applying → Applied → Interviewing → Negotiating → Accepted) heads the tracker table and doubles as a filter, and a follow-up date column is highlighted. Each job has its own stage bar, tabs (Job info, Notes, Resume, Check list, Practice interview) and a job description with <b>your keywords highlighted</b>, plus a hard-skills frequency list with an on/off toggle.</dd>
+    <dt>Type · colour</dt><dd>A compact sans and deep green brand, with mint highlights for matched keywords.</dd>
+    <dt>Layout / nav</dt><dd>A list of jobs on the left and the selected job on the right (master-detail).</dd>
+    <dt>Interaction</dt><dd>Sortable headers, group by, columns menu.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Stage names are written in the strip. The highlight colours are low-contrast, so don't copy those.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: the Applications header becomes a stage strip with counts, and the match breakdown highlights your matched skills inside the job description.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Teal · Reordering resume sections</h3><span class="num">15</span></div>
+    <div class="url"><a href="https://refero.design/flows/2717/a83bd3a4-2cb2-4ae6-8aef-4c9f23a7d3a4">refero.design/flows/2717/a83bd3a4-2cb2-4ae6-8aef-4c9f23a7d3a4</a></div>
+    <dl><dt>Why it works</dt><dd>Top tabs Preview, Design, Analysis (badge 9), Job Matching (badge), Cover Letter, Guidance. Under Design there are sub-tabs (Presentation, Sections, Settings, Advanced). "Section Order &amp; Naming" shows the resume's two columns as draggable blocks, and <b>the live preview on the right updates on drop</b>. Export PDF is the one dark button, top right.</dd>
+    <dt>Type · colour</dt><dd>UI sans, with the resume rendered in its own template type. Green brand with red count badges.</dd>
+    <dt>Layout / nav</dt><dd>Editor on the left, paper preview on the right, at about equal width.</dd>
+    <dt>Interaction</dt><dd>Direct manipulation mirrored in the preview, and badges that point to work still to do.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>Drag handles are visible. Keyboard reordering can't be checked from the frames.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: Resume Studio becomes editor + live paper side by side. Check and suggestions become badge counts, not separate screens.</dd></dl></div>
+</section>
+
+<section class="page">
+  <div class="ref"><div class="hd"><h3>Teal · Resume builder tour (counter-example)</h3><span class="num">16</span></div>
+    <div class="url"><a href="https://refero.design/flows/2686/8cfe6b0b-9e77-4512-a596-a5a679678ccd">refero.design/flows/2686/8cfe6b0b-9e77-4512-a596-a5a679678ccd</a></div>
+    <dl><dt>What it shows</dt><dd>A "Ready to take control of your job search?" modal starts a <b>10-step</b> coach-mark tour ("Next (2/10)"). Underneath, the useful part is that every accordion section has its own empty state and action ("No Work Experience added yet · Add Work Experience").</dd>
+    <dt>Lesson</dt><dd>Long tours ask people to memorise the interface before using it. Empty states that say what to do next teach in context.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: no product tour. Every empty state names the next action, and a one-line hint appears the first time a feature is used.</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Parallel · Searching jobs (counter-example)</h3><span class="num">17</span></div>
+    <div class="url"><a href="https://refero.design/flows/1049/9633bd76-d37a-4529-8a44-fdb7f2fc1c0e">refero.design/flows/1049/9633bd76-d37a-4529-8a44-fdb7f2fc1c0e</a></div>
+    <dl><dt>What it shows</dt><dd>A centred search field with a filter button, scope pills (All, Jobs, Startups, Collections) and category tabs. <b>Before you search, the page says "No Results · Broaden your search or come back soon!"</b> After searching, "Jobs (398)" lists cards with salary, applicant avatars, a save heart and "Apply Direct".</dd>
+    <dt>Lesson</dt><dd>A job product should never open empty. A count in the heading ("Jobs (398)") is a good, quiet way to show scale.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: Discover opens on your ranked matches, never on a blank search. Its heading carries the count and freshness ("38 new since yesterday").</dd></dl></div>
+
+  <div class="ref"><div class="hd"><h3>Craft · Exporting PDF file</h3><span class="num">18</span></div>
+    <div class="url"><a href="https://refero.design/flows/7958/5e0f42c8-4d3e-4d02-bff2-b7d230dfe29b">refero.design/flows/7958/5e0f42c8-4d3e-4d02-bff2-b7d230dfe29b</a></div>
+    <dl><dt>Why it works</dt><dd>Three panes: table of contents on the left, the page as paper in the middle, and an inspector on the right with tabs (Insert, Format, Style, Info), page properties and actions. Export shows a small inline card, "Exporting to PDF", over the document instead of a blocking dialog.</dd>
+    <dt>Type · colour</dt><dd>Document type in the centre, quiet UI type around it. Blue only for Shared and links.</dd>
+    <dt>Layout / nav</dt><dd>Outline, document, inspector: each pane has one job.</dd>
+    <dt>Interaction</dt><dd>Context-sensitive inspector tabs and non-blocking progress.</dd>
+    <dt>Motion · responsive</dt><dd>Not observable.</dd>
+    <dt>Accessibility</dt><dd>The progress state carries a text label.</dd>
+    <dd class="fix" style="grid-column:2">JobPilot: in Resume Studio, Content, Design, Check, Suggestions and History become inspector tabs. Export to PDF/Word shows inline progress and a "Downloaded" state.</dd></dl></div>
+</section>
+
+<!-- ============ PATTERN SKETCHES ============ -->
+<section class="page">
+  <div class="eyebrow">Section 3 · Patterns worth keeping</div>
+  <h2>Eight patterns, redrawn for JobPilot</h2>
+  <p class="muted">These are my own wireframes showing how each pattern would work with JobPilot content. Magenta marks the part that matters.</p>
+  <div class="two">
+    <figure class="sk">
+      <svg viewBox="0 0 320 190">
+        <rect x="0" y="0" width="74" height="190" fill="#F6F6F9"/>
+        <text x="10" y="18" font-size="9" font-weight="700">JobPilot</text>
+        <text x="10" y="38" font-size="6" fill="#5A5E6B">FIND</text>
+        <rect x="6" y="42" width="62" height="13" rx="3" fill="#FBEAF2"/><rect x="6" y="42" width="2" height="13" fill="#B8175F"/>
+        <text x="12" y="51" font-size="7" font-weight="600">Jobs</text>
+        <text x="12" y="66" font-size="7">Saved</text>
+        <text x="10" y="84" font-size="6" fill="#5A5E6B">APPLY</text>
+        <text x="12" y="96" font-size="7">Applications</text>
+        <text x="10" y="114" font-size="6" fill="#5A5E6B">GROW</text>
+        <text x="12" y="126" font-size="7">Career</text>
+        <text x="12" y="176" font-size="7" fill="#5A5E6B">Settings</text>
+        <rect x="110" y="40" width="170" height="104" rx="7" fill="#fff" stroke="#B8175F" stroke-width="1.2"/>
+        <text x="120" y="56" font-size="8">apply</text>
+        <rect x="114" y="62" width="162" height="14" rx="3" fill="#FBEAF2"/>
+        <text x="120" y="72" font-size="7" font-weight="600">Apply to selected job</text><text x="250" y="72" font-size="6.5" fill="#5A5E6B">A</text>
+        <text x="120" y="88" font-size="7">Applications › Needs confirmation</text>
+        <text x="120" y="102" font-size="7">Settings › Smart Apply setup</text>
+        <text x="120" y="116" font-size="7">Search jobs for "apply"</text>
+        <line x1="114" y1="126" x2="276" y2="126" stroke="#E1E2E9"/>
+        <text x="120" y="137" font-size="6" fill="#5A5E6B">↑↓ move · Return open · Esc close</text>
+      </svg>
+      <figcaption><b>Grouped sidebar + ⌘K</b>Contra's labelled groups, with Missive's and Linear's palette reaching every page, setting and action. Refs 03, 12.</figcaption>
+    </figure>
+    <figure class="sk">
+      <svg viewBox="0 0 320 190">
+        <text x="12" y="20" font-size="11" font-weight="700">Jobs</text><text x="46" y="20" font-size="7" fill="#5A5E6B">38 new since yesterday</text>
+        <rect x="12" y="28" width="150" height="16" rx="4" fill="#fff" stroke="#C9CBD6"/><text x="20" y="39" font-size="7" fill="#5A5E6B">Search title, company, skill</text>
+        <rect x="167" y="28" width="38" height="16" rx="4" fill="#fff" stroke="#C9CBD6"/><text x="172" y="39" font-size="6.5">Location ▾</text>
+        <rect x="209" y="28" width="38" height="16" rx="4" fill="#fff" stroke="#C9CBD6"/><text x="214" y="39" font-size="6.5">Remote ▾</text>
+        <rect x="251" y="28" width="56" height="16" rx="4" fill="#fff" stroke="#B8175F"/><text x="258" y="39" font-size="6.5" fill="#B8175F">Filters (2) ▾</text>
+        <rect x="12" y="50" width="52" height="12" rx="6" fill="#FBEAF2"/><text x="17" y="58" font-size="6" fill="#B8175F">0–2 yrs ×</text>
+        <rect x="68" y="50" width="48" height="12" rx="6" fill="#FBEAF2"/><text x="73" y="58" font-size="6" fill="#B8175F">Eligible ×</text>
+        <text x="122" y="58" font-size="6" fill="#5A5E6B">Reset</text>
+        <rect x="236" y="49" width="71" height="14" rx="4" fill="#1E2240"/><text x="243" y="58.5" font-size="6.5" fill="#fff">Save as view</text>
+        <rect x="140" y="66" width="150" height="104" rx="5" fill="#fff" stroke="#C9CBD6"/>
+        <rect x="140" y="66" width="56" height="104" fill="#F6F6F9"/>
+        <text x="146" y="80" font-size="6.5">Experience</text><text x="146" y="94" font-size="6.5" font-weight="700">Skill</text><text x="146" y="108" font-size="6.5">Company</text><text x="146" y="122" font-size="6.5">Seniority</text><text x="146" y="136" font-size="6.5">Sponsorship</text><text x="146" y="150" font-size="6.5">Source</text>
+        <rect x="202" y="72" width="82" height="12" rx="3" fill="#fff" stroke="#E1E2E9"/><text x="206" y="80.5" font-size="6" fill="#5A5E6B">Find a skill</text>
+        <rect x="204" y="91" width="6" height="6" fill="#B8175F"/><text x="214" y="96.5" font-size="6.5">SQL</text>
+        <rect x="204" y="104" width="6" height="6" fill="#B8175F"/><text x="214" y="109.5" font-size="6.5">Python</text>
+        <rect x="204" y="117" width="6" height="6" fill="none" stroke="#5A5E6B"/><text x="214" y="122.5" font-size="6.5">React</text>
+        <rect x="12" y="70" width="120" height="30" rx="4" fill="#fff" stroke="#E1E2E9"/><rect x="12" y="104" width="120" height="30" rx="4" fill="#fff" stroke="#E1E2E9"/><rect x="12" y="138" width="120" height="30" rx="4" fill="#fff" stroke="#E1E2E9"/>
+      </svg>
+      <figcaption><b>Quick filters, full filter menu, saved views</b>Three common filters stay visible, the rest sit behind one button, and "Save as view" replaces the separate Searches page. Ref 09.</figcaption>
+    </figure>
+    <figure class="sk">
+      <svg viewBox="0 0 320 190">
+        <rect x="0" y="0" width="112" height="190" fill="#F6F6F9"/>
+        <rect x="6" y="8" width="100" height="34" rx="4" fill="#fff" stroke="#B8175F" stroke-width="1.2"/><text x="12" y="21" font-size="7" font-weight="700">Junior Data Analyst</text><text x="12" y="32" font-size="6" fill="#5A5E6B">Razorpay · Hybrid</text><text x="88" y="27" font-size="9" font-family="IBM Plex Mono" fill="#B8175F">82</text>
+        <rect x="6" y="46" width="100" height="34" rx="4" fill="#fff" stroke="#E1E2E9"/><rect x="6" y="84" width="100" height="34" rx="4" fill="#fff" stroke="#E1E2E9"/><rect x="6" y="122" width="100" height="34" rx="4" fill="#fff" stroke="#E1E2E9"/>
+        <text x="122" y="20" font-size="10" font-weight="700">Junior Data Analyst</text><text x="122" y="31" font-size="6.5" fill="#5A5E6B">Razorpay · Bengaluru</text>
+        <text x="122" y="47" font-size="6" fill="#5A5E6B">AT A GLANCE</text>
+        <text x="122" y="58" font-size="6.5">₹6–8 LPA · Hybrid · Full-time</text><text x="122" y="68" font-size="6.5">0–2 yrs · No sponsorship needed</text>
+        <text x="122" y="84" font-size="6.5">You'll build <tspan fill="#B8175F" font-weight="700" text-decoration="underline">SQL</tspan> dashboards that flag</text>
+        <text x="122" y="94" font-size="6.5">unusual payments, with <tspan fill="#B8175F" font-weight="700" text-decoration="underline">Python</tspan> …</text>
+        <rect x="244" y="40" width="68" height="78" rx="5" fill="#fff" stroke="#C9CBD6"/>
+        <text x="250" y="54" font-size="6" fill="#5A5E6B">STRONG MATCH</text><text x="250" y="70" font-size="13" font-family="IBM Plex Mono" fill="#B8175F">82</text>
+        <text x="250" y="81" font-size="6">5 of 6 must-haves</text>
+        <rect x="249" y="90" width="58" height="14" rx="3" fill="#B8175F"/><text x="256" y="99.5" font-size="6.5" fill="#fff" font-weight="600">Apply</text>
+        <text x="250" y="113" font-size="6" fill="#5A5E6B">Save · Not for me</text>
+      </svg>
+      <figcaption><b>List, reading pane and sticky apply card</b>Handshake's "At a glance", Teal's keyword highlights and Contra's sticky card, so the "why it matches" sits next to Apply. Refs 11, 12, 14.</figcaption>
+    </figure>
+    <figure class="sk">
+      <svg viewBox="0 0 320 190">
+        <text x="12" y="18" font-size="9" font-weight="700">Apply · Junior Data Analyst</text>
+        <g font-size="6.5">
+          <line x1="22" y1="34" x2="22" y2="160" stroke="#E1E2E9" stroke-width="2"/>
+          <line x1="22" y1="34" x2="22" y2="104" stroke="#B8175F" stroke-width="2"/>
+          <circle cx="22" cy="34" r="4.5" fill="#177246"/><text x="34" y="36">Package ready · resume v3, 4 answers</text>
+          <circle cx="22" cy="58" r="4.5" fill="#177246"/><text x="34" y="60">Employer form opened in a new tab</text>
+          <circle cx="22" cy="82" r="4.5" fill="#177246"/><text x="34" y="84">Filled 14 fields · 2 need you</text>
+          <circle cx="22" cy="104" r="5.5" fill="#B8175F"/><circle cx="22" cy="104" r="9" fill="none" stroke="#B8175F" stroke-opacity=".35"/>
+          <text x="34" y="102" font-weight="700">Waiting for your review in Smart Apply</text><text x="34" y="111" fill="#5A5E6B">Tick "I have reviewed", then Submit there.</text>
+          <circle cx="22" cy="132" r="4.5" fill="#fff" stroke="#C9CBD6"/><text x="34" y="134" fill="#5A5E6B">Submitted · confirmed by the employer's page</text>
+          <circle cx="22" cy="156" r="4.5" fill="#fff" stroke="#C9CBD6"/><text x="34" y="158" fill="#5A5E6B">Tracking starts in Applications</text>
+        </g>
+        <rect x="214" y="30" width="96" height="58" rx="5" fill="#FBF5EA" stroke="#8F5A00" stroke-width=".8"/>
+        <text x="220" y="43" font-size="6.5" font-weight="700" fill="#8F5A00">If the tab was closed</text>
+        <text x="220" y="54" font-size="6">Did you submit it?</text>
+        <text x="220" y="66" font-size="6" fill="#14151B">Yes, I submitted ·</text><text x="220" y="76" font-size="6" fill="#14151B">No · Not sure yet</text>
+      </svg>
+      <figcaption><b>Apply as a live route of states</b>Handshake's persistent status plus Ashby's real confirmation page. Each backend state becomes a visible step, and "uncertain" gets its own branch. Refs 11, 13.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="page">
+  <div class="two">
+    <figure class="sk">
+      <svg viewBox="0 0 320 170">
+        <g font-size="6.5">
+          <rect x="8" y="12" width="62" height="28" rx="4" fill="#fff" stroke="#E1E2E9"/><text x="14" y="24" font-family="IBM Plex Mono" font-size="10">12</text><text x="14" y="35" fill="#5A5E6B">Applied</text>
+          <rect x="74" y="12" width="62" height="28" rx="4" fill="#FBEAF2" stroke="#B8175F"/><text x="80" y="24" font-family="IBM Plex Mono" font-size="10" fill="#B8175F">4</text><text x="80" y="35" fill="#B8175F" font-weight="700">Screening</text>
+          <rect x="140" y="12" width="62" height="28" rx="4" fill="#fff" stroke="#E1E2E9"/><text x="146" y="24" font-family="IBM Plex Mono" font-size="10">2</text><text x="146" y="35" fill="#5A5E6B">Interview</text>
+          <rect x="206" y="12" width="50" height="28" rx="4" fill="#fff" stroke="#E1E2E9"/><text x="212" y="24" font-family="IBM Plex Mono" font-size="10">1</text><text x="212" y="35" fill="#5A5E6B">Offer</text>
+          <rect x="260" y="12" width="52" height="28" rx="4" fill="#fff" stroke="#E1E2E9"/><text x="266" y="24" font-family="IBM Plex Mono" font-size="10">7</text><text x="266" y="35" fill="#5A5E6B">Closed</text>
+          <line x1="8" y1="50" x2="312" y2="50" stroke="#E1E2E9"/>
+          <text x="10" y="64" fill="#5A5E6B">ROLE</text><text x="120" y="64" fill="#5A5E6B">APPLIED</text><text x="180" y="64" fill="#5A5E6B">FOLLOW UP</text><text x="250" y="64" fill="#5A5E6B">NEXT</text>
+          <text x="10" y="82">Data Analyst · Razorpay</text><text x="120" y="82" font-family="IBM Plex Mono">12 Nov</text><text x="180" y="82" font-family="IBM Plex Mono" fill="#8F5A00">today</text><text x="250" y="82">Send note</text>
+          <text x="10" y="100">BI Intern · Zerodha</text><text x="120" y="100" font-family="IBM Plex Mono">9 Nov</text><text x="180" y="100" font-family="IBM Plex Mono">21 Nov</text><text x="250" y="100">Wait</text>
+          <text x="10" y="118">Analyst · CRED</text><text x="120" y="118" font-family="IBM Plex Mono">3 Nov</text><text x="180" y="118" font-family="IBM Plex Mono">—</text><text x="250" y="118">Prep test</text>
+        </g>
+      </svg>
+      <figcaption><b>Stage strip that filters</b>Teal's pipeline header as counts that double as filters. The board remains available for drag and drop. Ref 14.</figcaption>
+    </figure>
+    <figure class="sk">
+      <svg viewBox="0 0 320 170">
+        <rect x="0" y="0" width="320" height="170" fill="#fff"/>
+        <text x="14" y="22" font-size="9" font-weight="700">Turn on Smart Apply</text>
+        <text x="14" y="33" font-size="6.5" fill="#5A5E6B">About 3 minutes · works in Chrome, Edge, Brave · progress is saved</text>
+        <g font-size="7">
+          <circle cx="22" cy="54" r="6" fill="#177246"/><text x="19.5" y="56.5" fill="#fff" font-size="6">✓</text><text x="34" y="57">Download the extension</text>
+          <circle cx="22" cy="76" r="6" fill="#177246"/><text x="19.5" y="78.5" fill="#fff" font-size="6">✓</text><text x="34" y="79">Load it in Chrome (Developer mode)</text>
+          <circle cx="22" cy="98" r="6" fill="#B8175F"/><text x="20" y="100.5" fill="#fff" font-size="6">3</text><text x="34" y="101" font-weight="700">Connect it to your account</text>
+          <text x="34" y="112" font-size="6.5" fill="#5A5E6B">Detected version 2.1.0 · waiting for the connection code</text>
+          <circle cx="22" cy="130" r="6" fill="#fff" stroke="#C9CBD6"/><text x="20" y="132.5" font-size="6" fill="#5A5E6B">4</text><text x="34" y="133" fill="#5A5E6B">Try it on a sample form</text>
+        </g>
+        <rect x="200" y="46" width="108" height="80" rx="5" fill="#F6F6F9"/>
+        <text x="208" y="60" font-size="6.5" font-weight="700">Stuck?</text>
+        <text x="208" y="72" font-size="6">"Manifest file is missing"</text>
+        <text x="208" y="81" font-size="6" fill="#5A5E6B">Pick the folder that</text>
+        <text x="208" y="90" font-size="6" fill="#5A5E6B">contains manifest.json</text>
+        <rect x="208" y="102" width="44" height="14" rx="3" fill="#1E2240"/><text x="214" y="111.5" font-size="6.5" fill="#fff">Check again</text>
+      </svg>
+      <figcaption><b>Guided setup that checks itself</b>Stripe's time estimate and stepper. Steps 2 and 3 tick themselves off using the extension's existing ping, and the most common error has a fix ready. Refs 07, 08.</figcaption>
+    </figure>
+    <figure class="sk">
+      <svg viewBox="0 0 320 170">
+        <rect x="0" y="0" width="64" height="170" fill="#F6F6F9"/>
+        <text x="8" y="16" font-size="6" fill="#5A5E6B">OUTLINE</text>
+        <text x="10" y="30" font-size="6.5">Summary</text><text x="10" y="42" font-size="6.5" font-weight="700" fill="#B8175F">Experience</text><text x="10" y="54" font-size="6.5">Projects</text><text x="10" y="66" font-size="6.5">Skills</text><text x="10" y="78" font-size="6.5">Education</text>
+        <rect x="80" y="10" width="140" height="150" fill="#fff" stroke="#E1E2E9"/>
+        <rect x="92" y="22" width="70" height="7" fill="#14151B"/><rect x="92" y="34" width="110" height="3" fill="#C9CBD6"/>
+        <rect x="90" y="48" width="122" height="34" fill="#FBEAF2"/>
+        <rect x="92" y="52" width="60" height="4" fill="#14151B"/><rect x="92" y="61" width="112" height="3" fill="#C9CBD6"/><rect x="92" y="68" width="100" height="3" fill="#C9CBD6"/><rect x="92" y="75" width="106" height="3" fill="#C9CBD6"/>
+        <rect x="92" y="92" width="60" height="4" fill="#14151B"/><rect x="92" y="101" width="112" height="3" fill="#C9CBD6"/><rect x="92" y="108" width="96" height="3" fill="#C9CBD6"/>
+        <rect x="232" y="10" width="80" height="150" rx="4" fill="#F6F6F9"/>
+        <text x="238" y="24" font-size="6.5" font-weight="700">Content</text><text x="270" y="24" font-size="6.5" fill="#5A5E6B">Design</text>
+        <text x="238" y="38" font-size="6.5" fill="#5A5E6B">Check</text><rect x="258" y="31" width="12" height="9" rx="4.5" fill="#B8175F"/><text x="261.5" y="38" font-size="6" fill="#fff">3</text>
+        <text x="276" y="38" font-size="6.5" fill="#5A5E6B">History</text>
+        <rect x="238" y="48" width="68" height="40" rx="3" fill="#fff" stroke="#E1E2E9"/>
+        <text x="242" y="60" font-size="6">Role · Data Intern</text><text x="242" y="72" font-size="6" fill="#5A5E6B">Bullet 2 is 41 words</text><text x="242" y="82" font-size="6" fill="#B8175F">Shorten ›</text>
+        <rect x="238" y="140" width="68" height="14" rx="3" fill="#B8175F"/><text x="250" y="149.5" font-size="6.5" fill="#fff" font-weight="600">Export PDF</text>
+      </svg>
+      <figcaption><b>Outline, paper, inspector</b>Craft's three panes and Teal's live preview: the section being edited is tinted on the paper, and Check becomes a badge count, not a tab you have to visit. Refs 15, 18.</figcaption>
+    </figure>
+    <figure class="sk">
+      <svg viewBox="0 0 320 170">
+        <text x="12" y="20" font-size="9" font-weight="700">Outcomes</text>
+        <rect x="70" y="10" width="120" height="14" rx="7" fill="#F6F6F9"/><rect x="72" y="12" width="40" height="10" rx="5" fill="#fff" stroke="#E1E2E9"/>
+        <text x="78" y="19.5" font-size="6">Replies</text><text x="118" y="19.5" font-size="6" fill="#5A5E6B">Interviews</text><text x="158" y="19.5" font-size="6" fill="#5A5E6B">Sources</text>
+        <text x="12" y="48" font-size="18" font-family="IBM Plex Mono">11.0%</text>
+        <text x="12" y="60" font-size="6.5" fill="#5A5E6B">of 46 applications got a reply · 30 days</text>
+        <line x1="12" y1="118" x2="308" y2="118" stroke="#14151B" stroke-dasharray="3 2"/><text x="270" y="114" font-size="6" fill="#5A5E6B">avg 9%</text>
+        <g fill="#E8B7CD"><rect x="20" y="120" width="22" height="20"/><rect x="58" y="110" width="22" height="30"/><rect x="96" y="124" width="22" height="16"/><rect x="134" y="104" width="22" height="36"/><rect x="172" y="115" width="22" height="25"/></g>
+        <rect x="210" y="86" width="22" height="54" fill="#B8175F"/>
+        <line x1="12" y1="140" x2="308" y2="140" stroke="#C9CBD6"/>
+        <text x="12" y="158" font-size="6.5">Referred and company-site applications replied 3× more often than job-board ones.</text>
+      </svg>
+      <figcaption><b>One question, one number, one chart</b>Mercury Insights' structure for Reports, with the plain-language takeaway under the chart. Ref 10.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ AUDIT ============ -->
+<section class="page">
+  <div class="eyebrow">Section 4 · JobPilot UX audit</div>
+  <h2>What the code and the screens show today</h2>
+  <table>
+    <tr><th>Area</th><th>What I found</th></tr>
+    <tr><td>Stack</td><td>React 19, Vite, TypeScript, Tailwind v4, shadcn on Base UI, TanStack Query, HashRouter (GitHub Pages), lazy-loaded pages, sonner toasts, recharts, lucide icons.</td></tr>
+    <tr><td>Design tokens</td><td><code>index.css</code> holds the stock shadcn neutral palette: every colour is grey (OKLCH chroma 0), and only the dark sidebar has a blue. No tokens exist for status, match score, success or warning, so pages hand-pick Tailwind colours.</td></tr>
+    <tr><td>Fonts</td><td>Geist Variable only, self-hosted via Fontsource. No monospace or numeric face, and no type scale tokens.</td></tr>
+    <tr><td>Motion</td><td><code>tw-animate-css</code> utility classes only. No motion tokens and no shared reduced-motion handling.</td></tr>
+    <tr><td>Security constraint</td><td>The Content Security Policy allows <code>style-src 'self'</code> and <code>font-src 'self'</code>. Fonts must be self-hosted (no Google Fonts CDN), and libraries that inject <code>&lt;style&gt;</code> tags break; Base UI's are already switched off. Any motion library must be checked against this.</td></tr>
+    <tr><td>Entry gates</td><td><code>BackendGate → RequireAuth → RequireOnboarded</code> are nested, and each waits for its own request with its own full-screen message ("Connecting…", "Restoring your session…", setup check).</td></tr>
+    <tr><td>Navigation</td><td>12 flat sidebar items, plus My mentees (mentor) and Admin Console (admin). No grouping, no search, no command menu.</td></tr>
+    <tr><td>Shortcuts</td><td>Discover has j/k/o/s/a/d, and Studio has editor keys. Neither is discoverable in the interface.</td></tr>
+    <tr><td>Apply state</td><td>The backend tracks 12 Smart Apply states (draft, ready_to_fill, filling, needs_information, ready_for_review, reviewed, submission_authorized, submission_pending, submitted_confirmed, submission_uncertain, failed, cancelled). The web app shows a 3-step dialog and a status line, so most of this already-available truth is invisible.</td></tr>
+    <tr><td>Size</td><td>About 6,200 lines across pages, app components and layout. The biggest are Applications (604), Admin (433), Searches (391), Discover (366) and forms (358).</td></tr>
+  </table>
+
+  <h3>Issues, root causes, recommended changes</h3>
+  <table>
+    <tr><th style="width:21%">Problem</th><th style="width:37%">Root cause</th><th>Recommended change</th></tr>
+    <tr><td>1 · 12 nav items</td><td>Every backend feature got its own page. Related things (Saved vs Discover, Searches vs Run discovery, Gaps vs Mentor plan, Interview prep in two places) were never grouped.</td><td>4 primary areas plus a footer group, a ⌘K command menu and in-page tabs (section 7).</td></tr>
+    <tr><td>2 · Three loading screens</td><td>Three nested route guards, each awaiting its own request in sequence, each with its own full-screen message.</td><td>One entry: draw the app shell and skeleton immediately and run the health, session and setup checks in parallel. Only a real failure gets a screen: offline, with Retry and the cause.</td></tr>
+    <tr><td>3 · Cluttered Discover</td><td>Producing jobs (Run discovery, Search links, Add job, the status card) shares the page with reading them. All filters sit at one level.</td><td>The first job card is visible without scrolling. One search row with 3 quick filters and "Filters (n)". Discovery status becomes a one-line indicator, and add/run/links move to a "+" menu and ⌘K.</td></tr>
+    <tr><td>4 · Fragmented apply</td><td>The web app can't see the employer tab; truth arrives through the extension and the backend. The interface shows steps, not states.</td><td>One Apply panel showing the live state route (sketch 4). The app re-checks state on focus and while a session is open. Uncertain and failed states each get a recovery path.</td></tr>
+    <tr><td>5 · Resume and profile in 3 places</td><td>Setup, Settings › Resume &amp; profile and Resume Studio each edit their own slice with different forms.</td><td>One model: <b>Profile</b> (facts) → <b>Resumes</b> (documents made from it) → <b>Answers</b> (verified screening answers), all under Career › Profile. Onboarding and Settings link there.</td></tr>
+    <tr><td>6 · Extension install</td><td>Not on the Chrome Web Store, so the user must unzip, turn on Developer mode, Load unpacked, pin and enter a code.</td><td>A guided setup that detects each step through the existing ping, troubleshoots the "manifest missing" error and ends on "Connected". The real fix is Web Store publishing, which isn't frontend work.</td></tr>
+    <tr><td>7 · Settings overload</td><td>10 tabs mix daily items (preferences, answers) with rare ones (privacy, account).</td><td>Daily items move to where they're used (Jobs › Preferences, Career › Profile). Settings keeps 3: Smart Apply, Notifications, Account &amp; privacy.</td></tr>
+    <tr><td>8 · Generic look</td><td>Default shadcn tokens, one font, no semantic colours. Older pages (Mentor, International, Interview prep) predate the newer components.</td><td>A real token system (section 5) applied to every page in one pass, so every page looks like part of one product.</td></tr>
+  </table>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">Features that must survive the redesign (all of them)</h3>
+  <div class="two small">
+    <ul>
+      <li>Register (invite code), log in, forgot and reset password, the offline screen</li>
+      <li>Onboarding: resume upload or build without one, profile review, preferences (titles, cities, work mode, job type, experience, salary), job sites, confirm, first discovery</li>
+      <li>Discover: Jobs/Internships with counts, search, all advanced filters (domain, location, experience, mode, company, skill, country, seniority, sponsorship, eligibility, sort), source and date chips, ineligible ranked last</li>
+      <li>Job card: score, eligibility, verified date, opened state, skills, Save, Apply, Dismiss, keyboard shortcuts</li>
+      <li>Job detail: dates, eligibility check, original listing, continue application, interview prep, tailor resume, match breakdown, full description, qualifications, responsibilities</li>
+      <li>Apply: checklist, screening answers, resume picker, cover letter, Smart Apply status (ready / connect / get it), one-click fill on Greenhouse, Lever and Ashby, manual "Open listing", outcome confirmation with reference number, Back to package, auto-detect of a confirmed submission</li>
+      <li>Searches: saved searches, search links, run discovery, add a job, company watchlist, directory, suggestions, add by careers URL, source health</li>
+    </ul>
+    <ul>
+      <li>Applications: list, board with drag between stages, pending confirmations, detail tabs (overview, interviews, offer, contacts), notes, follow-up date, Smart Apply progress</li>
+      <li>Resume Studio: versions, editor, preview, content, design, check, suggestions, history, PDF and Word export</li>
+      <li>Career: gaps, skills and evidence, learning, snapshot</li>
+      <li>Interview prep: questions, company research, practice sessions</li>
+      <li>Mentor and plan: plan, actions, 1-on-1s, weekly reflection, plus the mentor workspace (My mentees)</li>
+      <li>International: country routes, strengths, gaps, relocation tips</li>
+      <li>Reports: today's report, full-history Excel, outcome charts</li>
+      <li>Notifications bell and alert emails</li>
+      <li>Settings: verified answers, career goals, platforms, extension download and connection code, privacy and consent, account and connection</li>
+      <li>Admin: users, invites, audit log, ops health</li>
+      <li>Light and dark theme, mobile menu</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ DIRECTIONS ============ -->
+<section class="page">
+  <div class="eyebrow">Section 5 · Three design directions</div>
+  <h2>A · Dossier <span class="muted" style="font-weight:500">(editorial light)</span></h2>
+  <p><b>Personality:</b> a calm reading room for careful applicants. Each job is treated as a document worth reading properly.</p>
+  <div class="two">
+    <div>
+      <p><b>Layout.</b> A grouped, labelled sidebar (240 px), a narrow list of compact job rows (380 px) and a wide reading pane set like a document (68-character measure) with "At a glance" facts and a sticky apply card in the margin. Applications is a ledger table with a stage strip. Studio is a centred paper page with an outline on the left and an inspector on the right.</p>
+      <p><b>Type.</b> Instrument Sans for display (20 px and up, tight tracking) with Inter for all interface and reading text; Inter's tabular figures handle numbers. That's two families.</p>
+      <p><b>Motion.</b> Quiet: opacity plus 4–8 px slides, 160–220 ms, no scaling or bounce.</p>
+      <p><b>Signature.</b> The reading pane. Your matched skills are underlined inside the job description, and short margin notes explain the score.</p>
+      <p><b>Risk.</b> Warm off-white is close to a common AI look. The cobalt accent and the absence of a serif keep it apart.</p>
+    </div>
+    <svg viewBox="0 0 240 160" style="border:0.8pt solid var(--b);border-radius:5pt;background:#F6F5F2">
+      <rect x="0" y="0" width="44" height="160" fill="#EFEEEA"/><rect x="6" y="20" width="32" height="5" fill="#C9C6BE"/><rect x="6" y="32" width="26" height="5" fill="#2B4BB0"/><rect x="6" y="44" width="30" height="5" fill="#C9C6BE"/><rect x="6" y="56" width="22" height="5" fill="#C9C6BE"/>
+      <g fill="#fff" stroke="#E3E1DB"><rect x="50" y="10" width="62" height="22"/><rect x="50" y="36" width="62" height="22"/><rect x="50" y="62" width="62" height="22"/><rect x="50" y="88" width="62" height="22"/></g>
+      <rect x="50" y="10" width="2" height="22" fill="#2B4BB0"/>
+      <rect x="118" y="6" width="116" height="148" fill="#fff" stroke="#E3E1DB"/>
+      <rect x="126" y="16" width="64" height="7" fill="#1B1D21"/><rect x="126" y="28" width="40" height="3" fill="#5D616A"/>
+      <g fill="#C9C6BE"><rect x="126" y="44" width="70" height="2.5"/><rect x="126" y="50" width="66" height="2.5"/><rect x="126" y="56" width="70" height="2.5"/><rect x="126" y="62" width="58" height="2.5"/><rect x="126" y="72" width="70" height="2.5"/><rect x="126" y="78" width="64" height="2.5"/></g>
+      <rect x="140" y="56" width="16" height="2.5" fill="#2B4BB0"/><rect x="126" y="78" width="14" height="2.5" fill="#2B4BB0"/>
+      <rect x="202" y="40" width="26" height="40" fill="#F6F5F2" stroke="#E3E1DB"/><rect x="205" y="68" width="20" height="7" fill="#2B4BB0"/>
+    </svg>
+  </div>
+  <img class="full" src="img/palette-a.png" alt="Palette A on a Discover mock with tokens and contrast ratios">
+</section>
+
+<section class="page">
+  <h2>B · Night Shift <span class="muted" style="font-weight:500">(midnight professional)</span></h2>
+  <p><b>Personality:</b> a cockpit for heavy job hunters who triage 50 jobs in a sitting, mostly by keyboard.</p>
+  <div class="two">
+    <div>
+      <p><b>Layout.</b> A 56 px icon rail and the ⌘K palette as the main way around. A full-width dense list (36 px rows) with inline key hints. A right inspector (400 px) toggled with Space. A bottom status bar shows discovery progress and the Smart Apply connection, like an editor's status bar.</p>
+      <p><b>Type.</b> Geist with Geist Mono for scores, dates and shortcuts. Both are already installed, so there's no new font cost.</p>
+      <p><b>Motion.</b> Crisp, 100–160 ms. The selection indicator slides between rows, and nothing moves for decoration.</p>
+      <p><b>Signature.</b> The status bar and multi-select commands ("Save 5 jobs", "Dismiss selected").</p>
+      <p><b>Risk.</b> A dark-only interface tires people during long reading and resume editing. It needs a light variant, which doubles token work.</p>
+    </div>
+    <svg viewBox="0 0 240 160" style="border-radius:5pt;background:#0E1014">
+      <rect x="0" y="0" width="16" height="160" fill="#0B0D10"/><g fill="#353B47"><rect x="5" y="12" width="6" height="6"/><rect x="5" y="26" width="6" height="6"/><rect x="5" y="40" width="6" height="6"/></g><rect x="5" y="26" width="6" height="6" fill="#5DBAAE"/>
+      <g fill="#15181E"><rect x="20" y="8" width="140" height="12"/><rect x="20" y="22" width="140" height="12"/><rect x="20" y="36" width="140" height="12"/><rect x="20" y="50" width="140" height="12"/><rect x="20" y="64" width="140" height="12"/><rect x="20" y="78" width="140" height="12"/><rect x="20" y="92" width="140" height="12"/></g>
+      <rect x="20" y="36" width="140" height="12" fill="#18272A"/><rect x="20" y="36" width="2" height="12" fill="#5DBAAE"/>
+      <g fill="#9AA0AC"><rect x="146" y="12" width="10" height="4"/><rect x="146" y="26" width="10" height="4"/></g><rect x="146" y="40" width="10" height="4" fill="#5DBAAE"/>
+      <rect x="164" y="8" width="72" height="136" fill="#1B1F27"/><rect x="170" y="16" width="44" height="6" fill="#E8EAEE"/><rect x="170" y="120" width="40" height="10" fill="#5DBAAE"/>
+      <rect x="0" y="148" width="240" height="12" fill="#15181E"/><rect x="22" y="152" width="40" height="4" fill="#52C285"/><rect x="180" y="152" width="50" height="4" fill="#9AA0AC"/>
+      <rect x="50" y="40" width="96" height="60" rx="4" fill="#1B1F27" stroke="#353B47"/><rect x="56" y="48" width="60" height="5" fill="#E8EAEE"/><rect x="56" y="58" width="84" height="8" fill="#18272A"/>
+    </svg>
+  </div>
+  <img class="full" src="img/palette-b.png" alt="Palette B on a Discover mock with tokens and contrast ratios">
+</section>
+
+<section class="page">
+  <h2>C · Magenta Line <span class="muted" style="font-weight:500">(modern signature) · recommended</span></h2>
+  <p><b>The idea.</b> On an aircraft's navigation display, the active route is drawn as a <b>magenta line</b> ("follow the magenta line" is pilots' shorthand for flying the plan). The product is called JobPilot, so every job's journey becomes a route: <span class="mono">Found → Saved → Ready → Applied → Screening → Interview → Offer</span>. The colours follow cockpit conventions, which gives each one a fixed meaning: <span class="pill" style="background:#FBEAF2;color:#B8175F">magenta · your active route and main action</span> <span class="pill" style="background:#E3F3F6;color:#0B7A90">cyan · selected, information</span> <span class="pill" style="background:#E6F2EB;color:#177246">green · confirmed</span> <span class="pill" style="background:#FBF5EA;color:#8F5A00">amber · needs you</span> <span class="pill" style="background:#FBECEA;color:#C4352B">red · failed</span></p>
+  <div class="two">
+    <div>
+      <p><b>Layout.</b> A grouped sidebar (232 px: Home, Jobs, Applications, Career, plus a footer group). Home is a "flight plan" showing the next three things to do. Jobs has a single search row, list and detail side by side, and a route strip on every job showing where it is in your journey. Apply is a right-hand route panel with live states. The Applications board's columns are waypoints joined by the line.</p>
+      <p><b>Type.</b> Satoshi for display and headings (character, used with restraint), Hanken Grotesk for reading and interface text (very legible at 13–14 px in the lab), IBM Plex Mono for "readouts" (scores, counts, dates). Three families, each with one job.</p>
+      <p><b>Motion.</b> The one memorable move is the route line drawing to the next waypoint when a job progresses (320 ms). Everything else is 120–220 ms and quiet.</p>
+      <p><b>Risk.</b> Magenta reads as "pink consumer" if overused. It is reserved for the route and the single primary action, under about 5% of the pixels on any screen.</p>
+    </div>
+    <svg viewBox="0 0 240 160" style="border:0.8pt solid var(--b);border-radius:5pt;background:#F6F6F9">
+      <rect x="0" y="0" width="44" height="160" fill="#fff"/><g fill="#C9CBD6"><rect x="6" y="20" width="30" height="5"/><rect x="6" y="44" width="30" height="5"/><rect x="6" y="56" width="22" height="5"/></g><rect x="6" y="32" width="26" height="5" fill="#B8175F"/>
+      <rect x="50" y="8" width="184" height="12" rx="3" fill="#fff" stroke="#C9CBD6"/>
+      <g fill="#fff" stroke="#E1E2E9"><rect x="50" y="26" width="84" height="28" rx="3"/><rect x="50" y="58" width="84" height="28" rx="3"/><rect x="50" y="90" width="84" height="28" rx="3"/></g>
+      <rect x="50" y="26" width="84" height="28" rx="3" fill="none" stroke="#B8175F"/>
+      <rect x="140" y="26" width="94" height="128" rx="3" fill="#fff" stroke="#E1E2E9"/>
+      <line x1="148" y1="40" x2="226" y2="40" stroke="#E1E2E9" stroke-width="2"/><line x1="148" y1="40" x2="186" y2="40" stroke="#B8175F" stroke-width="2"/>
+      <g fill="#B8175F"><circle cx="148" cy="40" r="2.6"/><circle cx="167" cy="40" r="2.6"/><circle cx="186" cy="40" r="3.4"/></g><g fill="#fff" stroke="#C9CBD6"><circle cx="206" cy="40" r="2.6"/><circle cx="226" cy="40" r="2.6"/></g>
+      <rect x="148" y="52" width="60" height="6" fill="#14151B"/><g fill="#C9CBD6"><rect x="148" y="64" width="76" height="2.5"/><rect x="148" y="70" width="70" height="2.5"/><rect x="148" y="76" width="74" height="2.5"/></g>
+      <rect x="148" y="132" width="50" height="12" rx="3" fill="#B8175F"/>
+      <text x="118" y="44" font-size="9" font-family="IBM Plex Mono" fill="#B8175F">82</text>
+    </svg>
+  </div>
+  <div class="two"><img class="full" src="img/palette-c-light.png" alt="Palette C light"><img class="full" src="img/palette-c-dark.png" alt="Palette C dark"></div>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">Exact tokens (hex) for all three palettes</h3>
+  <p class="small muted">Contrast ratios were computed in the lab page. Every text-bearing token reaches 4.5:1 or more on both background and surface. Three values were darkened after the first render failed: A accent, C success and C warning.</p>
+  <table class="mono" style="font-size:7.6pt">
+    <tr><th>Token</th><th>A · Dossier</th><th>B · Night Shift</th><th>C · light</th><th>C · dark</th></tr>
+    <tr><td>Background</td><td>#F6F5F2</td><td>#0E1014</td><td>#F6F6F9</td><td>#0D0E14</td></tr>
+    <tr><td>Surface</td><td>#FFFFFF</td><td>#15181E</td><td>#FFFFFF</td><td>#15161F</td></tr>
+    <tr><td>Elevated surface</td><td>#FFFFFF + shadow</td><td>#1B1F27</td><td>#FFFFFF + shadow</td><td>#1C1E29</td></tr>
+    <tr><td>Text primary</td><td>#1B1D21</td><td>#E8EAEE</td><td>#14151B</td><td>#ECEDF3</td></tr>
+    <tr><td>Text secondary</td><td>#5D616A</td><td>#9AA0AC</td><td>#5A5E6B</td><td>#9B9EAF</td></tr>
+    <tr><td>Border</td><td>#E3E1DB</td><td>#252A33</td><td>#E1E2E9</td><td>#272A38</td></tr>
+    <tr><td>Border strong</td><td>#CBC8C0</td><td>#353B47</td><td>#C9CBD6</td><td>#383C4E</td></tr>
+    <tr><td>Primary</td><td>#2B4BB0</td><td>#5DBAAE</td><td>#B8175F</td><td>#F0579C</td></tr>
+    <tr><td>On primary</td><td>#FFFFFF</td><td>#0B1412</td><td>#FFFFFF</td><td>#16070E</td></tr>
+    <tr><td>Secondary</td><td>#33363C</td><td>#8E8AD8</td><td>#1E2240</td><td>#C9CCF0</td></tr>
+    <tr><td>Accent</td><td>#36707F</td><td>#6FA8E6</td><td>#0B7A90</td><td>#4FCFE3</td></tr>
+    <tr><td>Hover</td><td>#ECEAE5</td><td>#1A1E25</td><td>#F0F0F5</td><td>#1A1C26</td></tr>
+    <tr><td>Selected</td><td>#E5EAF7</td><td>#18272A</td><td>#FBEAF2</td><td>#2A1622</td></tr>
+    <tr><td>Success</td><td>#2E7A4E</td><td>#52C285</td><td>#177246</td><td>#4CCB8C</td></tr>
+    <tr><td>Warning</td><td>#9A5F0E</td><td>#E2AA4A</td><td>#8F5A00</td><td>#F2B33E</td></tr>
+    <tr><td>Error</td><td>#B3362C</td><td>#EF6C61</td><td>#C4352B</td><td>#F26659</td></tr>
+    <tr><td>Information</td><td>#2A6796</td><td>#6FA8E6</td><td>#0B7A90</td><td>#4FCFE3</td></tr>
+  </table>
+</section>
+
+<!-- ============ TYPE + STATUS ============ -->
+<section class="page">
+  <div class="eyebrow">Section 6 · Type study</div>
+  <h2>Eight pairings, same content, rendered</h2>
+  <img class="full" src="img/type-specimens.png" alt="Eight font pairings rendering the same JobPilot content">
+  <table>
+    <tr><th>Pairing</th><th>What the render showed</th><th>Licence / hosting</th><th>Verdict</th></tr>
+    <tr><td>1 Geist / Inter</td><td>Very legible, neutral. Two near-identical sans faces is redundant.</td><td>OFL · Fontsource</td><td>Use one or the other</td></tr>
+    <tr><td>2 Satoshi</td><td>The most character in headings. Body at 14 px is fine but slightly airy.</td><td>ITF Free Font License · not on Fontsource, files must be vendored; check the licence terms before shipping</td><td>Display in C</td></tr>
+    <tr><td>3 Manrope / Inter</td><td>Wide headings that take space in dense lists.</td><td>OFL · Fontsource</td><td>Fallback display for C</td></tr>
+    <tr><td>4 Plus Jakarta</td><td>Tight word spacing at 13 px made meta lines run together.</td><td>OFL · Fontsource</td><td>Rejected for dense UI</td></tr>
+    <tr><td>5 DM Sans / Plex Mono</td><td>Friendly and readable. Plex Mono numbers are distinctive.</td><td>OFL · Fontsource</td><td>Plex Mono kept for C</td></tr>
+    <tr><td>6 Instrument Sans</td><td>Editorial headings, but cramped in small meta lines.</td><td>OFL · Fontsource</td><td>Display only, in A</td></tr>
+    <tr><td>7 Bricolage / Hanken</td><td>Hanken body was the most comfortable small text. Bricolage looked plain at this weight.</td><td>OFL · Fontsource</td><td>Hanken body in C</td></tr>
+    <tr><td>8 Geist (today)</td><td>Clean and technical, but the most familiar "developer tool" look.</td><td>OFL · installed</td><td>Used in B</td></tr>
+  </table>
+  <h3>Type scale (all directions)</h3>
+  <p class="mono" style="font-size:8pt">Display 32/36 −2% · H1 24/30 −1.5% · H2 19/26 −1% · H3 16/22 · Body 14/22 · Small 13/20 · Caption 12/16 +1% · Readout 13–28, tabular figures. Weights: 400 body · 500 UI labels · 600 headings · 700 display. Above 640 px, Display steps up to 36.</p>
+</section>
+
+<section class="page">
+  <h2>Status and match-score colours</h2>
+  <p>The same meanings in every direction. Each state always pairs colour with an icon and a word, never colour alone. A rejection is not shown as an error: it is grey, because it isn't something the user did wrong.</p>
+  <table>
+    <tr><th>State (user-facing word)</th><th>Backend state</th><th>Colour role</th><th>Icon</th></tr>
+    <tr><td>New</td><td>discovered, unopened</td><td>Information</td><td>dot</td></tr>
+    <tr><td>Saved</td><td>saved</td><td>Secondary</td><td>bookmark</td></tr>
+    <tr><td>Ready to apply</td><td>draft, ready_to_fill, ready_for_review, reviewed</td><td>Information</td><td>check-list</td></tr>
+    <tr><td>Applying · filling the form</td><td>filling</td><td>Primary (active route), gentle pulse</td><td>route</td></tr>
+    <tr><td>Needs you</td><td>needs_information, submission_authorized</td><td>Warning</td><td>hand</td></tr>
+    <tr><td>Submitting</td><td>submission_pending</td><td>Primary</td><td>spinner</td></tr>
+    <tr><td>Submitted · confirmed</td><td>submitted_confirmed</td><td>Success</td><td>check</td></tr>
+    <tr><td>Did you submit it?</td><td>submission_uncertain</td><td>Warning</td><td>question</td></tr>
+    <tr><td>Didn't finish</td><td>failed</td><td>Error</td><td>alert</td></tr>
+    <tr><td>Cancelled</td><td>cancelled</td><td>Neutral</td><td>x</td></tr>
+    <tr><td>Screening · Assessment · Interview</td><td>pipeline stages</td><td>Primary for the current stage, neutral for the rest</td><td>waypoint</td></tr>
+    <tr><td>Offer</td><td>offer</td><td>Success</td><td>star</td></tr>
+    <tr><td>Not selected · Withdrawn</td><td>rejected, withdrawn</td><td>Neutral grey</td><td>minus</td></tr>
+  </table>
+  <h3>Match score</h3>
+  <p>A score is a number and a word, with the reason next to it ("5 of 6 must-have skills"). It uses steps of the primary hue only, so it never competes with the status colours.</p>
+  <div class="swatches">
+    <div style="background:#B8175F;color:#fff">80–100 · Strong match</div>
+    <div style="background:#D4568E;color:#fff">65–79 · Good match</div>
+    <div style="background:#EBA5C4;color:#14151B">50–64 · Partial</div>
+    <div style="background:#F6DCE8;color:#14151B">0–49 · Weak</div>
+    <div style="background:repeating-linear-gradient(45deg,#E1E2E9 0 4px,#F6F6F9 4px 8px);color:#14151B">Not eligible · sorted last</div>
+  </div>
+  <p class="small muted">Shown with direction C values. A and B use the same four steps of their own primary colour. The score label text always sits on a surface at 4.5:1 or more; the tints above are fills, not text colours.</p>
+</section>
+
+<!-- ============ IA ============ -->
+<section class="page">
+  <div class="eyebrow">Section 7 · Information architecture</div>
+  <h2>From 12 flat items to 4 areas, a footer and ⌘K</h2>
+  <p>I checked the suggested grouping (Home · Explore Jobs · Applications · Career Studio · Insights · Settings) against the routes and against what users do. One change: <b>Insights is not a top-level area</b>. Reports are about application outcomes, so they live in Applications › Outcomes, and Home carries the 30-day summary. That saves a primary item. Promoting it back later is easy.</p>
+  <div class="three">
+    <div class="callout" style="margin:0"><b>Primary</b><br>Home<br>Jobs<br>Applications<br>Career</div>
+    <div class="callout" style="margin:0;border-color:var(--acc);background:var(--acctint)"><b>Footer</b><br>Settings<br>My mentees (mentors)<br>Admin (admins)<br>Account menu · theme</div>
+    <div class="callout" style="margin:0;border-color:var(--sec);background:#ECEDF3"><b>Everywhere</b><br>⌘K command menu<br>Notifications bell<br>"?" shortcut sheet</div>
+  </div>
+  <table style="margin-top:12pt">
+    <tr><th>Today</th><th>Route</th><th>Moves to</th><th>Why</th></tr>
+    <tr><td>Dashboard</td><td class="mono">/dashboard</td><td>Home</td><td>Opens on what to do next, not totals</td></tr>
+    <tr><td>Discover jobs</td><td class="mono">/discover</td><td>Jobs › Matches (Jobs | Internships)</td><td>The main daily task</td></tr>
+    <tr><td>Saved</td><td class="mono">/saved</td><td>Jobs › Saved</td><td>A view of the same list</td></tr>
+    <tr><td>Searches &amp; sources › Searches</td><td class="mono">/searches</td><td>Jobs › Saved views</td><td>Mercury's "save as view"</td></tr>
+    <tr><td>Searches &amp; sources › Companies</td><td class="mono">/searches</td><td>Jobs › Companies</td><td>Watchlist next to the jobs</td></tr>
+    <tr><td>Searches &amp; sources › Sources</td><td class="mono">/searches</td><td>Discovery status popover + Settings › Job sources</td><td>Rarely needed, visible when broken</td></tr>
+    <tr><td>Run discovery · Search links · Add job</td><td class="mono">/discover</td><td>Jobs "+" menu and ⌘K</td><td>Producing jobs, not reading them</td></tr>
+    <tr><td>Applications</td><td class="mono">/applied</td><td>Applications › List | Board | Needs confirmation</td><td>Unchanged role</td></tr>
+    <tr><td>Reports</td><td class="mono">/reports</td><td>Applications › Outcomes</td><td>Reports describe outcomes</td></tr>
+    <tr><td>Interview prep</td><td class="mono">/interview-prep</td><td>Inside each application + Career › Interview practice</td><td>Prep is per job; practice is general</td></tr>
+    <tr><td>Resume Studio</td><td class="mono">/studio</td><td>Career › Resumes</td><td>Documents made from your profile</td></tr>
+    <tr><td>Settings › Resume &amp; profile, Career goals, Verified answers</td><td class="mono">/settings</td><td>Career › Profile</td><td>One profile, edited in one place</td></tr>
+    <tr><td>Gaps &amp; learning</td><td class="mono">/career</td><td>Career › Skills &amp; learning</td><td>Same area as the plan</td></tr>
+    <tr><td>Mentor &amp; plan</td><td class="mono">/mentor</td><td>Career › Plan &amp; mentor</td><td>Plan uses the gaps</td></tr>
+    <tr><td>International</td><td class="mono">/international</td><td>Career › Work abroad</td><td>A career option, not a daily page</td></tr>
+    <tr><td>Settings › Job preferences, Platforms</td><td class="mono">/settings</td><td>Jobs › Preferences</td><td>Changes what Jobs shows</td></tr>
+    <tr><td>Settings › Browser extension</td><td class="mono">/settings</td><td>Settings › Smart Apply (also from Apply)</td><td>Setup is rare; status is shown in Apply</td></tr>
+    <tr><td>Settings › Alert emails, Notifications</td><td class="mono">/settings</td><td>Settings › Notifications</td><td>Merge two tabs</td></tr>
+    <tr><td>Settings › Privacy, Account &amp; connection</td><td class="mono">/settings</td><td>Settings › Account &amp; privacy</td><td>Rare, together</td></tr>
+    <tr><td>My mentees · Admin Console</td><td class="mono">/mentoring · /admin</td><td>Footer group, by role</td><td>Role-specific</td></tr>
+  </table>
+  <p class="small muted">Every old URL keeps working through a redirect inside the HashRouter, so bookmarks, guide links and alert-email links don't break. No backend endpoint changes.</p>
+</section>
+
+<!-- ============ FLOWS + MOTION ============ -->
+<section class="page">
+  <div class="eyebrow">Section 8 · Flow redesign plan</div>
+  <h2>Order of work, and what to measure</h2>
+  <table>
+    <tr><th>#</th><th>Flow</th><th>Change</th><th>How we'll know (target, to be measured)</th></tr>
+    <tr><td class="mono">1</td><td>H · Returning user / entry</td><td>Shell first, parallel checks, Home opens on "continue where you left off"</td><td>One loading state instead of three. App shell visible in under 300 ms on a warm load.</td></tr>
+    <tr><td class="mono">2</td><td>B · Discover</td><td>Single search row, quick filters, saved views, list and detail</td><td>First job card visible without scrolling at 1366×768. Save or dismiss in 1 key or 1 click.</td></tr>
+    <tr><td class="mono">3</td><td>C · Apply</td><td>One route panel with live states and recovery paths</td><td>From job to "form filling" in 2 clicks when Smart Apply is connected. Every backend state has a visible label.</td></tr>
+    <tr><td class="mono">4</td><td>G · Smart Apply setup</td><td>Self-checking stepper and troubleshooting</td><td>Steps 2 and 3 tick themselves. "Manifest missing" has a one-screen fix.</td></tr>
+    <tr><td class="mono">5</td><td>D · Tracking</td><td>Stage strip, list, board, detail with interviews and prep</td><td>The next action and follow-up date visible per row.</td></tr>
+    <tr><td class="mono">6</td><td>E · Resume Studio + Profile</td><td>Outline, paper, inspector, and one Profile</td><td>Profile edited in one place. Check issues shown as counts.</td></tr>
+    <tr><td class="mono">7</td><td>A · First-time user</td><td>Expectations card, one decision per screen, live profile preview, first matches</td><td>Sign-up to first match list in under 5 minutes.</td></tr>
+    <tr><td class="mono">8</td><td>F · Career readiness + mentor, abroad, reports, admin</td><td>Re-skin on the new tokens and tabs</td><td>Every page in one visual family.</td></tr>
+  </table>
+  <p class="small muted">Each flow will be designed with default, loading, empty, success, error, partial and recovery states, back navigation, keyboard access, and desktop plus mobile (375 px) layouts. The targets are hypotheses to check in the prototype; no improvement is claimed until it's tested.</p>
+
+  <h3>Technical constraints the design respects</h3>
+  <ul class="small">
+    <li><b>The web app cannot see the employer's tab.</b> Apply state arrives from the extension through the backend. The panel refreshes on window focus and polls while a session is open, using the existing endpoints.</li>
+    <li><b>Smart Apply never submits on its own.</b> The user ticks "I have reviewed" and clicks Submit in the extension panel. The design says so plainly instead of hiding it.</li>
+    <li><b>One-click fill works only on Greenhouse, Lever and Ashby forms.</b> Other sites get "Open the form" and manual confirmation. LinkedIn, Naukri and Indeed are never automated.</li>
+    <li><b>Developer-mode install remains until the extension is on the Chrome Web Store.</b> The setup design can't skip Chrome's own steps.</li>
+    <li><b>The CSP requires self-hosted fonts and forbids injected style tags,</b> so libraries must be checked before use.</li>
+    <li><b>Frontend only:</b> every grouping uses data the current API already returns.</li>
+  </ul>
+</section>
+
+<section class="page">
+  <h2>Motion system (direction C values)</h2>
+  <p class="small">Tokens: <span class="mono">fast 120 ms · base 200 ms · large 280 ms · route 320 ms</span>; easing <span class="mono">standard cubic-bezier(.2,0,0,1) · exit cubic-bezier(.4,0,1,1) · route cubic-bezier(.65,0,.35,1)</span>. Only transform and opacity animate, except the route line (stroke-dashoffset). With <i>reduced motion</i> on, every row falls back as listed. Plain CSS transitions cover nearly everything. A small motion library is considered only for board drag reflow (see section 9).</p>
+  <table style="font-size:7.8pt">
+    <tr><th>#</th><th>Trigger</th><th>From → to</th><th>Time · easing</th><th>Property</th><th>Purpose</th><th>Reduced motion</th></tr>
+    <tr><td>1</td><td>App launch</td><td>Shell skeleton → content</td><td>160 · standard</td><td>opacity</td><td>No blank screen</td><td>Instant</td></tr>
+    <tr><td>2</td><td>Navigation</td><td>Old page out, new page y+4 → 0</td><td>80 out / 180 in</td><td>opacity, transform</td><td>Show the page changed</td><td>Instant</td></tr>
+    <tr><td>3</td><td>Sidebar collapse</td><td>232 → 64 px, labels fade</td><td>200 / 120</td><td>grid columns, opacity</td><td>Keep orientation</td><td>Instant</td></tr>
+    <tr><td>4</td><td>Search focus</td><td>Ring on; suggestions scale .98 → 1</td><td>120 / 140</td><td>box-shadow, opacity, transform</td><td>Focus is obvious</td><td>Opacity only</td></tr>
+    <tr><td>5</td><td>Filter menu</td><td>Panel opens downward</td><td>200 · standard</td><td>opacity, transform</td><td>Shows where filters came from</td><td>Opacity only</td></tr>
+    <tr><td>6</td><td>Job card hover</td><td>Surface → hover tint, border darkens</td><td>100</td><td>background, border</td><td>Clickable feedback, no lift</td><td>Same</td></tr>
+    <tr><td>7</td><td>Job selection</td><td>Selection bar slides to the row</td><td>180 · standard</td><td>transform</td><td>Track keyboard focus</td><td>Jumps</td></tr>
+    <tr><td>8</td><td>Open job details</td><td>Pane x+16 → 0</td><td>220 · standard</td><td>opacity, transform</td><td>Detail belongs to the row</td><td>Opacity 120</td></tr>
+    <tr><td>9</td><td>Save a job</td><td>Bookmark fills, 1 → 1.12 → 1, toast with Undo</td><td>160</td><td>transform, fill</td><td>Confirms without a dialog</td><td>Fill only</td></tr>
+    <tr><td>10</td><td>Start applying</td><td>Button label crossfades, route panel slides in</td><td>150 / 280</td><td>opacity, transform</td><td>Same action, next state</td><td>Opacity</td></tr>
+    <tr><td>11</td><td>Apply step change</td><td>Route line draws to the next waypoint, content crossfades</td><td>320 route / 180</td><td>stroke-dashoffset, opacity</td><td>Signature: progress is visible</td><td>Line jumps</td></tr>
+    <tr><td>12</td><td>Submitted</td><td>Waypoint fills, check draws, banner appears</td><td>240 / 200</td><td>stroke, opacity</td><td>Unmistakable success, no confetti</td><td>Static</td></tr>
+    <tr><td>13</td><td>Waiting on extension</td><td>Active waypoint opacity .5 ↔ 1</td><td>1600 loop, stops after 30 s</td><td>opacity</td><td>Something is in progress</td><td>Static dot + "Waiting"</td></tr>
+    <tr><td>14</td><td>Board drag</td><td>Card scale 1.02 + shadow, others reflow</td><td>120 / 200</td><td>transform</td><td>Where the card will land</td><td>No scale, instant reflow</td></tr>
+    <tr><td>15</td><td>Resume preview update</td><td>Changed block tinted, tint fades</td><td>600</td><td>background</td><td>Shows what changed</td><td>1 s static outline</td></tr>
+    <tr><td>16</td><td>Tab change</td><td>Underline slides, panel crossfades</td><td>180 / 120</td><td>transform, opacity</td><td>Continuity</td><td>Instant</td></tr>
+    <tr><td>17</td><td>Dialog open / close</td><td>Scale .98 → 1, y 4 → 0; reverse on close</td><td>200 in / 140 out</td><td>opacity, transform</td><td>Layering</td><td>Opacity</td></tr>
+    <tr><td>18</td><td>Notification / toast</td><td>y 8 → 0, stack shifts</td><td>200</td><td>opacity, transform</td><td>Noticed, not alarming</td><td>Opacity</td></tr>
+    <tr><td>19</td><td>Empty state</td><td>No animation</td><td>–</td><td>–</td><td>The next action is the focus</td><td>–</td></tr>
+    <tr><td>20</td><td>Loading / error</td><td>Skeleton appears only after 400 ms; error text fades in, no shake</td><td>150</td><td>opacity</td><td>Honest waiting, no flash</td><td>Static skeleton</td></tr>
+  </table>
+</section>
+
+<!-- ============ PREVIEW + GATE ============ -->
+<section class="page">
+  <div class="eyebrow">Section 9 · Local preview plan</div>
+  <h2>How the prototypes will be built and reviewed</h2>
+  <ul>
+    <li><b>Where:</b> a separate <code>design-lab/</code> folder beside the app, with its own small Vite + React + Tailwind project in <code>design-lab/prototypes/</code>. It imports nothing from <code>frontend/src</code> and writes nothing there.</li>
+    <li><b>What:</b> clickable prototypes of the six required screens (workspace and navigation, Discover, job detail, Apply with all its states, application pipeline, Resume Studio) for the chosen direction, then the other two if you want them compared. Realistic sample data lives only in the prototype.</li>
+    <li><b>Review:</b> run one command, open <code>http://127.0.0.1:5199</code> on this machine, and switch direction, light/dark and reduced motion from a small toolbar. I'll also send screenshots and short recordings of each flow.</li>
+    <li><b>Motion library:</b> CSS transitions first. Motion for React (its <code>LazyMotion</code> build) is considered only for board drag reflow, and only if it passes the CSP check in the prototype.</li>
+    <li><b>Protection:</b> no commits, no pushes, no deploys and no change to the live app or its database. The existing app keeps running untouched. The folder is untracked and can be deleted in one step.</li>
+  </ul>
+
+  <h3>Why direction C is recommended</h3>
+  <table>
+    <tr><th>Criterion</th><th>A · Dossier</th><th>B · Night Shift</th><th>C · Magenta Line</th></tr>
+    <tr><td>Originality</td><td>Medium: editorial light is a familiar look</td><td>Medium: the dark dev-tool look is common</td><td><b>High</b>: the route concept is specific to JobPilot</td></tr>
+    <tr><td>Visual refinement</td><td>High</td><td>High</td><td>High (if magenta stays rare)</td></tr>
+    <tr><td>Readability</td><td><b>Best</b> for long job descriptions</td><td>Weaker for long reading</td><td>Good (Hanken body)</td></tr>
+    <tr><td>Workflow efficiency</td><td>Good</td><td><b>Best</b> for keyboard triage</td><td>Good, plus B's ⌘K layer</td></tr>
+    <tr><td>Status clarity</td><td>Good</td><td>Good</td><td><b>Best</b>: maps directly onto the 12 apply states</td></tr>
+    <tr><td>Accessibility</td><td>All tokens ≥ 4.5:1</td><td>All tokens ≥ 4.5:1</td><td>All tokens ≥ 4.5:1, light and dark</td></tr>
+    <tr><td>Implementation cost</td><td>Medium (2 new fonts)</td><td><b>Lowest</b> (fonts installed)</td><td>Medium (3 fonts, one needs a licence check)</td></tr>
+    <tr><td>Expected performance</td><td colspan="3">Similar for all three: transform and opacity motion, self-hosted variable fonts. To be measured in the prototype, not assumed.</td></tr>
+  </table>
+
+  <div class="gate">
+    <h2>Approval gate</h2>
+    <p style="font-size:12pt;margin-bottom:4pt"><b>Which visual direction would you like me to prototype first?</b></p>
+    <p class="muted">A · Dossier · B · Night Shift · C · Magenta Line (recommended), or a mix (for example C's identity with A's reading pane). Nothing will be built until you choose.</p>
+  </div>
+</section>
+
+</body>
+</html>

@@ -7,17 +7,30 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/app/common";
 import { Brand } from "@/layouts/AppLayout";
+import { DawnScene } from "@/components/app/DawnScene";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, errorMessage } from "@/lib/api";
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-muted/30 p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex justify-center"><Brand /></div>
-        {children}
-        <p className="text-center text-xs text-muted-foreground">Nothing is ever submitted to an employer without your explicit click.</p>
-      </div>
+    <div className="grid min-h-dvh bg-background lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+      {/* The dawn scene and what JobPilot does, in one breath. Hidden behind a short band on phones. */}
+      <aside className="relative isolate flex min-h-[200px] flex-col overflow-hidden p-6 sm:p-10 lg:m-3 lg:min-h-0 lg:rounded-[28px] lg:ring-1 lg:ring-border/70">
+        <div className="absolute inset-0 -z-10 hidden lg:block"><DawnScene align="right" points={[[905, 334], [995, 306], [1085, 286], [1165, 252]]} /></div>
+        <div className="absolute inset-0 -z-10 lg:hidden"><DawnScene /></div>
+        <Brand />
+        <div className="mt-[9vh] hidden max-w-lg lg:block">
+          <h1 className="font-display text-[52px] leading-[1.02] font-medium tracking-[-0.03em]">Every application, on a clear <em>flight path</em>.</h1>
+          <p className="mt-4 max-w-md text-base leading-relaxed text-foreground/75">JobPilot finds roles that fit you on employers' own job boards, prepares each application with you, and keeps track of every reply.</p>
+          <div className="eyebrow mt-8 flex flex-wrap gap-x-3 gap-y-1 text-foreground/70"><span>Find</span><span aria-hidden>→</span><span>Prepare</span><span aria-hidden>→</span><span>Apply</span><span aria-hidden>→</span><span>Track</span></div>
+        </div>
+      </aside>
+      <main className="flex items-center justify-center px-4 py-10 sm:px-8">
+        <div className="w-full max-w-md space-y-6 [&_[data-slot=card]]:rounded-[24px] [&_[data-slot=card]]:shadow-[var(--shadow-overlay)] [&_[data-slot=card-title]]:font-display [&_[data-slot=card-title]]:text-[28px] [&_[data-slot=card-title]]:font-medium [&_[data-slot=card-title]]:tracking-[-0.02em]">
+          {children}
+          <p className="text-center text-xs text-muted-foreground">Nothing is ever submitted to an employer without your explicit click.</p>
+        </div>
+      </main>
     </div>
   );
 }
@@ -117,7 +130,7 @@ export function RegisterPage() {
             <Field label="Password" htmlFor="rpass"><Input id="rpass" type="password" autoComplete="new-password" required value={form.password} onChange={set("password")} /></Field>
             <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
               {rules.map((r, i) => (
-                <li key={r.label} className={`flex items-center gap-1 ${passed[i] ? "text-emerald-600" : "text-muted-foreground"}`}>{passed[i] ? <Check className="size-3" /> : <X className="size-3" />}{r.label}</li>
+                <li key={r.label} className={`flex items-center gap-1 ${passed[i] ? "text-success" : "text-muted-foreground"}`}>{passed[i] ? <Check className="size-3" /> : <X className="size-3" />}{r.label}</li>
               ))}
             </ul>
             <Field label="Confirm password" htmlFor="rconf" hint={form.confirm && form.confirm !== form.password ? "Passwords don't match" : undefined}>
@@ -232,7 +245,7 @@ export function ResetPasswordPage() {
           </CardContent>
         ) : done ? (
           <CardContent className="space-y-3 text-sm">
-            <p role="status" className="rounded-lg bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200">Your password has been changed.</p>
+            <p role="status" className="rounded-lg bg-success-tint p-3 text-success">Your password has been changed.</p>
             <Button className="w-full" render={<Link to="/login" />}>Sign in</Button>
           </CardContent>
         ) : (
@@ -248,7 +261,7 @@ export function ResetPasswordPage() {
               <Field label="New password" htmlFor="npass"><Input id="npass" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
               <ul className="grid grid-cols-1 gap-1 text-xs sm:grid-cols-2">
                 {resetRules.map((r, i) => (
-                  <li key={r.label} className={`flex items-center gap-1 ${passed[i] ? "text-emerald-600" : "text-muted-foreground"}`}>{passed[i] ? <Check className="size-3" /> : <X className="size-3" />}{r.label}</li>
+                  <li key={r.label} className={`flex items-center gap-1 ${passed[i] ? "text-success" : "text-muted-foreground"}`}>{passed[i] ? <Check className="size-3" /> : <X className="size-3" />}{r.label}</li>
                 ))}
                 <li className="flex items-center gap-1 text-muted-foreground">Not a common password</li>
               </ul>

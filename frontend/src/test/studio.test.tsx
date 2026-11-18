@@ -66,13 +66,13 @@ beforeEach(() => {
 describe("resume studio list", () => {
   it("lists versions with template, status and where each was copied from", async () => {
     routeGets({ "/studio/versions": [
-      summary({ id: 2, name: "AR analyst — Stripe", status: "locked", parent_id: 1, template_name: "Modern Professional", ats_safe: false }),
+      summary({ id: 2, name: "AR analyst — Stripe", status: "locked", parent_id: 1, template_key: "modern_professional", template_name: "Modern Professional", ats_safe: false }),
       summary({ id: 1, name: "AR analyst" }),
     ] });
     renderAt("/studio");
     const row = (await screen.findByRole("link", { name: "AR analyst — Stripe" })).closest("tr")!;
     expect(within(row).getByText("Locked — used in an application")).toBeInTheDocument();
-    expect(within(row).getByText("Modern Professional")).toBeInTheDocument();
+    expect(within(row).getByText("Modern")).toBeInTheDocument();
     expect(within(row).getByRole("link", { name: "AR analyst" })).toHaveAttribute("href", "/studio/1");
     expect(within(row).getByRole("button", { name: "Delete AR analyst — Stripe" })).toBeDisabled();
     expect(screen.getByText("Draft")).toBeInTheDocument();

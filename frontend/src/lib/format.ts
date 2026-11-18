@@ -7,18 +7,19 @@ export function scoreTone(score: number | null | undefined): "excellent" | "good
 }
 
 export const toneClasses: Record<ReturnType<typeof scoreTone>, string> = {
-  excellent: "text-emerald-700 bg-emerald-50 ring-emerald-200 dark:text-emerald-300 dark:bg-emerald-950/40 dark:ring-emerald-900",
-  good: "text-sky-700 bg-sky-50 ring-sky-200 dark:text-sky-300 dark:bg-sky-950/40 dark:ring-sky-900",
-  moderate: "text-amber-700 bg-amber-50 ring-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:ring-amber-900",
-  low: "text-rose-700 bg-rose-50 ring-rose-200 dark:text-rose-300 dark:bg-rose-950/40 dark:ring-rose-900",
+  // A match score uses cobalt then violet, so it never competes with status colours (green confirmed, amber needs you).
+  excellent: "text-route bg-route-tint ring-route/30",
+  good: "text-violet bg-lavender ring-violet/25",
+  moderate: "text-foreground/75 bg-muted ring-border",
+  low: "text-muted-foreground bg-muted ring-border",
   none: "text-muted-foreground bg-muted ring-border",
 };
 
 export const toneStroke: Record<ReturnType<typeof scoreTone>, string> = {
-  excellent: "stroke-emerald-500",
-  good: "stroke-sky-500",
-  moderate: "stroke-amber-500",
-  low: "stroke-rose-500",
+  excellent: "stroke-route",
+  good: "stroke-violet",
+  moderate: "stroke-heading/35",
+  low: "stroke-muted-foreground/40",
   none: "stroke-muted-foreground/40",
 };
 

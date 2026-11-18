@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ExternalLink, FileText, Loader2, MessagesSquare, Send } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, FileText, Loader2, MessagesSquare, Send } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { PlatformBadge, ScoreBadge, SkillChips } from "@/components/app/common";
-import { useAddDescription, useAnalysis, useJob } from "@/services/queries";
+import { PlatformBadge, SkillChips } from "@/components/app/common";
+import { CompanyMark } from "@/components/app/JobCard";
+import { useAddDescription, useAnalysis, useJob, useJobAction } from "@/services/queries";
 import { errorMessage } from "@/lib/api";
 import { formatDate, postedDisplay, scoreTone, timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -25,79 +25,147 @@ const componentNames: Record<string, string> = {
   location: "Location & preferences",
 };
 
-const barTone = { excellent: "bg-emerald-500", good: "bg-sky-500", moderate: "bg-amber-500", low: "bg-rose-500", none: "bg-muted" };
+const barTone = { excellent: "bg-route", good: "bg-route-bright", moderate: "bg-[#C9B99A]", low: "bg-muted-foreground/40", none: "bg-muted" };
+const scoreWords = { excellent: "Strong match", good: "Good match", moderate: "Partial match", low: "Weak match", none: "Not scored" } as const;
 
-export function JobDetailSheet({ userJobId, onOpenChange, onApply, onOpenJob }: {
+/** The one Job Description view used everywhere "View full JD" appears: a modal with a fixed header and action bar,
+ *  and the full description scrolling inside it, so the list behind keeps its place. */
+export function JobDetailModal({ userJobId, onOpenChange, onApply, onOpenJob }: {
   userJobId: number | null; onOpenChange: (open: boolean) => void; onApply: (id: number) => void; onOpenJob?: (id: number) => void;
 }) {
   const job = useJob(userJobId);
   const analysis = useAnalysis(userJobId);
   const addDesc = useAddDescription();
+  const action = useJobAction();
   const [desc, setDesc] = useState("");
+  const scroller = useRef<HTMLDivElement>(null);
   const d = job.data;
   const a = analysis.data as AnalysisV2 | undefined;
   const dims = a?.dimensions ?? [];
+  const tone = scoreTone(d?.match_score);
+  const posted = d ? postedDisplay(d.job) : null;
+
+  const sections = d ? ([
+    ["overview", "Overview", true],
+    ["responsibilities", "Responsibilities", (d.responsibilities ?? []).length > 0],
+    ["requirements", "Requirements", (d.required_skills ?? []).length > 0 || (d.education_requirements ?? []).length > 0 || (d.mandatory_qualifications ?? []).length > 0],
+    ["preferred", "Preferred", (d.preferred_skills ?? []).length > 0],
+    ["match", "Match & eligibility", true],
+    ["description", "Full description", true],
+  ] as const).filter(([, , show]) => show) : [];
+  const jump = (id: string) => {
+    const el = scroller.current?.querySelector<HTMLElement>(`[data-section="${id}"]`);
+    if (el && scroller.current) scroller.current.scrollTo({ top: el.offsetTop - 12, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
+  const toggleSave = () => d && action.mutate({ id: d.user_job_id, action: d.is_saved ? "unsave" : "save" }, {
+    onSuccess: () => { toast.success(d.is_saved ? "Off your list" : "On your radar ✨"); void job.refetch(); }, onError: (e) => toast.error(errorMessage(e)),
+  });
 
   return (
-    <Sheet open={userJobId != null} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+    <Dialog open={userJobId != null} onOpenChange={onOpenChange}>
+      <DialogContent data-testid="jd-modal"
+                     className="flex h-dvh max-h-dvh w-full max-w-full flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-[88vh] sm:max-h-[88vh] sm:max-w-[960px] sm:rounded-[22px]">
         {!d ? (
-          <div className="space-y-3 p-6"><Skeleton className="h-7 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-40 w-full" /></div>
+          <div className="space-y-3 p-8" role="status" aria-label="Loading job">
+            <DialogTitle className="sr-only">Loading job</DialogTitle>
+            {job.isError ? <p className="text-sm text-destructive">This job couldn't be loaded. {errorMessage(job.error)}</p>
+              : <><Skeleton className="h-8 w-2/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-64 w-full" /></>}
+          </div>
         ) : (
           <>
-            <SheetHeader className="border-b pb-4">
-              <div className="flex flex-wrap items-center gap-2"><PlatformBadge platform={d.job.platform} /><ScoreBadge score={d.match_score} category={d.match_category} /><FreshnessBadge job={d.job} /></div>
-              <SheetTitle className="text-xl">{d.job.title}</SheetTitle>
-              <SheetDescription>
-                {d.job.company} · {d.job.location_normalized || d.job.location || "Location not stated"}
-                {d.job.work_mode && !(d.job.work_mode === "Remote" && (d.job.location_normalized ?? "").startsWith("Remote")) ? ` · ${d.job.work_mode}` : ""}
-              </SheetDescription>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-1 text-sm" aria-label="Job provenance">
-                <dt className="text-muted-foreground">Posting date</dt>
-                <dd title={postedDisplay(d.job).title}>{postedDisplay(d.job).text} <span className="text-xs text-muted-foreground">({postedDisplay(d.job).badge.toLowerCase()})</span></dd>
-                <dt className="text-muted-foreground">Found by JobPilot</dt>
-                <dd>{formatDate(d.job.first_seen_at, true)}{d.job.last_verified_at ? ` · still listed ${timeAgo(d.job.last_verified_at)}` : ""}</dd>
-                {freshnessOf(d.job) && <><dt className="text-muted-foreground">Still open?</dt><dd data-testid="freshness-detail">{freshnessOf(d.job)!.detail}</dd></>}
-                {d.job.location && d.job.location_normalized && d.job.location !== d.job.location_normalized && (
-                  <><dt className="text-muted-foreground">Location as posted</dt><dd>{d.job.location}</dd></>
-                )}
-                {d.job.remote_scope_label && <><dt className="text-muted-foreground">Remote, open to</dt><dd>{d.job.remote_scope_label}</dd></>}
-                {(d.job.salary_label || d.job.salary_range) && (
-                  <><dt className="text-muted-foreground">Salary</dt>
-                    <dd>{d.job.salary_label || d.job.salary_range}
-                      {d.job.salary_label?.includes("(assumed)") && <span className="block text-xs text-muted-foreground">The posting doesn't say per year; a figure this size is read as yearly.</span>}
-                    </dd></>
-                )}
-                {(d.similar?.length ?? 0) > 0 && (
-                  <><dt className="text-muted-foreground">Also listed</dt>
-                    <dd className="flex flex-wrap gap-1.5">{d.similar!.map((x) => (
-                      <button key={x.user_job_id} type="button" disabled={!onOpenJob} onClick={() => onOpenJob?.(x.user_job_id)}
-                              className="rounded border px-1.5 py-0.5 text-xs hover:bg-muted disabled:cursor-default">{x.location || "location not stated"}</button>
-                    ))}</dd></>
-                )}
-                <dt className="text-muted-foreground">Seen on</dt>
-                <dd className="flex flex-wrap gap-x-3 gap-y-1">
-                  {(d.job.sources.length ? d.job.sources : [{ source: d.job.source, platform: d.job.platform, url: d.job.job_url, first_seen_at: "" }]).map((s) => (
-                    s.url ? <a key={s.source + s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline-offset-2 hover:underline">{s.platform ?? s.source}<ExternalLink className="size-3" /></a>
-                      : <span key={s.source}>{s.platform ?? s.source}</span>
-                  ))}
-                </dd>
-              </dl>
-              <div className="flex flex-wrap gap-2 pt-2">
-                {d.job.job_url && (
-                  <Button size="sm" variant="outline" render={<a href={d.job.job_url} target="_blank" rel="noopener noreferrer" />}>
-                    <ExternalLink /> Original listing
-                  </Button>
-                )}
-                <Button size="sm" onClick={() => onApply(d.user_job_id)} disabled={!d.job.job_url}><Send /> {d.application_id ? "Continue application" : "Apply"}</Button>
-                <Button size="sm" variant="outline" render={<Link to={`/interview-prep?job=${d.user_job_id}`} />}><MessagesSquare /> Prepare for interview</Button>
-                <Button size="sm" variant="outline" render={<Link to={`/studio?job=${d.user_job_id}`} />}><FileText /> Tailor a resume</Button>
+            {/* header: fixed */}
+            <header className="border-b px-5 pt-5 pb-3 sm:px-7 sm:pt-6">
+              <div className="flex items-start gap-4 pr-8">
+                <CompanyMark name={d.job.company || "?"} className="size-12 text-base" />
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className="font-display text-[22px] leading-tight font-bold tracking-[-0.02em] text-heading sm:text-[26px]">{d.job.title}</DialogTitle>
+                  <DialogDescription className="mt-1 text-[14px]">
+                    <span className="font-medium text-foreground">{d.job.company}</span>
+                    {" · "}{d.job.location_normalized || d.job.location || "Location not stated"}
+                    {d.job.work_mode && !(d.job.work_mode === "Remote" && (d.job.location_normalized ?? "").startsWith("Remote")) ? ` · ${d.job.work_mode}` : ""}
+                    {(d.job.salary_label || d.job.salary_range) ? ` · ${d.job.salary_label || d.job.salary_range}` : ""}
+                  </DialogDescription>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5"><PlatformBadge platform={d.job.platform} /><FreshnessBadge job={d.job} />
+                    {posted && <span className="text-xs text-muted-foreground" title={posted.title}>{posted.text} · {posted.badge.toLowerCase()}</span>}
+                  </div>
+                </div>
+                <div className="hidden text-right sm:block" aria-label={d.match_score == null ? "Not scored" : `${Math.round(d.match_score)} percent match`}>
+                  <div className={cn("readout text-[34px] leading-none font-semibold", tone === "excellent" ? "text-route" : "text-heading")}>
+                    {d.match_score == null ? "–" : Math.round(d.match_score)}<span className="text-base text-muted-foreground">%</span>
+                  </div>
+                  <div className={cn("eyebrow mt-1 text-[10px]", tone === "excellent" && "text-route")}>{scoreWords[tone]}</div>
+                </div>
               </div>
-            </SheetHeader>
+              <nav aria-label="Sections" className="-mx-1 mt-4 flex gap-1 overflow-x-auto">
+                {sections.map(([id, label]) => (
+                  <button key={id} type="button" onClick={() => jump(id)}
+                          className="shrink-0 rounded-full px-3 py-1 text-[13px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-lavender hover:text-violet focus-visible:outline-2 focus-visible:outline-ring">
+                    {label}
+                  </button>
+                ))}
+              </nav>
+            </header>
 
-            <div className="space-y-6 px-4 pb-8">
-              <section>
-                <h3 className="mb-2 font-semibold">Matching analysis</h3>
+            {/* body: the only part that scrolls */}
+            <div ref={scroller} className="relative flex-1 space-y-8 overflow-y-auto overscroll-contain px-5 py-6 sm:px-7">
+              <section data-section="overview">
+                <h3 className="eyebrow mb-3">Overview</h3>
+                <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2" aria-label="Job provenance">
+                  <Fact label="Posting date"><span title={postedDisplay(d.job).title}>{postedDisplay(d.job).text} <span className="text-xs text-muted-foreground">({postedDisplay(d.job).badge.toLowerCase()})</span></span></Fact>
+                  <Fact label="Found by JobPilot">{formatDate(d.job.first_seen_at, true)}{d.job.last_verified_at ? ` · still listed ${timeAgo(d.job.last_verified_at)}` : ""}</Fact>
+                  {freshnessOf(d.job) && <Fact label="Still open?"><span data-testid="freshness-detail">{freshnessOf(d.job)!.detail}</span></Fact>}
+                  <Fact label="Experience">{d.job.experience_required || "Not stated"}</Fact>
+                  {(d.job.salary_label || d.job.salary_range) && (
+                    <Fact label="Salary">{d.job.salary_label || d.job.salary_range}
+                      {d.job.salary_label?.includes("(assumed)") && <span className="block text-xs text-muted-foreground">The posting doesn't say per year; a figure this size is read as yearly.</span>}
+                    </Fact>
+                  )}
+                  {d.job.location && d.job.location_normalized && d.job.location !== d.job.location_normalized && <Fact label="Location as posted">{d.job.location}</Fact>}
+                  {d.job.remote_scope_label && <Fact label="Remote, open to">{d.job.remote_scope_label}</Fact>}
+                  {(d.job.industry || d.job.department) && <Fact label="Team">{[d.job.industry, d.job.department].filter(Boolean).join(" · ")}</Fact>}
+                  {(d.similar?.length ?? 0) > 0 && (
+                    <Fact label="Also listed">
+                      <span className="flex flex-wrap gap-1.5">{d.similar!.map((x) => (
+                        <button key={x.user_job_id} type="button" disabled={!onOpenJob} onClick={() => onOpenJob?.(x.user_job_id)}
+                                className="rounded-full border px-2 py-0.5 text-xs hover:bg-muted disabled:cursor-default">{x.location || "location not stated"}</button>
+                      ))}</span>
+                    </Fact>
+                  )}
+                  <Fact label="Seen on">
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {(d.job.sources.length ? d.job.sources : [{ source: d.job.source, platform: d.job.platform, url: d.job.job_url, first_seen_at: "" }]).map((s) => (
+                        s.url ? <a key={s.source + s.url} href={s.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-route underline-offset-2 hover:underline">{s.platform ?? s.source}<ExternalLink className="size-3" /></a>
+                          : <span key={s.source}>{s.platform ?? s.source}</span>
+                      ))}
+                    </span>
+                  </Fact>
+                </dl>
+              </section>
+
+              {(d.responsibilities ?? []).length > 0 && (
+                <section data-section="responsibilities">
+                  <h3 className="eyebrow mb-3">Responsibilities</h3>
+                  <ul className="list-disc space-y-1.5 pl-5 text-[15px] leading-relaxed marker:text-violet">{(d.responsibilities ?? []).map((r) => <li key={r}>{r}</li>)}</ul>
+                </section>
+              )}
+
+              {((d.required_skills ?? []).length > 0 || (d.education_requirements ?? []).length > 0 || (d.mandatory_qualifications ?? []).length > 0) && (
+                <section data-section="requirements" className="space-y-3">
+                  <h3 className="eyebrow">Requirements</h3>
+                  {(d.required_skills ?? []).length > 0 && <SkillChips skills={d.required_skills} tone="neutral" max={40} />}
+                  {(d.education_requirements ?? []).length > 0 && <p className="text-sm"><span className="font-medium">Education:</span> {(d.education_requirements ?? []).join(", ")}{(d.mandatory_qualifications ?? []).length ? ` (mandatory: ${(d.mandatory_qualifications ?? []).join(", ")})` : ""}</p>}
+                </section>
+              )}
+
+              {(d.preferred_skills ?? []).length > 0 && (
+                <section data-section="preferred" className="space-y-3">
+                  <h3 className="eyebrow">Preferred qualifications</h3>
+                  <SkillChips skills={d.preferred_skills} tone="neutral" max={40} />
+                </section>
+              )}
+
+              <section data-section="match">
+                <h3 className="eyebrow mb-3">Match & eligibility</h3>
                 {!a ? <Skeleton className="h-32 w-full" /> : a.overall_score == null ? (
                   <p className="text-sm text-muted-foreground">Not scored yet. Confirm your profile in Settings first.</p>
                 ) : (
@@ -112,7 +180,7 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply, onOpenJob }: 
                         <p className="mt-1 text-xs text-muted-foreground">{c.evidence}</p>
                       </div>
                     ))}
-                    {a.recommendation && <p className="rounded-lg bg-muted p-3 text-sm">{a.recommendation}</p>}
+                    {a.recommendation && <p className="rounded-xl bg-lavender p-3 text-sm text-heading">{a.recommendation}</p>}
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div><h4 className="mb-1 text-sm font-medium">Why it fits</h4><ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">{a.reasons_for.length ? a.reasons_for.map((r) => <li key={r}>{r}</li>) : <li>—</li>}</ul></div>
                       <div><h4 className="mb-1 text-sm font-medium">Gaps</h4><ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">{a.reasons_against.length ? a.reasons_against.map((r) => <li key={r}>{r}</li>) : <li>None identified</li>}</ul></div>
@@ -124,7 +192,7 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply, onOpenJob }: 
                       )}
                     </div>
                     {!a.eligibility && a.eligibility_status && a.eligibility_status !== "ELIGIBLE" && (
-                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                      <div className="rounded-xl bg-caution-tint p-3 text-sm text-caution">
                         <strong>Eligibility: {a.eligibility_status.replace("_", " ").toLowerCase()}</strong>
                         <ul className="mt-1 list-disc pl-4">{a.eligibility_reasons.map((r) => <li key={r}>{r}</li>)}</ul>
                       </div>
@@ -138,48 +206,58 @@ export function JobDetailSheet({ userJobId, onOpenChange, onApply, onOpenJob }: 
                 )}
               </section>
 
-              {(d.required_skills.length > 0 || d.education_requirements.length > 0) && (
-                <section className="space-y-3">
-                  <Separator />
-                  <h3 className="font-semibold">Required qualifications</h3>
-                  {d.required_skills.length > 0 && <div><h4 className="mb-1 text-sm font-medium">Required skills</h4><SkillChips skills={d.required_skills} tone="neutral" max={40} /></div>}
-                  {d.preferred_skills.length > 0 && <div><h4 className="mb-1 text-sm font-medium">Preferred skills</h4><SkillChips skills={d.preferred_skills} tone="neutral" max={40} /></div>}
-                  {d.education_requirements.length > 0 && <p className="text-sm"><span className="font-medium">Education:</span> {d.education_requirements.join(", ")}{d.mandatory_qualifications.length ? ` (mandatory: ${d.mandatory_qualifications.join(", ")})` : ""}</p>}
-                </section>
-              )}
-
-              {d.responsibilities.length > 0 && (
-                <section>
-                  <Separator className="mb-3" />
-                  <h3 className="mb-2 font-semibold">Responsibilities</h3>
-                  <ul className="list-disc space-y-1 pl-5 text-sm">{d.responsibilities.map((r) => <li key={r}>{r}</li>)}</ul>
-                </section>
-              )}
-
-              <section>
-                <Separator className="mb-3" />
-                <h3 className="mb-2 font-semibold">Complete job description</h3>
+              <section data-section="description">
+                <h3 className="eyebrow mb-3">Complete job description</h3>
                 {d.description && !d.description_is_snippet ? (
-                  <div className="whitespace-pre-wrap rounded-lg border bg-card p-4 text-sm leading-relaxed">{d.description}</div>
+                  <div className="max-w-[72ch] whitespace-pre-wrap text-[15px] leading-[1.7]">{d.description}</div>
                 ) : (
                   <div className="space-y-2">
                     {d.description && <div className="whitespace-pre-wrap rounded-lg border bg-card p-4 text-sm text-muted-foreground">{d.description}<p className="mt-2 text-xs">(snippet only)</p></div>}
                     <p className="text-sm text-muted-foreground">Paste the full description from the original listing to get an accurate score.</p>
                     <Textarea rows={8} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Paste the complete job description…" />
                     <Button size="sm" disabled={desc.trim().length < 80 || addDesc.isPending} onClick={() => addDesc.mutate({ id: d.user_job_id, description: desc }, {
-                      onSuccess: () => { setDesc(""); toast.success("Description saved and job re-scored"); void analysis.refetch(); },
+                      onSuccess: () => { setDesc(""); toast.success("Description saved and job re-scored. Fresh numbers, fr."); void analysis.refetch(); },
                       onError: (e) => toast.error(errorMessage(e)),
                     })}>
                       {addDesc.isPending && <Loader2 className="animate-spin" />} Save description & re-score
                     </Button>
                   </div>
                 )}
-                {d.verification_flags.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-amber-700 dark:text-amber-300">{d.verification_flags.map((f) => <li key={f}>{f}</li>)}</ul>}
+                {(d.verification_flags ?? []).length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-caution">{(d.verification_flags ?? []).map((f) => <li key={f}>{f}</li>)}</ul>}
               </section>
             </div>
+
+            {/* actions: fixed */}
+            <footer className="flex flex-wrap items-center gap-2 border-t bg-background/80 px-5 py-3 backdrop-blur sm:px-7">
+              {d.job.job_url && (
+                <a href={d.job.job_url} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                  <ExternalLink /> Open original listing
+                </a>
+              )}
+              <Link to={`/studio?job=${d.user_job_id}`} className={buttonVariants({ variant: "ghost", size: "sm" })}><FileText /> Tailor a resume</Link>
+              <Link to={`/interview-prep?job=${d.user_job_id}`} className={buttonVariants({ variant: "ghost", size: "sm" })}><MessagesSquare /> Prepare for interview</Link>
+              <div className="ml-auto flex gap-2">
+                <Button variant="outline" onClick={toggleSave} disabled={action.isPending} aria-pressed={d.is_saved}>
+                  {d.is_saved ? <BookmarkCheck className="text-violet" /> : <Bookmark />} {d.is_saved ? "Saved" : "Save"}
+                </Button>
+                <Button onClick={() => onApply(d.user_job_id)} disabled={!d.job.job_url} className="px-5"><Send /> {d.application_id ? "Continue application" : "Apply"}</Button>
+              </div>
+            </footer>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Kept for existing imports: the JD now opens as a modal everywhere. */
+export const JobDetailSheet = JobDetailModal;
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5">{children}</dd>
+    </div>
   );
 }

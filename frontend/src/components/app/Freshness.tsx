@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 import type { Freshness, JobListing } from "@/types/api";
 
 const tone: Record<Freshness["state"], string> = {
-  open: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  unconfirmed: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  open: "bg-success-tint text-success",
+  unconfirmed: "bg-caution-tint text-caution",
   unchecked: "bg-muted text-muted-foreground",
-  expired: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  closed: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  expired: "bg-muted text-muted-foreground",
+  closed: "bg-muted text-muted-foreground",
 };
 const icon = { open: CircleCheck, unconfirmed: Clock, unchecked: CircleHelp, expired: TimerOff, closed: Archive };
 

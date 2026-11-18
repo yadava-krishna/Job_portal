@@ -32,7 +32,7 @@ export function ConnectionSettingsDialog({ open, onOpenChange }: { open: boolean
     const ok = await c.setBaseUrl(url);
     setBusy(false);
     if (ok) {
-      toast.success("Connected to the backend");
+      toast.success("Connected. We're so back.");
       onOpenChange(false);
     } else {
       toast.error("Saved, but the backend at that address is not responding yet");

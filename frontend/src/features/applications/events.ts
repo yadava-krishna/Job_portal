@@ -18,8 +18,17 @@ const LABELS: Record<string, string> = {
   APPLY_STATE: "Smart Apply progress",
 };
 
+/** Smart Apply (browser extension) progress states, as the backend names them (apply_state_service.LABELS). */
+export const APPLY_STATE_LABELS: Record<string, string> = {
+  draft: "Draft", ready_to_fill: "Ready to fill", filling: "Filling", needs_information: "Needs information",
+  ready_for_review: "Ready for review", reviewed: "Reviewed", submission_authorized: "Submission authorised",
+  submission_pending: "Submission pending", submitted_confirmed: "Submitted (confirmed)",
+  submission_uncertain: "Submission uncertain: please check", failed: "Failed", cancelled: "Cancelled",
+};
+
 /** A history line in plain words: "Moved to Interview" rather than "stage changed". */
 export function eventLabel(e: AppEvent): string {
+  if (e.event_type === "APPLY_STATE" && e.to_status && APPLY_STATE_LABELS[e.to_status]) return `Smart Apply: ${APPLY_STATE_LABELS[e.to_status]}`;
   if (e.event_type === "STAGE_CHANGED") return `Moved to ${stageLabels[e.to_status ?? ""] ?? e.to_status ?? "a new stage"}`;
   const known = LABELS[e.event_type];
   if (known) return known;
@@ -45,6 +54,8 @@ export function daysSince(iso: string | null | undefined, now = new Date()): num
 export function eventDetail(e: AppEvent): string | null {
   const d = e.details?.trim();
   if (!d) return null;
+  // The extension's default detail repeats the state label already shown in the line itself.
+  if (e.event_type === "APPLY_STATE" && e.to_status && APPLY_STATE_LABELS[e.to_status] === d) return null;
   if (e.event_type === "FOLLOW_UP_SET") {
     if (d === "cleared") return "Reminder removed";
     const when = new Date(d);

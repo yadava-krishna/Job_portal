@@ -35,29 +35,20 @@ export function ScoreBadge({ score, category }: { score: number | null | undefin
   );
 }
 
-const platformColors: Record<string, string> = {
-  LinkedIn: "bg-[#0a66c2]/10 text-[#0a66c2] dark:text-sky-300",
-  Indeed: "bg-[#2557a7]/10 text-[#2557a7] dark:text-blue-300",
-  Naukri: "bg-[#4a90e2]/10 text-[#275df5] dark:text-blue-300",
-  Adzuna: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-  Greenhouse: "bg-lime-500/10 text-lime-800 dark:text-lime-300",
-  Lever: "bg-violet-500/10 text-violet-700 dark:text-violet-300",
-  Ashby: "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-300",
-  SmartRecruiters: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  Recruitee: "bg-orange-500/10 text-orange-700 dark:text-orange-300",
-};
+/** Job sources are labels, not outcomes: one neutral style, so no source ever reads as "success" or "error". */
+const platformColors: Record<string, string> = {};
 
 export function PlatformBadge({ platform }: { platform: string }) {
-  return <span className={cn("rounded-md px-1.5 py-0.5 text-xs font-medium", platformColors[platform] ?? "bg-muted text-muted-foreground")}>{platform}</span>;
+  return <span className={cn("rounded-full px-2 py-px text-[11px] font-medium ring-1 ring-inset", platformColors[platform] ?? "bg-paper-sunk text-muted-foreground ring-border")}>{platform}</span>;
 }
 
 const statusTone: Record<string, string> = {
-  PREPARED: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
-  OPENED: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-  CONFIRMATION_PENDING: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200",
-  SUBMITTED: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
-  FAILED: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
-  WITHDRAWN: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+  PREPARED: "bg-paper-sunk text-heading",
+  OPENED: "bg-caution-tint text-caution",
+  CONFIRMATION_PENDING: "bg-caution-tint text-caution",
+  SUBMITTED: "bg-success-tint text-success",
+  FAILED: "bg-destructive/10 text-destructive",
+  WITHDRAWN: "bg-muted text-muted-foreground",
 };
 
 export function StatusBadge({ status }: { status: string }) {
@@ -72,14 +63,14 @@ export function StageBadge({ stage }: { stage: string | null }) {
 export function SkillChips({ skills, tone, max = 6 }: { skills: string[]; tone: "match" | "missing" | "neutral"; max?: number }) {
   if (!skills.length) return null;
   const cls = tone === "match"
-    ? "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900"
+    ? "bg-route-tint text-route ring-route/20"
     : tone === "missing"
-      ? "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900"
+      ? "bg-caution-tint text-caution ring-caution/20"
       : "bg-muted text-foreground ring-border";
   return (
-    <div className="flex flex-wrap gap-1">
+    <div className="flex flex-wrap gap-1.5">
       {skills.slice(0, max).map((s) => (
-        <span key={s} className={cn("rounded-md px-1.5 py-0.5 text-xs ring-1 ring-inset", cls)}>{s}</span>
+        <span key={s} className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset", cls)}>{s}</span>
       ))}
       {skills.length > max && <span className="text-xs text-muted-foreground">+{skills.length - max}</span>}
     </div>
@@ -88,9 +79,9 @@ export function SkillChips({ skills, tone, max = 6 }: { skills: string[]; tone: 
 
 export function EmptyState({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed px-6 py-14 text-center">
-      {icon && <div className="mb-3 text-muted-foreground">{icon}</div>}
-      <h3 className="font-medium">{title}</h3>
+    <div className="flex animate-in flex-col items-center justify-center rounded-2xl border border-dashed bg-card/60 px-6 py-12 text-center duration-300 fade-in-0">
+      {icon && <div className="mb-3 flex size-12 items-center justify-center rounded-2xl bg-lavender text-violet [&_svg]:size-6">{icon}</div>}
+      <h3 className="font-display text-[17px] font-bold text-heading">{title}</h3>
       {children && <div className="mt-1 max-w-md text-sm text-muted-foreground">{children}</div>}
     </div>
   );
@@ -118,12 +109,13 @@ export function ErrorState({ title = "This couldn't be loaded", error, onRetry, 
   );
 }
 
-export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+export function PageHeader({ title, description, actions, eyebrow }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; eyebrow?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+    <div className="mt-1 mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        {eyebrow && <div className="eyebrow mb-1.5">{eyebrow}</div>}
+        <h1 className="font-display text-[26px] leading-[1.15] font-extrabold tracking-[-0.03em] sm:text-[30px]">{title}</h1>
+        {description && <div className="mt-1 max-w-3xl text-[14px] leading-relaxed text-muted-foreground">{description}</div>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </div>
@@ -153,7 +145,7 @@ export function TagInput({ value, onChange, placeholder, suggestions = [], id }:
   const unused = suggestions.filter((s) => !value.some((v) => v.toLowerCase() === s.toLowerCase())).slice(0, 8);
   return (
     <div className="space-y-2">
-      <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border bg-background px-2 py-1.5 focus-within:ring-3 focus-within:ring-ring/50">
+      <div data-guard-value={JSON.stringify(value)} className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-lg border bg-background px-2 py-1.5 focus-within:ring-3 focus-within:ring-ring/50">
         {value.map((v) => (
           <span key={v} className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-sm">
             {v}
@@ -193,7 +185,7 @@ export function NativeSelect({ value, onChange, options, id, className, ariaLabe
 }) {
   return (
     <select id={id} aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}
-            className={cn("h-8 rounded-lg border bg-background px-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50", className)}>
+            className={cn("h-10 rounded-xl border bg-card px-3 text-sm outline-none transition-colors hover:border-foreground/25 focus-visible:ring-3 focus-visible:ring-ring/50", className)}>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );

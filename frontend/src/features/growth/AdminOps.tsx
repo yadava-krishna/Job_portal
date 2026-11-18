@@ -6,28 +6,23 @@ import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useAdminJobs, useProductMetrics, useRunJob, useSystemStatus } from "./queries";
 import type { BackgroundJob as AdminJob, JobRunResult } from "./types";
+import { StatusDot, table, type Tone } from "./ui";
 
-const panel = "rounded-xl border border-border bg-card overflow-hidden";
-const head = "p-4 border-b border-border flex items-center justify-between gap-2";
-const th = "px-4 py-3";
-const thead = "bg-muted/50 border-b border-border text-muted-foreground uppercase text-[10px]";
+const panel = "min-w-0 rounded-2xl bg-card ring-1 ring-border overflow-hidden";
+const head = "px-4 py-3 sm:px-5 flex items-center justify-between gap-2";
+const th = table.th;
+const thead = table.thead;
 
-const statusTone: Record<string, string> = {
-  ok: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  running: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-  partial: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
-  failed: "bg-destructive/15 text-destructive",
-  error: "bg-destructive/15 text-destructive",
-  blocked: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
-  skipped: "bg-muted text-muted-foreground",
-  interrupted: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
+const statusTone: Record<string, Tone> = {
+  ok: "success", running: "route", partial: "caution", failed: "danger", error: "danger", blocked: "caution", skipped: "muted", interrupted: "caution",
 };
 
+/** A run status as a dot plus the status word (never colour alone). */
 export function JobStatusBadge({ status }: { status: string | null }) {
   return (
-    <span className={cn("inline-block whitespace-nowrap rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase", status ? statusTone[status] ?? "bg-muted text-muted-foreground" : "bg-muted text-muted-foreground")}>
-      {status ?? "never run"}
-    </span>
+    <StatusDot tone={status ? statusTone[status] ?? "muted" : "muted"} pulse={status === "running"} className="text-[11.5px] font-medium">
+      {status ? status.charAt(0).toUpperCase() + status.slice(1) : "Never run"}
+    </StatusDot>
   );
 }
 
@@ -48,8 +43,8 @@ function LastRun({ j }: { j: AdminJob }) {
 function RunButton({ j, running, onRun }: { j: AdminJob; running: string | null; onRun: (name: string) => void }) {
   return (
     <button onClick={() => onRun(j.name)} disabled={running != null}
-            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-border px-2.5 py-1.5 text-[11px] font-medium hover:bg-muted disabled:opacity-50">
-      {running === j.name ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />} Run now
+            className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-background px-3 text-[11.5px] font-medium ring-1 ring-border transition-colors hover:bg-muted disabled:opacity-50">
+      {running === j.name ? <Loader2 className="size-3 animate-spin" /> : <Play className="size-3" />} Run now
     </button>
   );
 }
@@ -77,7 +72,7 @@ export function BackgroundJobsPanel() {
   return (
     <div className="space-y-4">
       {result && (
-        <div className={cn("rounded-lg border p-3 text-xs", result.status === "ok" ? "border-emerald-500/30 bg-emerald-500/10" : "border-destructive/30 bg-destructive/10")}>
+        <div className={cn("rounded-2xl p-3 text-xs animate-in fade-in-0 slide-in-from-top-1 duration-200", result.status === "ok" ? "bg-success-tint" : "bg-destructive/10")}>
           <div className="font-semibold">{humanize(result.name)}: {result.status} after {result.attempts} attempt(s)</div>
           {result.error && <div className="mt-1 whitespace-pre-wrap break-words font-mono text-destructive">{result.error}</div>}
           {result.details != null && <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-muted-foreground">{JSON.stringify(result.details, null, 2)}</pre>}
@@ -86,15 +81,15 @@ export function BackgroundJobsPanel() {
       <div className={panel}>
         <div className={head}>
           <div>
-            <h3 className="text-sm font-semibold text-foreground">Background jobs ({list.length})</h3>
+            <h3 className="font-display text-[15px] font-bold text-heading">Background jobs <span className="readout ml-1 rounded-full bg-paper-sunk px-1.5 text-[11px] font-medium text-muted-foreground">{list.length}</span></h3>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {problems ? `${problems} need attention. ` : "No problems. "}
+              <StatusDot tone={problems ? "caution" : "success"} className="mr-1 font-medium text-foreground">{problems ? `${problems} need attention.` : "No problems."}</StatusDot>{" "}
               {never ? `${never} haven't run yet. ` : ""}
               Jobs missed while this machine was off run once, a few minutes after it starts.
             </p>
           </div>
-          <button onClick={() => void jobs.refetch()} className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-            <RefreshCw className={cn("h-3.5 w-3.5", jobs.isFetching && "animate-spin")} /> Refresh
+          <button onClick={() => void jobs.refetch()} className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+            <RefreshCw className={cn("size-3.5", jobs.isFetching && "animate-spin")} /> Refresh
           </button>
         </div>
         {jobs.isLoading && <div className="p-6"><Loader2 className="animate-spin" /></div>}
@@ -114,7 +109,7 @@ export function BackgroundJobsPanel() {
         </table>
 
         {/* Phones: one card per job. */}
-        <ul className="divide-y divide-border md:hidden">
+        <ul className="divide-y divide-border/70 border-t border-border/70 md:hidden">
           {list.map((j) => (
             <li key={j.name} className="space-y-2 p-4 text-xs">
               <div className="flex items-start justify-between gap-3">
@@ -141,7 +136,7 @@ function ErrorNote({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const short = text.length > 220 ? `${text.slice(0, 220).trimEnd()}…` : text;
   return (
-    <div className="rounded-md bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+    <div className="rounded-xl bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
       <span className="font-semibold">Last error: </span>
       <span className="whitespace-pre-wrap break-words font-mono">{open ? text : short}</span>
       {text.length > 220 && (
@@ -156,20 +151,20 @@ function ErrorNote({ text }: { text: string }) {
 function JobRows({ j, running, onRun }: { j: AdminJob; running: string | null; onRun: (name: string) => void }) {
   return (
     <>
-      <tr className={cn("align-top hover:bg-muted/20", !j.last_error && "border-b border-border")}>
-        <td className="px-4 py-3">
-          <div className="font-medium">{humanize(j.name)}</div>
+      <tr className={cn("align-top transition-colors hover:bg-paper-sunk/50", !j.last_error && "border-b border-border/70")}>
+        <td className="py-3 pr-4 pl-5">
+          <div className="font-medium text-heading">{humanize(j.name)}</div>
           <div className="text-muted-foreground">{j.description}</div>
           <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">{j.name} · {j.owner}</div>
         </td>
         <td className="break-words px-4 py-3 text-muted-foreground">{j.schedule}</td>
         <td className="px-4 py-3"><LastRun j={j} /></td>
-        <td className="px-4 py-3 text-muted-foreground">{j.last_ok_at ? formatDate(j.last_ok_at, true) : "—"}</td>
-        <td className="px-4 py-3 text-right"><RunButton j={j} running={running} onRun={onRun} /></td>
+        <td className="px-4 py-3 text-[12px] text-muted-foreground">{j.last_ok_at ? formatDate(j.last_ok_at, true) : "—"}</td>
+        <td className="py-3 pr-5 pl-4 text-right"><RunButton j={j} running={running} onRun={onRun} /></td>
       </tr>
       {j.last_error && (
-        <tr className="border-b border-border">
-          <td colSpan={5} className="px-4 pb-3 pt-0"><ErrorNote text={j.last_error} /></td>
+        <tr className="border-b border-border/70">
+          <td colSpan={5} className="px-5 pb-3 pt-0"><ErrorNote text={j.last_error} /></td>
         </tr>
       )}
     </>
@@ -193,61 +188,64 @@ export function ProductMetricsPanel() {
   const m = useProductMetrics(days);
   const d = m.data;
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-2 text-xs">
         <span className="text-muted-foreground">Period</span>
-        {[7, 30, 90].map((n) => (
-          <button key={n} onClick={() => setDays(n)} className={cn("rounded-md border px-2 py-1", days === n ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>{n} days</button>
-        ))}
+        <div role="group" aria-label="Period" className="inline-flex rounded-full bg-paper-sunk p-0.5 ring-1 ring-border/70">
+          {[7, 30, 90].map((n) => (
+            <button key={n} onClick={() => setDays(n)} aria-pressed={days === n}
+                    className={cn("rounded-full px-3 py-1 font-medium transition-colors duration-150", days === n ? "bg-card text-foreground shadow-[var(--shadow-raised)]" : "text-muted-foreground hover:text-foreground")}>{n} days</button>
+          ))}
+        </div>
       </div>
       {m.isLoading ? <Loader2 className="animate-spin" /> : !d ? <p className="text-sm text-destructive">{errorMessage(m.error)}</p> : (
         <>
           {d.note && <p className="text-xs text-muted-foreground">{d.note}</p>}
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <dl className="grid grid-cols-2 overflow-hidden rounded-2xl bg-card ring-1 ring-border sm:grid-cols-3 lg:grid-cols-5">
             {Object.entries(d.north_star).map(([k, v]) => (
-              <div key={k} className="rounded-xl border border-border bg-card p-4">
-                <div className="text-xs font-medium text-muted-foreground">{northStarLabels[k] ?? k.replaceAll("_", " ")}</div>
-                <div className="text-xl font-bold text-foreground mt-1 tabular-nums">{v == null ? "—" : k.endsWith("_pct") ? `${v}%` : v}</div>
+              <div key={k} className="px-4 py-3 shadow-[0_0_0_0.5px_var(--border)]">
+                <dt className="truncate text-xs font-medium text-muted-foreground">{northStarLabels[k] ?? k.replaceAll("_", " ")}</dt>
+                <dd className="readout mt-0.5 text-[20px] font-semibold text-heading">{v == null ? "—" : k.endsWith("_pct") ? `${v}%` : v}</dd>
               </div>
             ))}
-          </div>
-          <div className="grid gap-6 lg:grid-cols-2">
+          </dl>
+          <div className="grid gap-4 lg:grid-cols-2">
             <div className={panel}>
-              <div className={head}><h3 className="text-sm font-semibold">Events (last {d.days} days)</h3></div>
+              <div className={head}><h3 className="font-display text-[15px] font-bold text-heading">Events (last {d.days} days)</h3></div>
               <table className="w-full text-left text-xs">
                 <thead className={thead}><tr><th className={th}>Event</th><th className={`${th} text-right`}>Count</th><th className={`${th} text-right`}>Users</th><th className={`${th} text-right`}>Failed</th></tr></thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-border/70">
                   {Object.entries(d.events).map(([name, e]) => (
-                    <tr key={name} className="hover:bg-muted/20">
-                      <td className="px-4 py-2 font-mono">{name}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{e.count}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{e.users}</td>
-                      <td className={cn("px-4 py-2 text-right tabular-nums", e.failed > 0 && "text-destructive font-semibold")}>{e.failed}</td>
+                    <tr key={name} className="transition-colors hover:bg-paper-sunk/50">
+                      <td className="py-2 pr-4 pl-5 font-mono">{name}</td>
+                      <td className="px-4 py-2 text-right readout">{e.count}</td>
+                      <td className="px-4 py-2 text-right readout">{e.users}</td>
+                      <td className={cn("px-4 py-2 text-right readout", e.failed > 0 && "text-destructive font-semibold")}>{e.failed}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className={panel}>
-                <div className={head}><h3 className="text-sm font-semibold">AI costs</h3></div>
+                <div className={head}><h3 className="font-display text-[15px] font-bold text-heading">AI costs</h3></div>
                 {d.ai_costs.length === 0 ? <p className="p-4 text-xs text-muted-foreground">No AI calls in this period.</p> : (
                   <table className="w-full text-left text-xs">
                     <thead className={thead}><tr><th className={th}>Purpose</th><th className={`${th} text-right`}>Calls</th><th className={`${th} text-right`}>Cost (USD)</th></tr></thead>
-                    <tbody className="divide-y divide-border">
-                      {d.ai_costs.map((c) => <tr key={c.purpose}><td className="px-4 py-2">{c.purpose}</td><td className="px-4 py-2 text-right tabular-nums">{c.calls}</td><td className="px-4 py-2 text-right tabular-nums">${c.cost_usd.toFixed(4)}</td></tr>)}
-                      <tr className="font-semibold"><td className="px-4 py-2">Total</td><td className="px-4 py-2 text-right tabular-nums">{d.ai_costs.reduce((a, c) => a + c.calls, 0)}</td><td className="px-4 py-2 text-right tabular-nums">${d.ai_costs.reduce((a, c) => a + c.cost_usd, 0).toFixed(4)}</td></tr>
+                    <tbody className="divide-y divide-border/70">
+                      {d.ai_costs.map((c) => <tr key={c.purpose}><td className="px-4 py-2">{c.purpose}</td><td className="px-4 py-2 text-right readout">{c.calls}</td><td className="px-4 py-2 text-right readout">${c.cost_usd.toFixed(4)}</td></tr>)}
+                      <tr className="font-semibold"><td className="px-4 py-2">Total</td><td className="px-4 py-2 text-right readout">{d.ai_costs.reduce((a, c) => a + c.calls, 0)}</td><td className="px-4 py-2 text-right readout">${d.ai_costs.reduce((a, c) => a + c.cost_usd, 0).toFixed(4)}</td></tr>
                     </tbody>
                   </table>
                 )}
               </div>
               <div className={panel}>
-                <div className={head}><h3 className="text-sm font-semibold">Research feedback</h3></div>
+                <div className={head}><h3 className="font-display text-[15px] font-bold text-heading">Research feedback</h3></div>
                 {d.feedback.length === 0 ? <p className="p-4 text-xs text-muted-foreground">No feedback yet.</p> : (
                   <table className="w-full text-left text-xs">
                     <thead className={thead}><tr><th className={th}>Topic</th><th className={`${th} text-right`}>Responses</th><th className={`${th} text-right`}>Avg rating</th></tr></thead>
-                    <tbody className="divide-y divide-border">
-                      {d.feedback.map((f) => <tr key={f.topic}><td className="px-4 py-2">{f.topic.replaceAll("_", " ")}</td><td className="px-4 py-2 text-right tabular-nums">{f.responses}</td><td className="px-4 py-2 text-right tabular-nums">{f.average_rating ?? "—"}</td></tr>)}
+                    <tbody className="divide-y divide-border/70">
+                      {d.feedback.map((f) => <tr key={f.topic}><td className="px-4 py-2">{f.topic.replaceAll("_", " ")}</td><td className="px-4 py-2 text-right readout">{f.responses}</td><td className="px-4 py-2 text-right readout">{f.average_rating ?? "—"}</td></tr>)}
                     </tbody>
                   </table>
                 )}
@@ -262,9 +260,8 @@ export function ProductMetricsPanel() {
 
 function diskTone(pct: number): string {
   if (pct >= 90) return "bg-destructive";
-  if (pct >= 80) return "bg-orange-500";
-  if (pct >= 70) return "bg-amber-400";
-  return "bg-emerald-500";
+  if (pct >= 70) return "bg-caution";
+  return "bg-success";
 }
 
 export function SystemPanel() {
@@ -275,10 +272,10 @@ export function SystemPanel() {
   const b = d.backup;
   const known = b.status !== "unknown" && b.status !== "unreadable";
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+    <div className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-2xl bg-card p-5 ring-1 ring-border space-y-3">
         <div className="flex items-center justify-between text-xs font-medium text-muted-foreground"><span>Disk used</span><HardDrive className="h-4 w-4" /></div>
-        <div className="text-2xl font-bold tabular-nums">{d.disk.used_percent}%</div>
+        <div className="readout text-[26px] font-semibold text-heading">{d.disk.used_percent}%</div>
         <div className="h-2 overflow-hidden rounded-full bg-muted"><div className={cn("h-full rounded-full", diskTone(d.disk.used_percent))} style={{ width: `${Math.min(100, d.disk.used_percent)}%` }} /></div>
         <p className="text-xs text-muted-foreground">
           {d.disk.free_gb} GB free.{" "}
@@ -287,15 +284,15 @@ export function SystemPanel() {
               : d.disk.used_percent >= 70 ? "Warning: keep an eye on it." : "Healthy."}
         </p>
       </div>
-      <div className="rounded-xl border border-border bg-card p-5 space-y-2">
+      <div className="rounded-2xl bg-card p-5 ring-1 ring-border space-y-2">
         <div className="text-xs font-medium text-muted-foreground">Last backup</div>
         <div className="flex items-center gap-2"><JobStatusBadge status={b.status} />{b.at && <span className="text-sm">{formatBackupTime(b.at)}</span>}</div>
         {known ? (
           <dl className="grid grid-cols-[10rem_1fr] gap-y-1 text-xs">
             {b.folder && <><dt className="text-muted-foreground">Folder</dt><dd className="font-mono">{b.folder}</dd></>}
             {b.size_kb != null && <><dt className="text-muted-foreground">Size</dt><dd>{(b.size_kb / 1024).toFixed(1)} MB</dd></>}
-            {b.encrypted != null && <><dt className="text-muted-foreground">Encrypted</dt><dd className={cn(!b.encrypted && "text-amber-700 dark:text-amber-300")}>{b.encrypted ? "Yes" : "No (set BACKUP_PASSPHRASE)"}</dd></>}
-            {b.offhost != null && <><dt className="text-muted-foreground">Copied off this machine</dt><dd className={cn(b.offhost !== "yes" && "text-amber-700 dark:text-amber-300")}>{b.offhost === "yes" ? "Yes" : "No (only on this machine)"}</dd></>}
+            {b.encrypted != null && <><dt className="text-muted-foreground">Encrypted</dt><dd className={cn(!b.encrypted && "font-medium text-caution")}>{b.encrypted ? "Yes" : "No (set BACKUP_PASSPHRASE)"}</dd></>}
+            {b.offhost != null && <><dt className="text-muted-foreground">Copied off this machine</dt><dd className={cn(b.offhost !== "yes" && "font-medium text-caution")}>{b.offhost === "yes" ? "Yes" : "No (only on this machine)"}</dd></>}
             {b.error && <><dt className="text-muted-foreground">Error</dt><dd className="font-mono text-destructive">{b.error}</dd></>}
           </dl>
         ) : (

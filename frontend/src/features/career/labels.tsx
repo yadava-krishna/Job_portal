@@ -1,44 +1,40 @@
-import { Check } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, ChevronsUp, ChevronUp, Circle, CircleDashed, CircleDot, CircleHelp, CircleMinus, Clock, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Chip } from "@/features/growth/ui";
 import { SKILL_STATES, stateLabel } from "./format";
 import type { Eligibility, SkillState } from "./types";
 
-const pill = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset";
-const green = "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900";
-const red = "bg-rose-50 text-rose-800 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:ring-rose-900";
-const amber = "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900";
-const sky = "bg-sky-50 text-sky-800 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-200 dark:ring-sky-900";
-const muted = "bg-muted text-muted-foreground ring-border";
-
 /** pass / fail / unknown. Anything that is not an explicit pass or fail is shown as "unknown", never as a pass. */
 export function EligibilityBadge({ value }: { value: Eligibility | string | undefined }) {
-  if (value === "pass") return <span className={cn(pill, green)} title="You meet the job's hard requirements">Eligible</span>;
-  if (value === "fail") return <span className={cn(pill, red)} title="A hard requirement isn't met">Not eligible</span>;
-  return <span className={cn(pill, muted)} title="We couldn't confirm eligibility from the posting">unknown</span>;
+  if (value === "pass") return <Chip tone="success" icon={<CheckCircle2 />} title="You meet the job's hard requirements">Eligible</Chip>;
+  if (value === "fail") return <Chip tone="danger" icon={<XCircle />} title="A hard requirement isn't met">Not eligible</Chip>;
+  return <Chip tone="muted" icon={<CircleHelp />} title="We couldn't confirm eligibility from the posting">unknown</Chip>;
 }
 
+/** How much closing a gap would help. The arrow icon carries the level, so it reads without colour. */
 export function SeverityBadge({ severity }: { severity: string }) {
-  const map: Record<string, [string, string]> = { high: ["High impact", red], medium: ["Medium impact", amber], low: ["Low impact", muted] };
-  const [label, cls] = map[severity] ?? [severity, muted];
-  return <span className={cn(pill, cls)}>{label}</span>;
+  if (severity === "high") return <Chip tone="coral" icon={<ChevronsUp />}>High impact</Chip>;
+  if (severity === "medium") return <Chip tone="caution" icon={<ChevronUp />}>Medium impact</Chip>;
+  if (severity === "low") return <Chip tone="muted" icon={<ChevronDown />}>Low impact</Chip>;
+  return <Chip tone="muted">{severity}</Chip>;
 }
 
 export function GapStatusBadge({ status }: { status: string }) {
-  const map: Record<string, [string, string]> = {
-    open: ["Not started", muted], in_progress: ["In progress", sky], closed: ["Closed", green], ignored: ["Set aside", muted],
-  };
-  const [label, cls] = map[status] ?? [status, muted];
-  return <span className={cn(pill, cls)}>{label}</span>;
+  if (status === "open") return <Chip tone="muted" icon={<Circle />}>Not started</Chip>;
+  if (status === "in_progress") return <Chip tone="route" icon={<CircleDot />}>In progress</Chip>;
+  if (status === "closed") return <Chip tone="success" icon={<CheckCircle2 />}>Closed</Chip>;
+  if (status === "ignored") return <Chip tone="muted" icon={<CircleMinus />}>Set aside</Chip>;
+  return <Chip tone="muted">{status}</Chip>;
 }
 
 export function ConfidenceBadge({ confidence }: { confidence: string }) {
-  if (confidence === "verified") return <span className={cn(pill, green)}>Checked by a person</span>;
-  if (confidence === "stale") return <span className={cn(pill, amber)}>Needs review</span>;
-  return <span className={cn(pill, muted)}>Not yet checked by a person</span>;
+  if (confidence === "verified") return <Chip tone="success" icon={<CheckCircle2 />}>Checked by a person</Chip>;
+  if (confidence === "stale") return <Chip tone="caution" icon={<Clock />}>Needs review</Chip>;
+  return <Chip tone="muted" icon={<CircleDashed />}>Not yet checked by a person</Chip>;
 }
 
 export function FreeBadge() {
-  return <span className={cn(pill, green)}>Free</span>;
+  return <Chip tone="route">Free</Chip>;
 }
 
 /** The six-step skill progression with the current step highlighted. */
@@ -53,16 +49,16 @@ export function StateStepper({ state, supports }: { state: SkillState; supports?
             aria-current={i === current ? "step" : undefined}
             title={i <= ceiling ? "Your evidence supports this step" : undefined}
             className={cn(
-              "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium",
-              i < current && "bg-primary/10 text-primary",
-              i === current && "bg-primary text-primary-foreground",
-              i > current && "bg-muted text-muted-foreground",
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors duration-200",
+              i < current && "bg-route-tint text-route",
+              i === current && "bg-route text-primary-foreground",
+              i > current && (i <= ceiling ? "bg-lavender text-violet" : "bg-muted text-muted-foreground"),
             )}
           >
-            {i < current && <Check className="size-3" />}
+            {i < current && <Check className="size-3" aria-hidden />}
             {s.label}
           </span>
-          {i < SKILL_STATES.length - 1 && <span className="h-px w-2 bg-border" aria-hidden />}
+          {i < SKILL_STATES.length - 1 && <span className={cn("h-px w-2", i < current ? "bg-route/40" : "bg-border")} aria-hidden />}
         </li>
       ))}
     </ol>
