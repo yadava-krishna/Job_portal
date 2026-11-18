@@ -46,13 +46,13 @@ export function ExtensionSettings() {
         <CardContent className="space-y-4 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" render={<a href={`${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.0.0.zip`} download />}>
-              <Download /> Download the extension (.zip, 67 KB)
+              <Download /> Download the extension (.zip, 69 KB)
             </Button>
             <span className="text-xs text-muted-foreground">Version 2.0.0 · Chrome, Edge or Brave</span>
           </div>
           <ol className="list-decimal space-y-1 pl-5 text-muted-foreground" data-testid="extension-install-steps">
-            <li>Download the .zip above and unzip it into a folder you will keep (Chrome loads it from there every time).</li>
-            <li>Open <span className="font-mono text-foreground">chrome://extensions</span>, switch on <strong className="text-foreground">Developer mode</strong> (top right), click <strong className="text-foreground">Load unpacked</strong> and choose the unzipped folder.</li>
+            <li>Unzip the download (right-click it → <strong className="text-foreground">Extract Here</strong>). You get a folder called <strong className="text-foreground">JobPilot-Smart-Apply</strong>; keep it somewhere you won't delete, because Chrome loads the extension from it every time.</li>
+            <li>Open <span className="font-mono text-foreground">chrome://extensions</span>, switch on <strong className="text-foreground">Developer mode</strong> (top right), click <strong className="text-foreground">Load unpacked</strong> and select the <strong className="text-foreground">JobPilot-Smart-Apply</strong> folder itself (not the .zip, and not your Downloads folder).</li>
             <li>Pin <strong className="text-foreground">JobPilot Smart Apply</strong> from the puzzle-piece menu.</li>
             <li>Create a connection code below and type it into the extension within 5 minutes. The code works once; the browser stays connected for 90 days, or until you disconnect it here.</li>
           </ol>
