@@ -227,6 +227,9 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
         check("credential is not in chrome.storage (content scripts cannot reach it)", "jpx_" not in json.dumps(storage))
         setup.close()
 
+        # ---- one click from JobPilot: the web app hands a job to the extension, which opens and fills the form ----
+        one_click_from_jobpilot(ctx, sw, ext_id, c, H, seed, submissions)
+
         # ---- per platform (offline copies) ---------------------------------------------------------
         for ats in ("lever", "greenhouse", "ashby"):
             job = seed["jobs"][ats]
@@ -313,6 +316,61 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
         if args.live:
             run_live(ctx, sw, ext_id, c, H, submissions)
         ctx.close()
+
+
+APP_PAGE = """<!doctype html><html><body><h1>JobPilot (test copy)</h1><script>
+window.ext = (msg) => new Promise((resolve) => {
+  if (!window.chrome || !chrome.runtime || !chrome.runtime.sendMessage) return resolve({ unavailable: true });
+  chrome.runtime.sendMessage("%s", msg, (r) => { void chrome.runtime.lastError; resolve(r || null); });
+});
+</script></body></html>"""
+
+
+def one_click_from_jobpilot(ctx, sw, ext_id, c, H, seed, submissions) -> None:
+    """The JobPilot site (served here at http://localhost:3080, one of the allowed origins) asks the extension to apply.
+    The form opens in a new tab and fills itself; nothing is submitted; other sites cannot ask."""
+    ctx.route("http://localhost:3080/**", lambda route, _r: route.fulfill(status=200, content_type="text/html", body=APP_PAGE % ext_id))
+    ctx.route("https://evil.example/**", lambda route, _r: route.fulfill(status=200, content_type="text/html", body=APP_PAGE % ext_id))
+    job = seed["jobs"]["ashby"]
+    app_page = ctx.new_page()
+    app_page.goto("http://localhost:3080/Job_portal/")
+    ping = app_page.evaluate("() => window.ext({type: 'ping'})")
+    check("one-click: JobPilot sees Smart Apply installed and connected", bool(ping and ping.get("ok") and ping["data"]["connected"]), str(ping))
+    bad = app_page.evaluate("() => window.ext({type: 'apply', url: 'https://www.linkedin.com/jobs/view/1', userJobId: 1})")
+    check("one-click: a LinkedIn address is refused", bool(bad) and not bad.get("ok") and "Greenhouse, Lever and Ashby" in (bad.get("error") or ""), str(bad))
+    with ctx.expect_page(timeout=15000) as opened:
+        res = app_page.evaluate("(a) => window.ext({type: 'apply', url: a.url, userJobId: a.id})", {"url": job["url"], "id": job["user_job_id"]})
+    form = opened.value
+    try:
+        form.wait_for_url("**/application", timeout=15000)
+    except Exception:
+        pass
+    check("one-click: the extension opens the application form (posting address → its /application page)",
+          bool(res and res.get("ok")) and form.url.rstrip("/").endswith("/application"), f"{res} {form.url}")
+    filled = False
+    for _ in range(40):
+        filled = form.evaluate("() => document.getElementById('_systemfield_email')?.value") == "test.candidate@example.com" \
+            and form.evaluate("() => !!document.querySelector('jobpilot-review')")
+        if filled:
+            break
+        form.wait_for_timeout(500)
+    check("one-click: the form fills itself and the review panel opens, with no popup click", filled,
+          json.dumps(form.evaluate("() => ({email: document.getElementById('_systemfield_email')?.value, panel: !!document.querySelector('jobpilot-review')})")))
+    shots = os.environ.get("E2E_SHOTS")
+    if shots:
+        form.set_viewport_size({"width": 1366, "height": 860})
+        form.wait_for_timeout(400)
+        form.screenshot(path=f"{shots}/one-click-filled.png")
+    apps = c.get("/applications", headers=H).json()
+    app = next((a for a in apps if a["user_job_id"] == job["user_job_id"]), None)
+    check("one-click: tracked as in progress, never as applied", bool(app) and app["status"] == "OPENED", str(app)[:200])
+    check("one-click: nothing was submitted", not submissions, "; ".join(submissions))
+    other = ctx.new_page()
+    other.goto("https://evil.example/")
+    r = other.evaluate("() => window.ext({type: 'ping'})")
+    check("one-click: any other website cannot talk to the extension", bool(r) and (r.get("unavailable") or not r.get("ok")), str(r))
+    for pg in (other, form, app_page):
+        pg.close()
 
 
 def assisted_submit(page, pop, c, H, app, allow_post, assisted_posts) -> None:

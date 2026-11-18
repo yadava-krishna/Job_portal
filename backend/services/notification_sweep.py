@@ -217,6 +217,29 @@ def closed_listings(db: Session, now: datetime | None = None, ctx: _Ctx | None =
 
 # ---------------- failed discovery runs ----------------
 
+def failure_reason(run: DiscoveryRun) -> str:
+    """Why a run failed, in words a user can act on. Never the progress line a run had when it stopped
+    ("Fetching job listings: X (20 of 206)…"), and never a raw exception."""
+    errs = [e for e in (run.error_details or []) if isinstance(e, dict)]
+    types = {str(e.get("type") or "") for e in errs}
+    boards = []
+    for e in errs:
+        if e.get("type") == "BOARD_FETCH_FAILED":
+            name = str(e.get("message") or "").split(" (", 1)[0].split(":", 1)[0].strip()
+            if name and name not in boards:
+                boards.append(name)
+    if "INTERRUPTED" in types:
+        why = "It was cut short when JobPilot restarted."
+    elif boards and types <= {"BOARD_FETCH_FAILED"} | set(discovery_service.WARNING_ERRORS):
+        shown = ", ".join(boards[:3]) + (f" and {len(boards) - 3} more" if len(boards) > 3 else "")
+        why = f"{len(boards)} job {'board' if len(boards) == 1 else 'boards'} didn't answer ({shown})."
+    elif run.summary and not run.summary.rstrip().endswith("…") and run.summary.strip() != "Discovery could not run.":
+        why = run.summary  # a finished run's own plain-language summary
+    else:
+        why = "Something went wrong on our side."
+    return why + " Your earlier matches are safe."
+
+
 def failed_discovery_runs(db: Session, now: datetime | None = None, ctx: _Ctx | None = None) -> int:
     """One alert per failed run. Runs cut off by a restart are marked failed at the next start-up
     (saved_search_service.mark_interrupted) and are alerted then; runs still marked running are left alone."""
@@ -227,13 +250,10 @@ def failed_discovery_runs(db: Session, now: datetime | None = None, ctx: _Ctx | 
     for run in rows.scalars():
         if discovery_service.nothing_configured(run):
             continue  # e.g. the daily run when no alert mailbox or Adzuna key is set up: a setup gap, not a failure
-        reason = run.summary
-        if not reason:
-            msgs = [e.get("message") for e in (run.error_details or []) if isinstance(e, dict) and e.get("message")]
-            reason = msgs[0] if msgs else "Discovery could not run."
+        reason = failure_reason(run)
         scheduled = run.trigger in ("scheduled", "catch_up")
         title = "Your scheduled job search couldn't run" if scheduled else "A job search couldn't run"
-        body = f"{reason[:280]} Check Source health, then run it again."
+        body = f"{reason[:280]} Try running it again; if it keeps failing, check Source health."
         if c.notify(run.user_id, "discovery_failed", title, body, "/searches?tab=sources", f"discovery_failed:{run.id}"):
             created += 1
     return created

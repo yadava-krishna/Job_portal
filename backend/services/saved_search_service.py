@@ -433,10 +433,10 @@ def _adzuna_items(db: Session, settings: BackendSettings, user: User, run: Disco
     discovery_service.source_result(run, "adzuna_api")
     if client is None and not settings.adzuna_enabled:
         discovery_service._error(db, user, run, "ADZUNA_NOT_CONFIGURED",
-                                 "Adzuna is not configured on this server (ADZUNA_APP_ID / ADZUNA_APP_KEY in .env).", platform="Adzuna",
+                                 "Adzuna isn't set up on this server yet, so it was skipped. Ask whoever runs JobPilot to add an Adzuna API key.", platform="Adzuna",
                                  recovery="CONFIGURE_ADZUNA")
         discovery_service.source_result(run, "adzuna_api", status="not_configured",
-                                        message="Adzuna API credentials are not configured on this server (ADZUNA_APP_ID / ADZUNA_APP_KEY).")
+                                        message="Adzuna isn't set up on this server yet, so it was skipped. Ask whoever runs JobPilot to add an Adzuna API key.")
         return []
     client = client or AdzunaClient(settings.adzuna_app_id, settings.adzuna_app_key, settings.adzuna_country)  # type: ignore[arg-type]
     if not crit.titles:

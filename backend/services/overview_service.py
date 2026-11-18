@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.models import Application, CandidateProfile, DiscoveryRun, Job, JobPreference, JobView, Resume, User, UserJob, utcnow
@@ -42,6 +42,7 @@ def new_jobs(db: Session, user: User, now) -> dict[str, Any]:
     rows = db.execute(select(UserJob).join(Job, Job.id == UserJob.job_id)
                       .where(UserJob.user_id == user.id, UserJob.status.in_(["new", "shortlisted"]), UserJob.discovered_at >= since,
                              UserJob.match_score >= min_score, Job.closed_at.is_(None), Job.is_expired.is_(False),
+                             or_(UserJob.eligibility.is_(None), UserJob.eligibility != "fail"),
                              UserJob.job_id.not_in(viewed))
                       .order_by(UserJob.match_score.desc(), UserJob.discovered_at.desc())).unique().scalars().all()
     return {"count": len(rows), "min_score": min_score, "days": NEW_JOB_DAYS, "top": [_job_row(u, now) for u in rows[:TOP]]}

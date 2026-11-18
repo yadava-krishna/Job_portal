@@ -146,7 +146,17 @@ class JobMatcher:
         cy = self.candidate_years
         lo, hi = job.exp_min_years, job.exp_max_years
         if lo is None and hi is None:
-            return 70.0, f"experience requirement not stated; candidate has {cy:.1f} years", ""
+            level = entry_level(job)
+            if level is None:
+                return 70.0, f"experience requirement not stated; candidate has {cy:.1f} years", ""
+            # An internship or graduate role states no years but is aimed at 0-1 / 0-2 years: an experienced candidate
+            # is a weak fit for it (the floor is lower than for a stated range because the gap is usually large).
+            top = 1.0 if level == "internship" else 2.0
+            if cy <= top:
+                return 100.0, f"{level} role (no years stated); candidate has {cy:.1f}", ""
+            over = cy - top
+            return (max(20.0, 100 - over * 15), f"{level} role (no years stated, about 0-{top:g}); candidate has {cy:.1f}",
+                    f"{over:.1f} years more than an {level} role usually expects")
         lo = lo or 0
         if cy + 1e-9 < lo:
             gap = lo - cy
@@ -409,3 +419,15 @@ def _recommendation(category: str, missing: list[str], gap: str) -> str:
     if gap:
         rec += f" Experience: {gap}."
     return rec
+
+
+_ENTRY_TITLE = re.compile(r"(?<![a-z])(intern|internship|apprentice|apprenticeship|trainee|graduate|fresher|new grad|entry[- ]level)(?![a-z])", re.I)
+
+
+def entry_level(job: JobPosting) -> str | None:
+    """'internship' | 'entry-level' when the job is clearly for people starting out, else None."""
+    if (job.employment_type or "").lower() == "internship" or re.search(r"(?<![a-z])(intern|internship|apprentice|apprenticeship)(?![a-z])", job.title or "", re.I):
+        return "internship"
+    if _ENTRY_TITLE.search(job.title or ""):
+        return "entry-level"
+    return None

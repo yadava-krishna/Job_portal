@@ -318,7 +318,8 @@ def summarize(run: DiscoveryRun) -> str | None:
     if not results:
         return None
     ran = {k: e for k, e in results.items() if e["status"] in RAN}
-    notes = [f"{e['label']}: {e['message']}" for e in results.values() if e["status"] not in ("ok", "empty") and e.get("message")]
+    notes = [f"{e['label']}: {e['message']}" for e in results.values() if e["status"] not in ("ok", "empty") and e.get("message")
+             and (e["status"] != "not_configured" or not ran)]  # "not set up" is noise once another source ran
     if run.status == "failed" and not ran:
         return "Discovery could not run. " + " ".join(notes) if notes else "Discovery could not run."
     found = sum(e.get("found", 0) for e in ran.values())
@@ -582,9 +583,9 @@ def legacy_sources(db: Session, settings: BackendSettings, user: User, run: Disc
         adz = enabled.get(preference_service.ADZUNA)
         if not settings.adzuna_enabled and adzuna_client is None:
             source_result(run, "adzuna_api", status="not_configured",
-                          message="Adzuna API credentials are not configured on this server (ADZUNA_APP_ID / ADZUNA_APP_KEY).")
+                          message="Adzuna isn't set up on this server yet, so it was skipped. Ask whoever runs JobPilot to add an Adzuna API key.")
             if adz and adz.enabled:
-                _error(db, user, run, "ADZUNA_NOT_CONFIGURED", "Adzuna is not configured on this server.", platform="Adzuna")
+                _error(db, user, run, "ADZUNA_NOT_CONFIGURED", "Adzuna isn't set up on this server yet, so it was skipped. Ask whoever runs JobPilot to add an Adzuna API key.", platform="Adzuna")
         elif not (adz and adz.enabled):
             source_result(run, "adzuna_api", status="disabled", message="Adzuna is turned off in your Settings → Platforms.")
         else:

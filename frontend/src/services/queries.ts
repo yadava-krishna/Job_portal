@@ -96,6 +96,8 @@ export interface JobQuery {
   sponsorship?: ("verified" | "inferred" | "none" | "unknown")[];
   eligibility?: ("pass" | "fail" | "unknown")[];
   sort?: "score" | "posted" | "discovered";
+  /** jobs: everything except internships; internships: only internships. */
+  kind?: "all" | "jobs" | "internships";
   page?: number;
   page_size?: number;
 }

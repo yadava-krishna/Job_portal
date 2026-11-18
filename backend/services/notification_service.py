@@ -101,6 +101,8 @@ def notify_new_match(db: Session, user: User, uj: UserJob, source: str | None = 
     job = uj.job
     if not p["new_matches"]:
         return None
+    if uj.eligibility == "fail":  # a high score on a job you are ruled out of is not news
+        return None
     if p["min_score"] is not None and (uj.match_score is None or uj.match_score < p["min_score"]):
         return None
     if p["sources"] and (source or job.source) not in p["sources"]:

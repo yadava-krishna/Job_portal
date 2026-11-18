@@ -145,3 +145,25 @@ def test_cover_letter_verification(profile):
     assert method.startswith("template")
     tpl = template_cover_letter(j, profile, None)
     assert "Acme Health" in tpl and not verify_letter(tpl, j, profile)
+
+
+def test_internship_and_entry_level_roles_weigh_experience(settings, profile, taxonomy):
+    m = JobMatcher(settings.matching, settings.search, profile, taxonomy)
+    plain = m.years_fit(job(exp_min_years=None, exp_max_years=None))
+    assert plain[0] == 70 and plain[2] == ""
+    m.candidate_years = 5.9
+    intern = m.years_fit(job(title="Engineering Intern – Gen AI for FP&A", exp_min_years=None, exp_max_years=None))
+    assert intern[0] == 100 - (5.9 - 1) * 15 and "internship" in intern[1] and "years more" in intern[2]
+    by_type = m.years_fit(job(title="Finance Associate", employment_type="Internship", exp_min_years=None, exp_max_years=None))
+    assert by_type[0] == intern[0]
+    m.candidate_years = 12
+    assert m.years_fit(job(title="Finance Intern", exp_min_years=None, exp_max_years=None))[0] == 20  # floor
+    m.candidate_years = 5.9
+    grad = m.years_fit(job(title="Graduate Analyst", exp_min_years=None, exp_max_years=None))
+    assert grad[0] == max(20.0, 100 - (5.9 - 2) * 15) and "entry-level" in grad[1]
+    # words that only contain "intern" are not internships; a stated range always wins
+    assert m.years_fit(job(title="Internal Audit Manager", exp_min_years=None, exp_max_years=None))[0] == 70
+    assert m.years_fit(job(title="International Tax Lead", exp_min_years=None, exp_max_years=None))[0] == 70
+    assert m.years_fit(job(title="Graduate Programme Lead", exp_min_years=5, exp_max_years=8))[0] == 100
+    m.candidate_years = 0.5
+    assert m.years_fit(job(title="Finance Intern", exp_min_years=None, exp_max_years=None))[0] == 100

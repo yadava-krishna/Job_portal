@@ -76,3 +76,21 @@ export const CONTENT_FILES = [
   "src/content/adapters/generic.js",
   "src/content/panel.js",
 ];
+
+// The JobPilot web app may ask the extension (externally_connectable) to check that it is connected, and to open
+// one job's application form and fill it. Nothing else; it never receives profile data back.
+export const APP_ORIGINS = ["https://yadava-krishna.github.io", "http://localhost:3080", "http://127.0.0.1:3080"];
+
+/** The application-form address for a listing on Greenhouse, Lever or Ashby (Lever and Ashby keep the form on a
+ *  sub-page of the posting), or null for any other site. */
+export function formUrl(value) {
+  let u;
+  try { u = new URL(String(value || "")); } catch { return null; }
+  const p = platformForUrl(u.href);
+  if (!p?.builtin || u.username || u.password) return null;
+  u.hash = "";
+  const parts = u.pathname.split("/").filter(Boolean);
+  if (p.id === "lever" && parts.length === 2) u.pathname = `/${parts.join("/")}/apply`;
+  if (p.id === "ashby" && parts.length === 2) u.pathname = `/${parts.join("/")}/application`;
+  return u.toString();
+}

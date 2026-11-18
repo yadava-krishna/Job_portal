@@ -7,7 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, case, cast, func, or_, select
 
 from backend.api import serializers
 from backend.api.deps import CurrentUser, DbSession, SettingsDep
@@ -133,6 +133,7 @@ def list_jobs(
     sponsorship: list[Literal["verified", "inferred", "none", "unknown"]] | None = Query(None, description="Visa sponsorship signal from the posting"),
     eligibility: list[Literal["pass", "fail", "unknown"]] | None = Query(None),
     application_status: list[Literal["none", "PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"]] | None = Query(None),
+    kind: Literal["all", "jobs", "internships"] = Query("all", description="jobs: everything except internships; internships: only internships"),
     sort: Literal["score", "posted", "discovered"] = "score",
     group_similar: bool = Query(True, description="Feed only: show one card per role when the same company lists the same "
                                                   "title more than once (other cities, re-posts); the rest are listed on the card"),
@@ -230,6 +231,10 @@ def list_jobs(
         stmt = stmt.where(func.lower(Job.industry) == industry.lower())
     if employment_type:
         stmt = stmt.where(Job.employment_type.in_(employment_type))
+    if kind == "internships":
+        stmt = stmt.where(Job.employment_type == "Internship")
+    elif kind == "jobs":
+        stmt = stmt.where(or_(Job.employment_type.is_(None), Job.employment_type != "Internship"))
     if company:
         stmt = stmt.where(func.lower(Job.company).like(f"%{company.lower()}%"))
     if saved_search_id is not None:
@@ -249,7 +254,8 @@ def list_jobs(
         stmt = _one_per_role(stmt)
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     order = {
-        "score": (UserJob.match_score.desc().nullslast(), UserJob.id.desc()),
+        # Best match: jobs you are not eligible for come after all others, however well they score.
+        "score": (case((UserJob.eligibility == "fail", 1), else_=0), UserJob.match_score.desc().nullslast(), UserJob.id.desc()),
         "posted": (Job.posted_at.desc().nullslast(), UserJob.id.desc()),
         "discovered": (UserJob.discovered_at.desc(), UserJob.id.desc()),
     }[sort]

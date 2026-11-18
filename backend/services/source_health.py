@@ -134,7 +134,7 @@ def overview(db: Session, settings: BackendSettings, user: User) -> SourcesOverv
     adz_used = any("adzuna_api" in c.sources for _, c in enabled_searches) or bool(adz_pref and adz_pref.enabled)
     r = reg.get("adzuna_api")
     if not settings.adzuna_enabled:
-        adz_missing, adz_conn = "Server credentials are missing: set ADZUNA_APP_ID and ADZUNA_APP_KEY in the backend's .env and restart it.", "not_configured"
+        adz_missing, adz_conn = "Not set up on this server yet. Ask whoever runs JobPilot to add an Adzuna API key (see OWNER_GUIDE.md).", "not_configured"
     elif not adz_used:
         adz_missing, adz_conn = "Turn on Adzuna in Settings → Platforms or in a saved search.", "disabled"
     else:

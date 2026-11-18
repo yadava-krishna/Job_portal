@@ -165,3 +165,64 @@ def test_overlong_fields_are_trimmed_and_a_bad_listing_never_fails_the_run(clien
     titles = {i["job"]["title"]: i["job"] for i in client.get(f"{API}/jobs", headers=h, params={"page_size": 100}).json()["items"]}
     assert "Accounts Receivable Analyst" in titles and "Accounts Receivable Executive" not in titles
     assert len(titles["Accounts Receivable Analyst"]["salary_range"] or "") <= 100
+
+
+def test_ineligible_jobs_rank_last_and_never_count_as_new_matches(client, boards, resume_bytes):
+    from backend.db import session_factory
+    from backend.models import User, UserJob, utcnow
+    from backend.services import notification_service, overview_service
+
+    h = onboard(client, "elig@example.com", resume_bytes)
+    for url in ("https://job-boards.greenhouse.io/acmefintech", "https://jobs.lever.co/betapay", "https://jobs.ashbyhq.com/gammaco"):
+        client.post(f"{API}/companies/watchlist", headers=h, json={"url": url})
+    _run(client, h)
+    items = client.get(f"{API}/jobs", headers=h, params={"page_size": 100}).json()["items"]
+    assert len(items) >= 2
+    best = items[0]["user_job_id"]
+    with session_factory()() as db:
+        uj = db.get(UserJob, best)
+        uj.eligibility, uj.match_score = "fail", 99.0
+        db.commit()
+    again = client.get(f"{API}/jobs", headers=h, params={"page_size": 100}).json()["items"]
+    flags = [i["eligibility"] == "fail" for i in again]
+    assert again[0]["user_job_id"] != best and best in [i["user_job_id"] for i in again]
+    assert flags == sorted(flags)  # every eligible or unknown job comes before any job you are not eligible for
+    with session_factory()() as db:
+        uj = db.get(UserJob, best)
+        owner = db.get(User, uj.user_id)
+        assert notification_service.notify_new_match(db, owner, uj, "greenhouse") is None
+        ids = [r["user_job_id"] for r in overview_service.new_jobs(db, owner, utcnow())["top"]]
+        assert best not in ids
+
+
+def test_internships_are_recognised_and_listed_apart_from_jobs(client, boards, resume_bytes):
+    from types import SimpleNamespace
+
+    from backend.db import session_factory
+    from backend.models import Job, UserJob
+    from backend.services.normalization import is_internship_title, normalize_facts
+
+    for t in ("Finance Intern", "Summer Internship 2026", "Operations Associate, Apprenticeship", "Interns - FP&A"):
+        assert is_internship_title(t), t
+    for t in ("Internal Audit Manager", "International Tax Lead", "Accounts Receivable Analyst", None, ""):
+        assert not is_internship_title(t), t
+    job = SimpleNamespace(title="Engineering Intern", employment_type="Full-time", location="Remote", work_mode="Remote", country=None,
+                          salary_range=None, salary_min_lpa=None, salary_max_lpa=None)
+    assert normalize_facts(job).employment_type == "Internship"  # boards often label internships Full-time
+
+    h = onboard(client, "kinds@example.com", resume_bytes)
+    for url in ("https://job-boards.greenhouse.io/acmefintech", "https://jobs.lever.co/betapay", "https://jobs.ashbyhq.com/gammaco"):
+        client.post(f"{API}/companies/watchlist", headers=h, json={"url": url})
+    _run(client, h)
+    every = client.get(f"{API}/jobs", headers=h, params={"page_size": 100, "view": "all", "group_similar": False}).json()
+    assert every["total"] >= 2
+    intern_id = every["items"][0]["user_job_id"]
+    with session_factory()() as db:
+        db.get(Job, db.get(UserJob, intern_id).job_id).employment_type = "Internship"
+        db.commit()
+    params = {"page_size": 100, "view": "all", "group_similar": False}
+    jobs = client.get(f"{API}/jobs", headers=h, params={**params, "kind": "jobs"}).json()
+    interns = client.get(f"{API}/jobs", headers=h, params={**params, "kind": "internships"}).json()
+    assert [i["user_job_id"] for i in interns["items"]] == [intern_id]
+    assert intern_id not in [i["user_job_id"] for i in jobs["items"]]
+    assert jobs["total"] + interns["total"] == every["total"]

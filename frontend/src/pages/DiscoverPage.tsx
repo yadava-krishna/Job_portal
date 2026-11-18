@@ -24,7 +24,7 @@ const PLATFORMS = ["LinkedIn", "Indeed", "Naukri", "Greenhouse", "Lever", "Ashby
 const POSTED: [NonNullable<JobQuery["posted"]>, string][] = [
   ["any", "Any date"], ["today", "Posted today"], ["24h", "24 hours"], ["3d", "3 days"], ["7d", "7 days"], ["30d", "30 days"], ["range", "Date range"],
 ];
-const EMPTY_QUERY: JobQuery = { view: "feed", posted: "any", sort: "score", platform: [] };
+const EMPTY_QUERY: JobQuery = { view: "feed", posted: "any", sort: "score", platform: [], kind: "jobs" };
 
 /** Shared list + JD sheet + apply dialog, used by Discover and Saved. */
 export function JobWorkspace({ query, emptyTitle, emptyBody, toolbar, empty, initialDetailId = null, onShowUnknownDates }: {
@@ -188,8 +188,10 @@ export function DiscoverPage() {
     return g;
   }, [links.data]);
 
+  const setKind = (kind: "jobs" | "internships") => { const next = { ...draft, kind }; setDraft(next); setQuery({ ...next, page: 1 }); };
   const toolbar = (
     <Card className="mb-5 gap-3 p-4">
+      <KindTabs query={query} onChange={setKind} />
       <form onSubmit={submit} className="flex flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">
@@ -331,6 +333,26 @@ export function DiscoverPage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Jobs and internships are separate lists, each with its own count for the current filters. */
+function KindTabs({ query, onChange }: { query: JobQuery; onChange: (k: "jobs" | "internships") => void }) {
+  const jobs = useJobs({ ...query, kind: "jobs", page: 1, page_size: 1 });
+  const interns = useJobs({ ...query, kind: "internships", page: 1, page_size: 1 });
+  const active = query.kind === "internships" ? "internships" : "jobs";
+  const tabs = [["jobs", "Jobs", jobs.data?.total], ["internships", "Internships", interns.data?.total]] as const;
+  return (
+    <div role="tablist" aria-label="Jobs or internships" className="flex w-fit gap-1 rounded-lg bg-muted p-1">
+      {tabs.map(([k, label, n]) => (
+        <button key={k} type="button" role="tab" aria-selected={active === k} onClick={() => onChange(k)} data-testid={`kind-${k}`}
+                className={cn("flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                              active === k ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+          {label}
+          {n !== undefined && <span className={cn("rounded-full px-1.5 text-xs tabular-nums", active === k ? "bg-primary/10 text-primary" : "bg-background")}>{n}</span>}
+        </button>
+      ))}
+    </div>
   );
 }
 

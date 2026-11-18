@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CircleHelp, Copy, Download, ExternalLink, FileText, Loader2, Puzzle, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, CircleHelp, Copy, Download, ExternalLink, FileText, Loader2, Puzzle, Wand2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { ResumeVersionPicker } from "@/features/studio/ResumePicker";
 import type { AttachResult } from "@/features/studio/api";
 import type { ApplicationDetail, UserJob } from "@/types/api";
 import { cn } from "@/lib/utils";
+import { canSmartApply, smartApplyStart, smartApplyStatus, type SmartApplyStatus } from "@/lib/smartApply";
 
 type Step = "preparing" | "review" | "returned" | "done" | "error";
 
@@ -37,6 +38,16 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
   const [studioResume, setStudioResume] = useState<AttachResult | null>(null);
   const openedRef = useRef(false);
   const options = useApplyOptions(app?.id);
+  // Smart Apply: undefined while checking, null when not installed in this browser.
+  const [ext, setExt] = useState<SmartApplyStatus | null | undefined>(undefined);
+  const [starting, setStarting] = useState(false);
+  useEffect(() => {
+    if (!item) return;
+    const check = () => { smartApplyStatus().then(setExt).catch(() => setExt(null)); };
+    check();
+    window.addEventListener("focus", check);  // picks up an install or a connection made in another tab
+    return () => window.removeEventListener("focus", check);
+  }, [item]);
 
   useEffect(() => {
     if (!item) return;
@@ -57,12 +68,20 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.user_job_id]);
 
-  // When the user comes back to this tab after opening the listing, ask for the outcome.
+  // When the user comes back to this tab after opening the listing, refresh the application (Smart Apply may already
+  // have recorded the submission from the employer's thank-you page) and otherwise ask for the outcome.
   useEffect(() => {
-    const onFocus = () => { if (openedRef.current && step === "review") setStep("returned"); };
+    const onFocus = () => {
+      if (!openedRef.current || step !== "review" || !item) return;
+      setStep("returned");
+      action.mutate({ kind: "prepare", userJobId: item.user_job_id }, {
+        onSuccess: (a) => { setApp(a); if (a.status === "SUBMITTED") setStep("done"); },
+      });
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [step]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, item?.user_job_id]);
 
   if (!item) return null;
   const busy = action.isPending;
@@ -77,6 +96,23 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
       onSuccess: (a) => setApp(a),
       onError: (e) => toast.error(errorMessage(e)),
     });
+  };
+
+  const formTarget = hostedUrl ?? item.job.job_url;
+  const smart = canSmartApply(formTarget);
+  const smartReady = smart && !!ext?.connected;
+  const startSmartApply = async () => {
+    if (!app || !formTarget) return;
+    setStarting(true);
+    try {
+      await smartApplyStart(formTarget, item.user_job_id);
+      openedRef.current = true;
+      toast.success("Opened the form. Smart Apply is filling it now: check every answer in its panel, then submit there.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Smart Apply couldn't open this form.");
+    } finally {
+      setStarting(false);
+    }
   };
 
   const confirm = (submitted: boolean) => {
@@ -155,25 +191,13 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
               </section>
             )}
             {options.data && (
-              <section className={cn("flex gap-2 rounded-lg border p-3 text-sm", options.data.original_supported || hostedUrl ? "border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100" : "")}>
-                <Puzzle className="mt-0.5 size-4 shrink-0" />
-                <div>
-                  <p>{options.data.message}</p>
-                  {(options.data.original_supported || hostedUrl) && (
-                    <p className="mt-1 text-xs opacity-80">With the Smart Apply browser extension connected (Settings → Browser extension), open the form and click Fill. You review every answer before anything is submitted.</p>
-                  )}
-                  <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="apply-extension-cta">
-                    <Button size="xs" variant="outline" render={<a href={`${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.0.0.zip`} download />}>
-                      <Download /> Get the Smart Apply extension
-                    </Button>
-                    <a href="#/settings?tab=extension" className="text-xs underline underline-offset-2" onClick={onClose}>How to set it up</a>
-                  </div>
-                </div>
-              </section>
+              <SmartApplyCard message={options.data.message} smart={smart} ext={ext} onClose={onClose} />
             )}
             <p className="rounded-lg bg-muted p-3 text-sm">
-              Next: open the original listing, complete the application <strong>on {item.job.platform}</strong>, then come back here and confirm.
-              Opening the listing does not mark it as applied.
+              {smartReady
+                ? <>Next: click <strong>Apply with Smart Apply</strong>, check the filled form, submit it on {item.job.platform}, then come back here. If Smart Apply saw the employer's thank-you page, it's already recorded for you.</>
+                : <>Next: open the original listing, complete the application <strong>on {item.job.platform}</strong>, then come back here and confirm.</>}
+              {" "}Opening the form does not mark it as applied.
             </p>
           </div>
         )}
@@ -200,7 +224,14 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
             <>
               <Button variant="outline" onClick={onClose}>Close</Button>
               <Button variant="outline" onClick={() => setStep("returned")}>I already applied</Button>
-              {hostedUrl ? (
+              {smartReady ? (
+                <>
+                  <Button variant="outline" onClick={() => openListing(formTarget)} disabled={busy || starting}><ExternalLink /> Apply by hand</Button>
+                  <Button onClick={startSmartApply} disabled={busy || starting} data-testid="smart-apply-start">
+                    {starting ? <Loader2 className="animate-spin" /> : <Wand2 />} Apply with Smart Apply
+                  </Button>
+                </>
+              ) : hostedUrl ? (
                 <>
                   <Button variant="outline" onClick={() => openListing()} disabled={busy || !item.job.job_url}><ExternalLink /> Employer's listing</Button>
                   <Button onClick={() => openListing(hostedUrl)} disabled={busy}><ExternalLink /> Open Greenhouse application form</Button>
@@ -212,6 +243,7 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
           )}
           {step === "returned" && (
             <>
+              <Button variant="ghost" className="mr-auto" onClick={() => { openedRef.current = false; setStep("review"); }} disabled={busy}><ArrowLeft /> Back to package</Button>
               <Button variant="outline" onClick={() => openListing(hostedUrl ?? item.job.job_url)} disabled={busy}><ExternalLink /> Reopen listing</Button>
               <Button variant="outline" onClick={later} disabled={busy}>Not sure yet</Button>
               <Button variant="outline" onClick={() => confirm(false)} disabled={busy}><XCircle /> I didn't apply</Button>
@@ -239,5 +271,40 @@ function Steps({ step }: { step: Step }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+const EXT_ZIP = `${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.1.0.zip`;
+
+/** Where Smart Apply stands in this browser, and the one next step to make one-click applying work. */
+function SmartApplyCard({ message, smart, ext, onClose }: { message: string; smart: boolean; ext: SmartApplyStatus | null | undefined; onClose: () => void }) {
+  const ready = smart && !!ext?.connected;
+  const tone = ready ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+    : smart ? "border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100" : "";
+  return (
+    <section className={cn("flex gap-2 rounded-lg border p-3 text-sm", tone)} data-testid="smart-apply-card">
+      {ready ? <Wand2 className="mt-0.5 size-4 shrink-0" /> : <Puzzle className="mt-0.5 size-4 shrink-0" />}
+      <div className="space-y-1">
+        <p className={smart ? "text-xs opacity-80" : undefined}>{message}</p>
+        {smart && ready && (
+          <p><strong>Smart Apply is ready.</strong> Click <strong>Apply with Smart Apply</strong>: the form opens in a new tab and fills itself
+            from your profile, with your resume attached. Check every answer in the panel, then submit. Nothing is sent without your click.</p>
+        )}
+        {smart && ext === undefined && <p className="flex items-center gap-2"><Loader2 className="size-3.5 animate-spin" /> Checking for Smart Apply in this browser…</p>}
+        {smart && ext && !ext.connected && (
+          <p><strong>Smart Apply is installed but not connected.</strong> Connect it once and this form will fill itself.{" "}
+            <a href="#/settings?tab=extension" className="underline underline-offset-2" onClick={onClose}>Connect it now</a></p>
+        )}
+        {smart && ext === null && (
+          <>
+            <p><strong>Apply in one click with Smart Apply.</strong> This form can be filled for you. Install the free browser extension once (two minutes), then use <strong>Apply with Smart Apply</strong>.</p>
+            <div className="flex flex-wrap items-center gap-2 pt-1" data-testid="apply-extension-cta">
+              <Button size="xs" variant="outline" render={<a href={EXT_ZIP} download />}><Download /> Get the Smart Apply extension</Button>
+              <a href="#/settings?tab=extension" className="text-xs underline underline-offset-2" onClick={onClose}>How to set it up</a>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }

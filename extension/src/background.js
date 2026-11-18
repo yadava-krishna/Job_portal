@@ -3,13 +3,16 @@
 // Who may ask for what:
 //  * the extension's own popup: everything (connect, inspect the page, fill, attach, record, settings);
 //  * the in-page review panel (a content script): only actions for the Smart Apply session the user started from
-//    the popup in that same tab and frame, on a page the extension is allowed on. Web pages themselves can never
-//    message the extension (no externally_connectable, no web-accessible pages).
+//    the popup (or from JobPilot) in that same tab and frame, on a page the extension is allowed on;
+//  * the JobPilot web app (externally_connectable, APP_ORIGINS only): "ping" (is Smart Apply here and connected?) and
+//    "apply" (open one job's Greenhouse/Lever/Ashby form and fill it). It never gets profile data back, and filling
+//    never submits: the user still reviews and authorises every submission in the panel. No other page may message
+//    the extension, and it has no web-accessible pages.
 // Scripts are injected only after a click, only into frames of Greenhouse/Lever/Ashby pages or of sites the user
 // allowed one by one, and never into LinkedIn, Naukri or Indeed.
 
 import { ApiError, apiBase, forget, jobpilot } from "./lib/api.js";
-import { CONTENT_FILES, platformForUrl, validApiBase } from "./lib/config.js";
+import { APP_ORIGINS, CONTENT_FILES, formUrl, platformForUrl, validApiBase } from "./lib/config.js";
 import { vault } from "./lib/vault.js";
 
 const WEB_APP = "https://yadava-krishna.github.io/Job_portal/";
@@ -293,7 +296,84 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   } catch { /* the page could not be read: the panel or the user resolves it */ }
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => { dropSession(tabId).catch(() => null); });
+chrome.tabs.onRemoved.addListener((tabId) => { dropSession(tabId).catch(() => null); vault.remove(`handoff:${tabId}`).catch(() => null); });
 
-// Nobody else may talk to the extension.
-chrome.runtime.onMessageExternal?.addListener((_m, _s, reply) => reply({ ok: false }));
+// ---- Apply from JobPilot: the web app hands over one job; the extension opens its form and fills it ------------
+
+const HANDOFF_TTL_MS = 3 * 60 * 1000;
+const handoffKey = (tabId) => `handoff:${tabId}`;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const badge = (tabId, text, title) => {
+  chrome.action.setBadgeBackgroundColor({ tabId, color: text === "!" ? "#E11D48" : "#4F46E5" }).catch(() => null);
+  chrome.action.setBadgeText({ tabId, text }).catch(() => null);
+  if (title) chrome.action.setTitle({ tabId, title }).catch(() => null);
+};
+
+async function external(msg) {
+  if (msg.type === "ping") return { version: chrome.runtime.getManifest().version, connected: await jobpilot.connected() };
+  if (msg.type !== "apply") throw new ApiError(0, "Not allowed.");
+  if (!(await jobpilot.connected())) throw new ApiError(0, "Smart Apply isn't connected yet. Open Settings → Browser extension and create a connection code.");
+  const userJobId = Number(msg.userJobId);
+  if (!Number.isInteger(userJobId) || userJobId <= 0) throw new ApiError(0, "Not allowed.");
+  const url = formUrl(msg.url);
+  if (!url) throw new ApiError(0, "Smart Apply fills Greenhouse, Lever and Ashby forms. Open this listing and apply there.");
+  // Record the hand-over before the form loads (a fast page could finish loading first and be missed).
+  const tab = await chrome.tabs.create({ url: "about:blank", active: true });
+  const h = { userJobId, url, at: Date.now(), running: false };
+  await vault.set(handoffKey(tab.id), h);
+  await chrome.tabs.update(tab.id, { url });
+  return { tabId: tab.id, url };
+}
+
+/** Find the form once the page has loaded (Ashby and some Greenhouse pages render it a moment later), then fill it
+ *  and attach the resume. Same fill as the popup's button; submitting still needs the user in the review panel. */
+async function autoFill(tabId, h) {
+  const key = handoffKey(tabId);
+  h.running = true;
+  await vault.set(key, h);
+  badge(tabId, "…", "JobPilot is filling this application");
+  try {
+    let form = null;
+    for (let i = 0; i < 12 && !form; i++) {
+      const frames = await supportedFrames(tabId);
+      if (frames.length) {
+        await inject(tabId, frames);
+        const found = [];
+        for (const f of frames) {
+          const d = await run(tabId, f.frameId, () => globalThis.__jobpilot?.detect()).catch(() => null);
+          if (d?.platform && d.fields > 0) found.push({ ...f, ...d });
+        }
+        form = found.sort((a, b) => b.fields - a.fields)[0] || null;
+      }
+      if (!form) await sleep(750);
+    }
+    if (!form) { badge(tabId, "!", "No application form found yet. Click Apply on the page, then click here and Fill."); return; }
+    const r = await fill({ tabId, frameId: form.frameId, overwrite: false, userJobId: h.userJobId });
+    await attachResume({ tabId, frameId: form.frameId, replace: false }).catch(() => null);  // a form without a file field
+    badge(tabId, r?.report?.needs?.length ? "!" : "✓", r?.report?.needs?.length ? "Filled: some questions need you" : "Filled: review and submit in the panel");
+  } catch (e) {
+    badge(tabId, "!", `JobPilot couldn't fill this form: ${e?.message || "unknown error"}. Click here to try again.`);
+  } finally {
+    await vault.remove(key);
+  }
+}
+
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (info.status !== "complete") return;
+  const h = await vault.get(handoffKey(tabId)).catch(() => null);
+  if (!h || h.running) return;
+  if (Date.now() - h.at > HANDOFF_TTL_MS) { await vault.remove(handoffKey(tabId)); return; }
+  if (!(await allowedPlatform(tab.url))) return;  // a redirect on the way to the form: wait for the next load
+  await autoFill(tabId, h);
+});
+
+// Only the JobPilot web app may talk to the extension from a web page, and only with these two messages.
+chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
+  let origin = sender.origin || "";
+  try { origin = origin || new URL(sender.url || "").origin; } catch { origin = ""; }
+  if (!APP_ORIGINS.includes(origin) || !msg || typeof msg.type !== "string") { reply({ ok: false, error: "Not allowed." }); return false; }
+  external(msg)
+    .then((data) => reply({ ok: true, data }))
+    .catch((e) => reply({ ok: false, error: e instanceof ApiError || e instanceof Error ? e.message : "Something went wrong." }));
+  return true;
+});

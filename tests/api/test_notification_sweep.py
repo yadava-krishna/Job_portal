@@ -225,8 +225,26 @@ def test_failed_discovery_runs_notify_once_per_run(client):
     titles = sorted(n.title for n in notes)
     assert titles == ["A job search couldn't run", "Your scheduled job search couldn't run"]
     assert all(n.link == "/searches?tab=sources" for n in notes)
-    assert any("The server restarted" in n.body for n in notes)
+    assert all("cut short when JobPilot restarted" in n.body for n in notes)
     assert _sweep()["discovery_failed"] == 0
+
+
+def test_failed_run_reasons_are_plain_words():
+    from backend.models import DiscoveryRun
+    from backend.services.notification_sweep import failure_reason
+
+    progress = DiscoveryRun(summary="Fetching job listings: Meesho (20 of 206 company boards)…", error_details=[
+        {"type": "BOARD_FETCH_FAILED", "message": "CRED (lever): Job board timed out."},
+        {"type": "BOARD_FETCH_FAILED", "message": "Meesho (lever): Job board temporarily unavailable (HTTP 500)."},
+        {"type": "INTERRUPTED", "message": "The server restarted before this run finished."}])
+    assert failure_reason(progress).startswith("It was cut short when JobPilot restarted.")
+    boards = DiscoveryRun(summary="Discovery could not run.", error_details=[
+        {"type": "BOARD_FETCH_FAILED", "message": f"Co{i} (lever): Job board timed out."} for i in range(5)])
+    assert failure_reason(boards).startswith("5 job boards didn't answer (Co0, Co1, Co2 and 2 more).")
+    crash = DiscoveryRun(summary="Discovery could not run.", error_details=[
+        {"type": "DISCOVERY_FAILED", "message": "PendingRollbackError: This Session's transaction has been rolled back"}])
+    reason = failure_reason(crash)
+    assert reason.startswith("Something went wrong on our side.") and "Error" not in reason and "…" not in reason
 
 
 def test_preferences_and_inactive_users_are_respected(client):

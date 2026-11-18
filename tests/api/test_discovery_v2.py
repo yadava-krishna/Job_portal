@@ -92,7 +92,7 @@ def test_repeat_runs_add_no_duplicate_jobs_or_notifications(client, boards, resu
     h, sid, _ = _setup(client, resume_bytes)
     first = _run(client, h, sid)
     notes1 = client.get(f"{API}/notifications", headers=h).json()
-    assert notes1["unread"] == first["jobs_new"] == 4 and len(notes1["items"]) == 4
+    assert first["jobs_new"] == 4 and notes1["unread"] == len(notes1["items"]) == 2  # 2 of the 4 are ruled out: no alert
     from backend.services.ats import board_cache
 
     for _ in range(2):
@@ -100,12 +100,12 @@ def test_repeat_runs_add_no_duplicate_jobs_or_notifications(client, boards, resu
         again = _run(client, h, sid)
         assert again["jobs_new"] == 0 and again["duplicates"] == 4
     assert len(_feed(client, h)) == 4
-    assert client.get(f"{API}/notifications", headers=h).json()["unread"] == 4
+    assert client.get(f"{API}/notifications", headers=h).json()["unread"] == 2
     db = session_factory()()
     try:
         assert db.execute(select(func.count()).select_from(Job)).scalar_one() == 4
         assert db.execute(select(func.count()).select_from(JobSourceLink)).scalar_one() == 4
-        assert db.execute(select(func.count()).select_from(Notification)).scalar_one() == 4
+        assert db.execute(select(func.count()).select_from(Notification)).scalar_one() == 2
     finally:
         db.close()
 
@@ -263,7 +263,7 @@ def test_adzuna_source_without_credentials_reports_not_configured(client, boards
     run = _run(client, h, sid, expect=("failed",))  # never "completed" when the only source is unconfigured
     assert [e["type"] for e in run["error_details"]] == ["ADZUNA_NOT_CONFIGURED"] and run["jobs_found"] == 0
     assert run["source_results"]["adzuna_api"]["status"] == "not_configured"
-    assert "ADZUNA_APP_ID" in run["summary"]
+    assert "Adzuna isn't set up" in run["summary"] and "ADZUNA_APP_ID" not in run["summary"]
 
 
 def test_adzuna_results_merge_with_board_listing(client, boards, resume_bytes):
@@ -379,7 +379,7 @@ def test_saved_searches_watchlists_and_notifications_are_private(client, boards,
     assert client.get(f"{API}/notifications", headers=other).json() == {"items": [], "unread": 0}
     mine = client.get(f"{API}/notifications", headers=h).json()["items"][0]["id"]
     client.post(f"{API}/notifications/{mine}/read", headers=other)
-    assert client.get(f"{API}/notifications", headers=h).json()["unread"] == 4  # the intruder could not mark it read
+    assert client.get(f"{API}/notifications", headers=h).json()["unread"] == 2  # the intruder could not mark it read
     assert client.get(f"{API}/jobs", headers=other).json()["total"] == 0
 
 
@@ -389,8 +389,8 @@ def test_notifications_read_flow(client, boards, resume_bytes):
     items = client.get(f"{API}/notifications", headers=h).json()["items"]
     assert all(i["kind"] == "new_match" and "%" in i["title"] and i["link"].startswith("/discover?job=") for i in items)
     assert client.post(f"{API}/notifications/{items[0]['id']}/read", headers=h).status_code == 204
-    assert client.get(f"{API}/notifications", headers=h).json()["unread"] == 3
-    assert len(client.get(f"{API}/notifications", headers=h, params={"unread_only": True}).json()["items"]) == 3
+    assert client.get(f"{API}/notifications", headers=h).json()["unread"] == 1
+    assert len(client.get(f"{API}/notifications", headers=h, params={"unread_only": True}).json()["items"]) == 1
     client.post(f"{API}/notifications/read-all", headers=h)
     assert client.get(f"{API}/notifications", headers=h).json()["unread"] == 0
 
@@ -595,7 +595,7 @@ def test_run_everything_with_nothing_available_fails_with_reasons(client, resume
     assert run["status"] == "failed"
     assert {k: v["status"] for k, v in run["source_results"].items()} == {
         "alert_email": "not_configured", "adzuna_api": "not_configured", "company_boards": "not_configured"}
-    assert "No mailbox" in run["summary"] and "ADZUNA_APP_ID" in run["summary"] and "No companies to search" in run["summary"]
+    assert "No mailbox" in run["summary"] and "Adzuna isn't set up" in run["summary"] and "No companies to search" in run["summary"]
 
 
 def test_two_users_get_independent_matches_from_shared_boards(client, boards, resume_bytes):
@@ -635,7 +635,7 @@ def test_source_health_before_and_after_a_run(client, boards, resume_bytes, monk
     assert set(before) == {"greenhouse", "lever", "ashby", "smartrecruiters", "recruitee", "adzuna_api", "alert_email", "manual"}
     assert before["greenhouse"]["configured"] and before["greenhouse"]["boards"] == {"total": 1, "ok": 0, "failing": 0, "unchecked": 1}
     assert before["ashby"]["configured"] is False and "No Ashby companies" in before["ashby"]["missing"]
-    assert before["adzuna_api"]["connection"] == "not_configured" and "ADZUNA_APP_ID" in before["adzuna_api"]["missing"]
+    assert before["adzuna_api"]["connection"] == "not_configured" and "Not set up on this server" in before["adzuna_api"]["missing"]
     assert before["alert_email"]["configured"] is False and "No mailbox" in before["alert_email"]["missing"]
     assert before["greenhouse"]["last_attempt_at"] is None
 

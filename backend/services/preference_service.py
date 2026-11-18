@@ -91,7 +91,7 @@ def list_platforms(db: Session, settings: BackendSettings, user: User) -> list[P
         automated_search=settings.adzuna_enabled, automated_apply=False,
         application_method="Open the listing and apply on the employer/job-board site",
         notes=("Official Adzuna API (aggregates many Indian job boards). Posting dates are verified; descriptions are snippets."
-               if settings.adzuna_enabled else "Not configured on this server (ADZUNA_APP_ID / ADZUNA_APP_KEY)."),
+               if settings.adzuna_enabled else "Not set up on this server yet."),
     ))
     return out
 

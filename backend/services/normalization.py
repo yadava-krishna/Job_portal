@@ -104,7 +104,7 @@ class NormalizedJob:
 
 # ---- normalised facts on a stored job --------------------------------------------------------
 
-NORMALIZED_VERSION = "n1.2026-11"
+NORMALIZED_VERSION = "n1.2026-11b"  # b: internships recognised from the title
 
 
 def normalize_facts(job: Any) -> Any:
@@ -115,6 +115,8 @@ def normalize_facts(job: Any) -> Any:
     from core.locations import normalize_location
     from core.salary import parse as parse_salary_text
 
+    if is_internship_title(getattr(job, "title", None)) and hasattr(job, "employment_type"):
+        job.employment_type = "Internship"  # boards often label internships "Full-time"; the title decides
     place = normalize_location(job.location, remote_hint=(job.work_mode == "Remote"))
     job.location_normalized = (place.display or None) and place.display[:300]
     job.remote_scope = place.remote_scope if place.remote else None
@@ -242,6 +244,14 @@ def work_mode(*values: Any) -> str | None:
         if n in ("onsite", "on site", "in office", "office") or "on site" in n or "onsite" in n:
             return "On-site"
     return None
+
+
+_INTERN_TITLE = re.compile(r"(?<![a-z])(interns?|internships?|apprentices?|apprenticeships?)(?![a-z])", re.I)
+
+
+def is_internship_title(title: str | None) -> bool:
+    """"Finance Intern", "Summer Internship 2026", "Operations Apprenticeship"; not "Internal Audit" or "International"."""
+    return bool(title) and bool(_INTERN_TITLE.search(title))
 
 
 def employment_type(value: Any) -> str | None:
