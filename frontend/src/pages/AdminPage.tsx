@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
+import { Copy, KeyRound, Loader2, Plus, RefreshCw, ScrollText, Trash2, Users } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NativeSelect, PageHeader } from "@/components/app/common";
 import { api } from "@/lib/api";
-import { ShieldAlert, CheckCircle2, XCircle, Plus, Copy, Trash2, RefreshCw } from "lucide-react";
+import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { Chip, Panel, StatusDot, table, type Tone } from "@/features/growth/ui";
 import { BackgroundJobsPanel, ProductMetricsPanel, SystemPanel } from "@/features/growth/AdminOps";
 import { OpsHealthPanel } from "@/features/growth/OpsHealth";
 
@@ -10,6 +18,10 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "jobs", label: "Background jobs" }, { key: "health", label: "Health" }, { key: "product", label: "Product metrics" },
   { key: "system", label: "System" },
 ];
+const roleTone: Record<string, Tone> = { admin: "violet", mentor: "route", user: "muted" };
+const roleLabel = (r: string) => ROLES.find((x) => x.value === r)?.label ?? r;
+const detail = (err: unknown, fallback: string) =>
+  (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail?.toString() || fallback;
 const ROLES = [
   { value: "user", label: "Candidate" }, { value: "mentor", label: "Mentor" }, { value: "admin", label: "Admin" },
 ];
@@ -106,9 +118,10 @@ export function AdminPage() {
   const handleToggleActive = async (userId: number, currentActive: boolean) => {
     try {
       await api.put(`/admin/users/${userId}/status`, { is_active: !currentActive });
+      toast.success(currentActive ? "Account deactivated" : "Account activated");
       fetchUsers();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Action failed");
+    } catch (err) {
+      toast.error(detail(err, "Action failed"));
     }
   };
 
@@ -117,9 +130,10 @@ export function AdminPage() {
     if (!confirm(`Are you sure you want to change user role to ${newRole}?`)) return;
     try {
       await api.put(`/admin/users/${userId}/role`, { role: newRole });
+      toast.success(`Role changed to ${roleLabel(newRole)}`);
       fetchUsers();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Action failed");
+    } catch (err) {
+      toast.error(detail(err, "Action failed"));
     }
   };
 
@@ -135,8 +149,8 @@ export function AdminPage() {
       setCreatedInviteCode(res.data.code);
       setInviteEmail("");
       fetchInvites();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || "Failed to generate invite");
+    } catch (err) {
+      toast.error(detail(err, "Failed to generate invite"));
     }
   };
 
@@ -144,290 +158,171 @@ export function AdminPage() {
     if (!confirm("Revoke this invite code?")) return;
     try {
       await api.delete(`/admin/invites/${inviteId}`);
+      toast.success("Invite revoked");
       fetchInvites();
-    } catch {}
+    } catch (err) {
+      toast.error(detail(err, "Couldn't revoke the invite"));
+    }
   };
 
+  const refreshButton = (onClick: () => void) => (
+    <Button variant="ghost" size="sm" onClick={onClick} disabled={loading} className="text-muted-foreground">
+      <RefreshCw className={cn(loading && "animate-spin")} /> Refresh
+    </Button>
+  );
+  const now = Date.now();
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <ShieldAlert className="h-6 w-6 text-primary" /> Admin Operations Center
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            System metrics, users, invites, audit log, background jobs, operational health, product metrics and server status.
-          </p>
-        </div>
+    <>
+      <PageHeader eyebrow="Admin" title="Admin console"
+                  description="System metrics, users, invites, audit log, background jobs, operational health, product metrics and server status." />
 
-        <div role="tablist" className="flex w-full gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              role="tab"
-              aria-selected={tab === t.key}
-              onClick={() => setTab(t.key)}
-              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                tab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-            </button>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="gap-0">
+        <div className="-mx-1 mb-4 overflow-x-auto px-1 pb-1">
+          <TabsList>
+            {TABS.map((t) => <TabsTrigger key={t.key} value={t.key} className="flex-none">{t.label}</TabsTrigger>)}
+          </TabsList>
+        </div>
+      </Tabs>
+
+      <div key={tab} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
+      {tab === "metrics" && (metrics ? (
+        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-border ring-1 ring-border lg:grid-cols-4">
+          {[
+            { label: "Registered users", value: metrics.total_users, sub: <StatusDot tone="success">{metrics.active_users} active accounts</StatusDot> },
+            { label: "Jobs collected (all users)", value: metrics.total_jobs, sub: <>{metrics.active_sources} active sources</> },
+            { label: "Applications", value: metrics.total_applications, sub: <>{metrics.total_interviews} interviews scheduled</> },
+            { label: "Offers", value: metrics.total_offers, sub: <>Across all candidates</> },
+          ].map((m) => (
+            <div key={m.label} className="bg-card px-5 py-4">
+              <dt className="text-xs font-medium text-muted-foreground">{m.label}</dt>
+              <dd className="readout mt-1 text-[26px] leading-tight font-semibold text-heading">{m.value.toLocaleString()}</dd>
+              <dd className="mt-0.5 text-xs text-muted-foreground">{m.sub}</dd>
+            </div>
           ))}
-        </div>
-      </div>
+        </dl>
+      ) : loading ? <Loader2 className="animate-spin text-muted-foreground" /> : <p className="text-sm text-muted-foreground">Metrics couldn't be loaded.</p>)}
 
-      {/* METRICS TAB */}
-      {tab === "metrics" && metrics && (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="text-xs font-medium text-muted-foreground">Registered Users</div>
-              <div className="text-2xl font-bold text-foreground mt-2">{metrics.total_users}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">
-                {metrics.active_users} active accounts
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="text-xs font-medium text-muted-foreground">Global Jobs Ingested</div>
-              <div className="text-2xl font-bold text-foreground mt-2">{metrics.total_jobs}</div>
-              <div className="text-xs text-muted-foreground mt-1">{metrics.active_sources} active sources</div>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="text-xs font-medium text-muted-foreground">Total Applications</div>
-              <div className="text-2xl font-bold text-foreground mt-2">{metrics.total_applications}</div>
-              <div className="text-xs text-muted-foreground mt-1">{metrics.total_interviews} interviews scheduled</div>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-5">
-              <div className="text-xs font-medium text-muted-foreground">Employment Offers</div>
-              <div className="text-2xl font-bold text-foreground mt-2">{metrics.total_offers}</div>
-              <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">Pipeline conversions</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* USERS TAB */}
       {tab === "users" && (
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="p-4 border-b border-border flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">User Accounts ({users.length})</h3>
-            <button
-              onClick={fetchUsers}
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/50 border-b border-border text-muted-foreground uppercase text-[10px]">
-                <tr>
-                  <th className="px-4 py-3">ID / User</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Jobs / Apps</th>
-                  <th className="px-4 py-3">Created</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
+        <Panel title="User accounts" icon={<Users />} count={users.length} actions={refreshButton(fetchUsers)} bodyClassName="px-0 pb-0 pt-3 sm:px-0">
+          <div className={table.wrap}>
+            <table className={cn(table.table, "min-w-[760px]")}>
+              <thead className={table.thead}>
+                <tr><th className={table.th}>User</th><th className={table.th}>Role</th><th className={table.th}>Status</th>
+                  <th className={cn(table.th, "text-right")}>Jobs / Apps</th><th className={table.th}>Created</th><th className={cn(table.th, "text-right")}>Actions</th></tr>
               </thead>
-              <tbody className="divide-y divide-border text-foreground">
+              <tbody>
                 {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-muted/20">
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{u.full_name || "Unnamed"}</div>
-                      <div className="text-muted-foreground font-mono text-[11px]">{u.email}</div>
+                  <tr key={u.id} className={table.tr}>
+                    <td className={table.td}>
+                      <div className="font-medium text-foreground">{u.full_name || "Unnamed"}</div>
+                      <div className="readout text-[11.5px] text-muted-foreground">#{u.id} · {u.email}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                          u.role === "admin"
-                            ? "bg-primary/20 text-primary"
-                            : u.role === "mentor"
-                              ? "bg-sky-500/15 text-sky-700 dark:text-sky-300"
-                              : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 font-medium">
-                        {u.is_active ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5 text-destructive" />
-                        )}
-                        {u.is_active ? "Active" : "Disabled"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono">
-                      {u.jobs_count} / {u.applications_count}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {new Date(u.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right space-x-2">
-                      <button
-                        onClick={() => handleToggleActive(u.id, u.is_active)}
-                        className="rounded px-2 py-1 border border-border text-[11px] hover:bg-muted font-medium"
-                      >
-                        {u.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                      <select
-                        aria-label={`Role for ${u.email}`}
-                        value={u.role}
-                        onChange={(e) => handleRoleChange(u.id, u.role, e.target.value)}
-                        className="rounded px-2 py-1 border border-border bg-background text-[11px] font-medium"
-                      >
-                        {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                      </select>
+                    <td className={table.td}><Chip tone={roleTone[u.role] ?? "muted"}>{roleLabel(u.role)}</Chip></td>
+                    <td className={table.td}><StatusDot tone={u.is_active ? "success" : "danger"} className="font-medium">{u.is_active ? "Active" : "Disabled"}</StatusDot></td>
+                    <td className={cn(table.td, "readout text-right")}>{u.jobs_count.toLocaleString()} / {u.applications_count}</td>
+                    <td className={cn(table.td, "text-muted-foreground")}>{formatDate(u.created_at)}</td>
+                    <td className={cn(table.td, "text-right")}>
+                      <div className="inline-flex items-center gap-1.5">
+                        <Button size="xs" variant="outline" onClick={() => handleToggleActive(u.id, u.is_active)}>{u.is_active ? "Deactivate" : "Activate"}</Button>
+                        <NativeSelect ariaLabel={`Role for ${u.email}`} value={u.role} onChange={(v) => handleRoleChange(u.id, u.role, v)}
+                                      className="h-6 rounded-full px-2 text-[11.5px]" options={ROLES} />
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </Panel>
       )}
 
-      {/* INVITES TAB */}
       {tab === "invites" && (
-        <div className="space-y-6">
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-              <Plus className="h-4 w-4" /> Generate Registration Invite
-            </h3>
-            <form onSubmit={handleCreateInvite} className="grid gap-3 sm:grid-cols-3">
-              <input
-                type="email"
-                placeholder="Candidate Email (optional restriction)"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                className="rounded-lg border border-input bg-background px-3 py-2 text-xs"
-              />
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as any)}
-                className="rounded-lg border border-input bg-background px-3 py-2 text-xs"
-              >
-                <option value="user">Candidate Role (user)</option>
-                <option value="mentor">Mentor Role (mentor)</option>
-                <option value="admin">Administrator Role (admin)</option>
-              </select>
-              <button
-                type="submit"
-                className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                Generate Code
-              </button>
+        <div className="space-y-4">
+          <Panel title="Create a registration invite" icon={<Plus />} description="Single use, valid for 7 days. Add an e-mail to restrict who can use it.">
+            <form onSubmit={handleCreateInvite} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_14rem_auto]">
+              <Input type="email" aria-label="Restrict to e-mail (optional)" placeholder="Candidate e-mail (optional restriction)" value={inviteEmail}
+                     onChange={(e) => setInviteEmail(e.target.value)} />
+              <NativeSelect ariaLabel="Role" value={inviteRole} onChange={(v) => setInviteRole(v as "user" | "mentor" | "admin")}
+                            options={[{ value: "user", label: "Candidate (user)" }, { value: "mentor", label: "Mentor (mentor)" }, { value: "admin", label: "Administrator (admin)" }]} />
+              <Button type="submit" className="h-10"><KeyRound /> Generate code</Button>
             </form>
-
             {createdInviteCode && (
-              <div className="mt-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
-                <div>
+              <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-success-tint px-3 py-2 text-[13px] animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                <div className="text-success">
                   <span className="font-semibold">Invite code created: </span>
-                  <span className="font-mono text-sm ml-2 font-bold">{createdInviteCode}</span>
+                  <span className="readout ml-1 text-[15px] font-bold">{createdInviteCode}</span>
                 </div>
-                <button
-                  onClick={() => navigator.clipboard.writeText(createdInviteCode)}
-                  className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-white hover:bg-emerald-700"
-                >
-                  <Copy className="h-3 w-3" /> Copy
-                </button>
+                <Button size="xs" variant="outline" onClick={() => { void navigator.clipboard.writeText(createdInviteCode); toast.success("Copied"); }}>
+                  <Copy /> Copy
+                </Button>
               </div>
             )}
-          </div>
+          </Panel>
 
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <div className="p-4 border-b border-border">
-              <h3 className="text-sm font-semibold text-foreground">Recent Invites ({invites.length})</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/50 border-b border-border text-muted-foreground uppercase text-[10px]">
-                  <tr>
-                    <th className="px-4 py-3">Code / Restrict</th>
-                    <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3">Uses</th>
-                    <th className="px-4 py-3">Expires</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
+          <Panel title="Recent invites" icon={<KeyRound />} count={invites.length} bodyClassName="px-0 pb-0 pt-3 sm:px-0">
+            <div className={table.wrap}>
+              <table className={cn(table.table, "min-w-[620px]")}>
+                <thead className={table.thead}>
+                  <tr><th className={table.th}>Code</th><th className={table.th}>Restricted to</th><th className={table.th}>Role</th>
+                    <th className={table.th}>Status</th><th className={cn(table.th, "text-right")}>Uses</th><th className={table.th}>Expires</th><th className={cn(table.th, "text-right")}>Actions</th></tr>
                 </thead>
-                <tbody className="divide-y divide-border text-foreground">
-                  {invites.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-muted/20">
-                      <td className="px-4 py-3">
-                        <span className="font-mono font-medium">{inv.code}</span>
-                        {inv.email && <span className="ml-2 text-muted-foreground">({inv.email})</span>}
-                      </td>
-                      <td className="px-4 py-3 uppercase text-[10px] font-semibold">{inv.role}</td>
-                      <td className="px-4 py-3 font-mono">{inv.used_count} / {inv.max_uses}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{new Date(inv.expires_at).toLocaleDateString()}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleRevokeInvite(inv.id)}
-                          className="rounded p-1 text-destructive hover:bg-destructive/10"
-                          title="Revoke code"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody>
+                  {invites.map((inv) => {
+                    const expired = new Date(inv.expires_at).getTime() < now;
+                    const used = inv.used_count >= inv.max_uses;
+                    return (
+                      <tr key={inv.id} className={table.tr}>
+                        <td className={cn(table.td, "readout font-medium")}>{inv.code}</td>
+                        <td className={cn(table.td, "text-muted-foreground")}>{inv.email ?? "Anyone"}</td>
+                        <td className={table.td}><Chip tone={roleTone[inv.role] ?? "muted"}>{roleLabel(inv.role)}</Chip></td>
+                        <td className={table.td}>
+                          <StatusDot tone={used ? "muted" : expired ? "caution" : "route"}>{used ? "Used" : expired ? "Expired" : "Open"}</StatusDot>
+                        </td>
+                        <td className={cn(table.td, "readout text-right")}>{inv.used_count} / {inv.max_uses}</td>
+                        <td className={cn(table.td, "text-muted-foreground")}>{formatDate(inv.expires_at)}</td>
+                        <td className={cn(table.td, "text-right")}>
+                          <Button size="icon-xs" variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={() => handleRevokeInvite(inv.id)}
+                                  title="Revoke code" aria-label={`Revoke invite ${inv.code}`}><Trash2 /></Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          </div>
+          </Panel>
         </div>
       )}
 
-      {/* AUDIT LOG TAB */}
       {tab === "audit" && (
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-sm font-semibold text-foreground">Security Audit Trail</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/50 border-b border-border text-muted-foreground uppercase text-[10px]">
-                <tr>
-                  <th className="px-4 py-3">Timestamp</th>
-                  <th className="px-4 py-3">Actor</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">Target</th>
-                  <th className="px-4 py-3">IP Address</th>
-                </tr>
+        <Panel title="Security audit trail" icon={<ScrollText />} count={auditLogs.length} actions={refreshButton(fetchAudit)} bodyClassName="px-0 pb-0 pt-3 sm:px-0">
+          <div className={table.wrap}>
+            <table className={cn(table.table, "min-w-[680px]")}>
+              <thead className={table.thead}>
+                <tr><th className={table.th}>Time</th><th className={table.th}>Actor</th><th className={table.th}>Action</th><th className={table.th}>Target</th><th className={table.th}>IP address</th></tr>
               </thead>
-              <tbody className="divide-y divide-border text-foreground">
+              <tbody>
                 {auditLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-muted/20">
-                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">
-                      {new Date(log.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 font-mono">User #{log.actor_id ?? "system"}</td>
-                    <td className="px-4 py-3 font-semibold text-primary">{log.action}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {log.target_type} {log.target_id ? `(#${log.target_id})` : ""}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{log.ip || "unknown"}</td>
+                  <tr key={log.id} className={table.tr}>
+                    <td className={cn(table.td, "readout whitespace-nowrap text-[11.5px] text-muted-foreground")}>{formatDate(log.created_at, true)}</td>
+                    <td className={cn(table.td, "readout")}>{log.actor_id != null ? `User #${log.actor_id}` : "System"}</td>
+                    <td className={table.td}><code className="rounded-md bg-paper-sunk px-1.5 py-0.5 font-mono text-[11.5px] text-heading">{log.action}</code></td>
+                    <td className={cn(table.td, "text-muted-foreground")}>{log.target_type ?? "—"} {log.target_id ? `(#${log.target_id})` : ""}</td>
+                    <td className={cn(table.td, "readout text-[11.5px] text-muted-foreground")}>{log.ip || "unknown"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
+        </Panel>
       )}
 
       {tab === "jobs" && <BackgroundJobsPanel />}
       {tab === "health" && <OpsHealthPanel />}
       {tab === "product" && <ProductMetricsPanel />}
       {tab === "system" && <SystemPanel />}
-    </div>
+      </div>
+    </>
   );
 }

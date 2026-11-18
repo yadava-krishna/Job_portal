@@ -1,54 +1,67 @@
-import type { ReactNode } from "react";
-import { AlertTriangle, Lock, ShieldCheck } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { AlertTriangle, Check, Columns2, Lock, Rows3, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NativeSelect } from "@/components/app/common";
 import { cn } from "@/lib/utils";
 import { useJobs } from "@/services/queries";
 import type { StudioTemplate, TemplateKey, VersionStatus } from "./api";
+import { FORM_FRIENDLY_HELP, PRINT_FIRST_HELP, templateDescription, templateName } from "./templateCopy";
 
 export function VersionStatusBadge({ status }: { status: VersionStatus }) {
   if (status === "locked") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+      <span className="inline-flex items-center gap-1 rounded-full bg-caution-tint px-2 py-0.5 text-xs font-medium text-caution">
         <Lock className="size-3" /> Locked — used in an application
       </span>
     );
   }
-  if (status === "archived") return <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Archived</span>;
-  return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200">Draft</span>;
+  if (status === "archived") return <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">Archived</span>;
+  return <span className="rounded-full bg-paper-sunk px-2 py-0.5 text-xs font-medium text-heading ring-1 ring-inset ring-border">Draft</span>;
 }
 
 export function AtsBadge({ safe }: { safe: boolean }) {
   return safe ? (
-    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900">
-      <ShieldCheck className="size-3" /> ATS-safe
+    <span className="inline-flex items-center gap-1 rounded-full bg-route-tint px-2 py-0.5 text-[11px] font-medium text-route" title={FORM_FRIENDLY_HELP}>
+      <ShieldCheck className="size-3" aria-hidden /> Safe for online forms
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900">
-      For reading by people
+    <span className="inline-flex items-center gap-1 rounded-full bg-caution-tint px-2 py-0.5 text-[11px] font-medium text-caution" title={PRINT_FIRST_HELP}>
+      Best for email &amp; print
     </span>
   );
 }
 
-/** Template cards as a radio group (keyboard: Tab to the group, click/Enter/Space on a card). */
+/** Template cards as a radio group (keyboard: Tab to the group, click/Enter/Space on a card). The chosen card gets a
+ *  ring and a one-shot check-mark pop so the switch registers before the preview re-renders. */
 export function TemplatePicker({ templates, value, onChange, disabled, compact }: {
   templates: StudioTemplate[]; value: TemplateKey; onChange: (k: TemplateKey) => void; disabled?: boolean; compact?: boolean;
 }) {
+  const [bump, setBump] = useState(0);
   return (
     <div role="radiogroup" aria-label="Template" className={cn("grid gap-2", compact ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-3")}>
       {templates.map((t) => {
         const on = t.key === value;
+        const Cols = t.columns === 1 ? Rows3 : Columns2;
         return (
-          <button key={t.key} type="button" role="radio" aria-checked={on} disabled={disabled} onClick={() => onChange(t.key)}
-                  className={cn("rounded-lg border p-2.5 text-left text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60",
-                    on ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/50")}>
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium">{t.name}</span>
-              <AtsBadge safe={t.ats_safe} />
+          <button key={t.key} type="button" role="radio" aria-checked={on} disabled={disabled}
+                  onClick={() => { if (!on) setBump((n) => n + 1); onChange(t.key); }}
+                  className={cn("group/tpl relative rounded-xl bg-card p-3 text-left text-sm outline-none ring-1 transition-[box-shadow,background-color] duration-200 ease-[cubic-bezier(.2,0,0,1)] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60",
+                    on ? "bg-lavender/40 ring-2 ring-violet/70 dark:bg-lavender/10" : "ring-border hover:ring-route/30 hover:shadow-[var(--shadow-raised)]")}>
+            <div className="flex items-start gap-2.5">
+              <span aria-hidden className={cn("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+                on ? "bg-violet text-white" : "bg-paper-sunk text-muted-foreground group-hover/tpl:text-route")}>
+                {on ? <Check key={bump} className={cn("size-4", bump > 0 && "jp-bump")} /> : <Cols className="size-4" />}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                  <span className={cn("font-medium", on && "text-heading")}>{templateName(t.key, t.name)}</span>
+                  <AtsBadge safe={t.ats_safe} />
+                </div>
+                <p className="mt-1 text-xs leading-snug text-muted-foreground">{templateDescription(t)}</p>
+                {!compact && <p className="readout mt-1.5 text-[11px] text-muted-foreground">{t.columns === 1 ? "Single column" : `${t.columns} columns`} · up to {t.max_pages} page{t.max_pages > 1 ? "s" : ""}</p>}
+              </div>
             </div>
-            <p className="mt-1 text-xs leading-snug text-muted-foreground">{t.description}</p>
-            {!compact && <p className="mt-1 text-[11px] text-muted-foreground">{t.columns === 1 ? "Single column" : `${t.columns} columns`} · up to {t.max_pages} page{t.max_pages > 1 ? "s" : ""}</p>}
           </button>
         );
       })}
@@ -75,7 +88,7 @@ export function ConfirmDialog({ open, title, children, confirmLabel = "Delete", 
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><AlertTriangle className="size-5 text-amber-600" /> {title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><AlertTriangle className="size-5 text-caution" /> {title}</DialogTitle>
           {children && <DialogDescription>{children}</DialogDescription>}
         </DialogHeader>
         <DialogFooter>

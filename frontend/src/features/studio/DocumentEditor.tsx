@@ -50,11 +50,11 @@ export function DocumentEditor({ sections, onChange, readOnly }: { sections: Sec
         const open = !collapsed[key];
         const canAdd = s.type !== "header" && !(s.type === "summary" && s.blocks.length > 0);
         return (
-          <section key={key} className={cn("rounded-xl border bg-card", !s.visible && "opacity-70", over === `s${si}` && drag?.kind === "section" && "ring-2 ring-primary")}
+          <section key={key} className={cn("rounded-2xl bg-card ring-1 ring-border transition-shadow duration-150", !s.visible && "bg-paper-sunk/60 opacity-75", over === `s${si}` && drag?.kind === "section" && "ring-2 ring-route")}
                    aria-label={`${s.heading} section`}
                    onDragOver={(e) => { if (drag?.kind === "section") { e.preventDefault(); setOver(`s${si}`); } }}
                    onDrop={(e) => { if (drag?.kind === "section") { e.preventDefault(); onChange(move(sections, drag.from, si)); } endDrag(); }}>
-            <div className="flex flex-wrap items-center gap-1.5 border-b px-2 py-1.5">
+            <div className={cn("flex flex-wrap items-center gap-1.5 px-2 py-1.5", open && "border-b")}>
               {!readOnly && (
                 <span draggable aria-hidden="true" title="Drag to reorder sections" className="cursor-grab text-muted-foreground active:cursor-grabbing"
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s.heading); setDrag({ kind: "section", from: si }); }}
@@ -66,8 +66,8 @@ export function DocumentEditor({ sections, onChange, readOnly }: { sections: Sec
               </Button>
               <label htmlFor={`${key}-heading`} className="sr-only">Section heading</label>
               <Input id={`${key}-heading`} value={s.heading} maxLength={80} onChange={(e) => setSection(si, (x) => ({ ...x, heading: e.target.value }))}
-                     className="h-7 max-w-56 flex-1 border-transparent px-1.5 font-medium shadow-none hover:border-input focus-visible:border-input" />
-              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{s.type}</span>
+                     className="h-7 max-w-56 flex-1 border-transparent bg-transparent px-1.5 font-display font-bold text-heading shadow-none hover:border-input focus-visible:border-input dark:bg-transparent" />
+              <span className="eyebrow text-[10px]">{s.type}</span>
               <div className="ml-auto flex items-center gap-1">
                 <span className="flex items-center gap-1.5 pr-1 text-xs text-muted-foreground">
                   <Switch size="sm" checked={s.visible} disabled={readOnly} aria-label={`Show ${s.heading} on the resume`}
@@ -86,10 +86,10 @@ export function DocumentEditor({ sections, onChange, readOnly }: { sections: Sec
             </div>
             {open && (
               <div className="space-y-2 p-2">
-                {!s.blocks.length && <p className="px-1 py-2 text-xs text-muted-foreground">Nothing here yet.</p>}
+                {!s.blocks.length && <p className="px-1 py-2 text-xs text-muted-foreground">Nothing here yet. Add an entry when you're ready.</p>}
                 {s.blocks.map((b, bi) => (
-                  <div key={b._k ?? bi} className={cn("relative rounded-lg", !readOnly && s.blocks.length > 1 && b.type !== "contact" && "pl-4",
-                                                       over === `b${si}-${bi}` && drag?.kind === "block" && "ring-2 ring-primary")}
+                  <div key={b._k ?? bi} className={cn("relative rounded-xl", !readOnly && s.blocks.length > 1 && b.type !== "contact" && "pl-4",
+                                                       over === `b${si}-${bi}` && drag?.kind === "block" && "ring-2 ring-route")}
                        onDragOver={(e) => { if (drag?.kind === "block" && drag.section === si) { e.preventDefault(); e.stopPropagation(); setOver(`b${si}-${bi}`); } }}
                        onDrop={(e) => { if (drag?.kind === "block" && drag.section === si) { e.preventDefault(); e.stopPropagation(); setBlocks(si, (bs) => move(bs, drag.from, bi)); } endDrag(); }}>
                   {!readOnly && s.blocks.length > 1 && b.type !== "contact" && (
@@ -149,7 +149,7 @@ function BlockEditor({ section, block, index, count, readOnly, onChange, onMove,
   );
 
   return (
-    <div className={cn("rounded-lg border bg-background p-2.5", !block.visible && "border-dashed opacity-70")}>
+    <div className={cn("rounded-xl border bg-background p-3", !block.visible && "border-dashed opacity-70")}>
       {block.type === "contact" && <ContactEditor id={id} c={block.content} onChange={(content) => onChange({ ...block, content })} />}
 
       {block.type === "text" && (
@@ -235,19 +235,19 @@ function BulletsEditor({ id, bullets, onChange }: { id: string; bullets: Bullet[
   const set = (ui: number, patch: Partial<Bullet>) => onChange(bullets.map((u, i) => (i === ui ? { ...u, ...patch } : u)));
   return (
     <div className="mt-2 space-y-1.5">
-      <div className="text-xs font-medium text-muted-foreground">Bullets</div>
+      <div className="eyebrow text-[10px]">Bullets</div>
       {bullets.map((u, ui) => {
         const bid = `${id}-b${u._k ?? ui}`;
         const fromProfile = u.source === "profile";
         return (
-          <div key={u._k ?? ui} className={cn("rounded-md border p-1.5", !u.approved && "border-dashed bg-muted/40")}>
+          <div key={u._k ?? ui} className={cn("rounded-lg border bg-card p-1.5 transition-colors duration-150 focus-within:border-route/40", !u.approved && "border-dashed bg-muted/40")}>
             <label htmlFor={bid} className="sr-only">Bullet {ui + 1}</label>
             <Textarea id={bid} rows={2} value={u.text} className="min-h-0 resize-y border-0 px-1.5 py-1 shadow-none focus-visible:ring-0"
                       onChange={(e) => set(ui, { text: e.target.value, source: fromProfile ? "user" : u.source })} />
             <div className="flex flex-wrap items-center gap-1.5 px-1 pt-1">
               {fromProfile
-                ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">from profile</span>
-                : <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                ? <span className="rounded-full bg-success-tint px-2 py-0.5 text-[11px] font-medium text-success">from profile</span>
+                : <span className="rounded-full bg-caution-tint px-2 py-0.5 text-[11px] font-medium text-caution"
                         title={u.source === "suggestion" ? "Accepted suggestion" : "Written or edited here"}>not from your profile</span>}
               <label className="ml-1 flex items-center gap-1 text-xs text-muted-foreground">
                 <input type="checkbox" className="size-3.5 accent-primary" checked={u.approved} onChange={(e) => set(ui, { approved: e.target.checked })} />

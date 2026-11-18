@@ -99,17 +99,17 @@ describe("discovery outcomes are explained", () => {
 
   it("explains each kind of empty feed", () => {
     const { unmount } = empty({});
-    expect(screen.getByText("Discovery hasn't run yet")).toBeInTheDocument();
+    expect(screen.getByText(/Discovery hasn't run yet/)).toBeInTheDocument();
     unmount();
     const r1 = empty({ running: true });
-    expect(screen.getByText("Discovery is running")).toBeInTheDocument();
+    expect(screen.getByText(/Discovery is cooking/)).toBeInTheDocument();
     r1.unmount();
     const r2 = empty({ lastRun: run({ status: "failed", summary: "Discovery could not run. No companies to search." }) });
     expect(screen.getByText(/could not search anything/)).toBeInTheDocument();
     expect(screen.getByText(/No companies to search/)).toBeInTheDocument();
     r2.unmount();
     const r3 = empty({ lastRun: run({ summary: "Checked Greenhouse. No listings matched your titles and locations right now." }) });
-    expect(screen.getByText("No matching jobs found yet")).toBeInTheDocument();
+    expect(screen.getByText(/No matches yet/)).toBeInTheDocument();
     r3.unmount();
     const onClear = vi.fn();
     empty({ filtered: true, onClearFilters: onClear, lastRun: run() });

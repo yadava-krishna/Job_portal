@@ -47,7 +47,7 @@ function RejectionForm({ app, onClose, onSaved }: { app: RejectTarget; onClose: 
     setTried(true);
     if (!reason || !known) return;
     save.mutate({ id: app.id, reason, detail: detail.trim() || null, known: known === "yes" }, {
-      onSuccess: (r) => { toast.success("Rejection recorded"); onSaved?.(r); onClose(); },
+      onSuccess: (r) => { toast.success("Rejection recorded. Their loss, honestly."); onSaved?.(r); onClose(); },
       onError: (err) => toast.error(errorMessage(err)),
     });
   };
@@ -178,14 +178,14 @@ export function FunnelView({ data, title }: { data: Funnel; title: string }) {
   return (
     <Card className="gap-3 p-4" data-testid="funnel-panel">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <h2 className="font-display text-[15px] font-bold text-heading">{title}</h2>
         <p className="text-xs text-muted-foreground">Each count is kept separate: preparing or opening is not the same as applying.</p>
       </div>
       <div className="grid grid-cols-4 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-8">
         {FUNNEL_STEPS.map((s, i) => (
           <div key={s.key} className={cn("bg-card px-2 py-1.5", i === 3 && "bg-muted/40")} title={s.hint}>
             <div className="text-[11px] text-muted-foreground">{s.label}</div>
-            <div className="text-lg font-semibold tabular-nums">{data.counts[s.key] ?? 0}</div>
+            <div className="text-lg font-semibold readout">{data.counts[s.key] ?? 0}</div>
           </div>
         ))}
       </div>
@@ -193,16 +193,16 @@ export function FunnelView({ data, title }: { data: Funnel; title: string }) {
         <div>
           <h3 className="mb-1 text-xs font-medium text-muted-foreground">Conversion</h3>
           <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5">
-            <dt>Applied → screening</dt><dd className="tabular-nums">{pct(data.conversion.application_to_screening)}</dd>
-            <dt>Applied → interview</dt><dd className="tabular-nums">{pct(data.conversion.application_to_interview)}</dd>
-            <dt>Interview → offer</dt><dd className="tabular-nums">{pct(data.conversion.interview_to_offer)}</dd>
+            <dt>Applied → screening</dt><dd className="readout">{pct(data.conversion.application_to_screening)}</dd>
+            <dt>Applied → interview</dt><dd className="readout">{pct(data.conversion.application_to_interview)}</dd>
+            <dt>Interview → offer</dt><dd className="readout">{pct(data.conversion.interview_to_offer)}</dd>
           </dl>
         </div>
         <div>
           <h3 className="mb-1 text-xs font-medium text-muted-foreground">Top rejection reasons</h3>
           {data.rejection_reasons.length === 0 ? <p className="text-xs text-muted-foreground">None recorded yet.</p> : (
             <ul className="space-y-0.5">
-              {data.rejection_reasons.slice(0, 4).map((r) => <li key={r.reason} className="flex justify-between gap-2"><span className="truncate">{r.label}</span><span className="tabular-nums">{r.count}</span></li>)}
+              {data.rejection_reasons.slice(0, 4).map((r) => <li key={r.reason} className="flex justify-between gap-2"><span className="truncate">{r.label}</span><span className="readout">{r.count}</span></li>)}
             </ul>
           )}
           {data.counts.rejected > 0 && <p className="mt-1 text-xs text-muted-foreground">{data.rejections_with_known_reason} of {data.counts.rejected} reason(s) came from the employer; the rest are guesses.</p>}
@@ -212,7 +212,7 @@ export function FunnelView({ data, title }: { data: Funnel; title: string }) {
           {data.by_resume_version.length === 0 ? <p className="text-xs text-muted-foreground">No submitted applications yet.</p> : (
             <table className="w-full text-xs">
               <thead className="text-muted-foreground"><tr><th className="text-left font-normal">Version</th><th className="text-right font-normal">Applied</th><th className="text-right font-normal">Interviews</th></tr></thead>
-              <tbody>{data.by_resume_version.map((v) => <tr key={v.version}><td className="truncate pr-2">{v.version}</td><td className="text-right tabular-nums">{v.applications}</td><td className="text-right tabular-nums">{v.interviews}</td></tr>)}</tbody>
+              <tbody>{data.by_resume_version.map((v) => <tr key={v.version}><td className="truncate pr-2">{v.version}</td><td className="text-right readout">{v.applications}</td><td className="text-right readout">{v.interviews}</td></tr>)}</tbody>
             </table>
           )}
         </div>

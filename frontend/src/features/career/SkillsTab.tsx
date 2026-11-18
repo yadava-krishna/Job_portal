@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { ExternalLink, Info, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BadgeCheck, ExternalLink, Info, Loader2, Plus, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState, Field, NativeSelect } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { Note, Panel } from "@/features/growth/ui";
 import { backendMessage, useAddEvidence, useAddSkill, useDeleteEvidence, useDeleteSkill, useMatchHistory, useSetSkillState, useSkills } from "./hooks";
 import { EVIDENCE_TYPES, evidenceLabel, isHttpsLink, SKILL_STATES, stateLabel } from "./format";
 import { StateStepper } from "./labels";
@@ -17,28 +18,32 @@ import type { Evidence, EvidenceType, Skill } from "./types";
 
 export function SkillsTab() {
   const skills = useSkills();
-  if (skills.isLoading) return <div className="space-y-3"><Skeleton className="h-20" /><Skeleton className="h-28" /><Skeleton className="h-28" /></div>;
+  if (skills.isLoading) return <div className="space-y-3"><Skeleton className="h-20 rounded-2xl" /><Skeleton className="h-28 rounded-2xl" /><Skeleton className="h-28 rounded-2xl" /></div>;
   if (skills.isError) return <EmptyState title="Couldn't load your skills">{errorMessage(skills.error)}</EmptyState>;
   const list = skills.data?.skills ?? [];
   return (
-    <div className="space-y-6">
-      <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-        <Info className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-        <div>
-          <p className="font-medium">Courses and projects never count as work experience.</p>
-          <p className="text-muted-foreground">
-            Each skill moves through six steps. You can move a skill up only as far as your evidence supports: a course shows you are
-            learning, a project shows you can use it, and only a real job counts as professional experience.
-          </p>
-        </div>
-      </div>
-      <ScoreHistory />
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      <Panel title="Your skills" count={list.length} icon={<BadgeCheck />}
+             description="Each skill moves up six steps as you add evidence." bodyClassName="px-0 pb-1 sm:px-0">
+        {list.length === 0 ? (
+          <div className="px-4 pb-3 sm:px-5">
+            <EmptyState title="No skills yet. Let's fix that.">Skills from your resume appear here automatically. You can also add one with the form.</EmptyState>
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/70">{list.map((s) => <SkillCard key={s.id} skill={s} />)}</ul>
+        )}
+      </Panel>
+      <div className="space-y-4">
+      <Note tone="violet" icon={<Info />} className="rounded-2xl px-4 py-3 text-[13px]">
+        <p className="font-semibold">Courses and projects never count as work experience.</p>
+        <p className="mt-0.5 text-foreground/75">
+          You can move a skill up only as far as your evidence supports: a course shows you are learning, a project shows you can use it,
+          and only a real job counts as professional experience.
+        </p>
+      </Note>
       <AddSkillForm />
-      {list.length === 0 ? (
-        <EmptyState title="No skills yet">Skills from your resume appear here automatically. You can also add one above.</EmptyState>
-      ) : (
-        <div className="space-y-3">{list.map((s) => <SkillCard key={s.id} skill={s} />)}</div>
-      )}
+      <ScoreHistory />
+      </div>
     </div>
   );
 }
@@ -52,26 +57,23 @@ function AddSkillForm() {
     e.preventDefault();
     if (!name.trim()) return;
     add.mutate({ name: name.trim(), proficiency: proficiency || null, years: years === "" ? null : Number(years) }, {
-      onSuccess: () => { toast.success("Skill added"); setName(""); setProficiency(""); setYears(""); },
+      onSuccess: () => { toast.success("Skill added. Now stack some evidence."); setName(""); setProficiency(""); setYears(""); },
       onError: (err) => toast.error(errorMessage(err)),
     });
   };
   return (
-    <Card>
-      <CardHeader><CardTitle>Add a skill</CardTitle><CardDescription>New skills start at "Aware". Add evidence to move them up.</CardDescription></CardHeader>
-      <CardContent>
-        <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[1fr_12rem_8rem_auto] sm:items-end">
-          <Field label="Skill" htmlFor="sk-name"><Input id="sk-name" value={name} maxLength={100} placeholder="e.g. SAP FICO" onChange={(e) => setName(e.target.value)} /></Field>
-          <Field label="How well you know it" htmlFor="sk-prof">
-            <NativeSelect id="sk-prof" value={proficiency} onChange={setProficiency} className="w-full"
-                          options={[{ value: "", label: "Not sure" }, { value: "beginner", label: "Beginner" }, { value: "intermediate", label: "Intermediate" },
-                                    { value: "advanced", label: "Advanced" }, { value: "expert", label: "Expert" }]} />
-          </Field>
-          <Field label="Years" htmlFor="sk-years"><Input id="sk-years" type="number" min={0} max={50} step={0.5} value={years} onChange={(e) => setYears(e.target.value)} /></Field>
-          <Button type="submit" disabled={!name.trim() || add.isPending}>{add.isPending ? <Loader2 className="animate-spin" /> : <Plus />} Add skill</Button>
-        </form>
-      </CardContent>
-    </Card>
+    <Panel title="Add a skill" icon={<Plus />} description={<>New skills start at "Aware". Add evidence to move them up.</>}>
+      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-[1fr_8rem] lg:grid-cols-[1fr_5.5rem]">
+        <Field label="Skill" htmlFor="sk-name" className="sm:col-span-2"><Input id="sk-name" value={name} maxLength={100} placeholder="e.g. SAP FICO" onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="How well you know it" htmlFor="sk-prof">
+          <NativeSelect id="sk-prof" value={proficiency} onChange={setProficiency} className="w-full"
+                        options={[{ value: "", label: "Not sure" }, { value: "beginner", label: "Beginner" }, { value: "intermediate", label: "Intermediate" },
+                                  { value: "advanced", label: "Advanced" }, { value: "expert", label: "Expert" }]} />
+        </Field>
+        <Field label="Years" htmlFor="sk-years"><Input id="sk-years" type="number" min={0} max={50} step={0.5} value={years} onChange={(e) => setYears(e.target.value)} /></Field>
+        <Button type="submit" className="sm:col-span-2" disabled={!name.trim() || add.isPending}>{add.isPending ? <Loader2 className="animate-spin" /> : <Plus />} Add skill</Button>
+      </form>
+    </Panel>
   );
 }
 
@@ -100,10 +102,10 @@ function SkillCard({ skill }: { skill: Skill }) {
   };
 
   return (
-    <Card className="gap-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <li className="space-y-2.5 px-4 py-3.5 sm:px-5">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <div className="min-w-0">
-          <div className="font-medium">{skill.name}</div>
+          <div className="font-semibold text-heading">{skill.name}</div>
           <div className="text-xs text-muted-foreground">
             {skill.source === "resume_parse" ? "From your resume" : "Added by you"}
             {skill.proficiency && ` · ${skill.proficiency}`}
@@ -111,38 +113,38 @@ function SkillCard({ skill }: { skill: Skill }) {
             {` · Your evidence supports up to "${stateLabel(skill.evidence_supports)}"`}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <NativeSelect id={`state-${skill.id}`} ariaLabel={`Step for ${skill.name}`} value={skill.state} onChange={changeState}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <NativeSelect id={`state-${skill.id}`} ariaLabel={`Step for ${skill.name}`} value={skill.state} onChange={changeState} className="h-8 rounded-full px-2.5 text-[12.5px]"
                         options={SKILL_STATES.map((s) => ({ value: s.key, label: s.label }))} />
           <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}><Plus /> Add evidence</Button>
-          <Button size="icon-sm" variant="ghost" aria-label={`Remove ${skill.name}`} onClick={() => setConfirm({ kind: "skill" })}><Trash2 /></Button>
+          <Button size="icon-sm" variant="ghost" className="text-muted-foreground hover:text-destructive" aria-label={`Remove ${skill.name}`} onClick={() => setConfirm({ kind: "skill" })}><Trash2 /></Button>
         </div>
       </div>
       <StateStepper state={skill.state} supports={skill.evidence_supports} />
       {setState.isPending && <p className="text-xs text-muted-foreground">Saving…</p>}
-      {stateError && <p role="alert" className="rounded-md bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">{stateError}</p>}
+      {stateError && <p role="alert" className="rounded-lg bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">{stateError}</p>}
 
       {skill.evidence.length > 0 ? (
-        <ul className="space-y-1.5">
+        <ul className="space-y-1">
           {skill.evidence.map((e) => (
-            <li key={e.id} className="flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
+            <li key={e.id} className="flex items-start justify-between gap-2 rounded-xl bg-paper-sunk/70 px-3 py-2 text-[13px]">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs">{evidenceLabel(e.type)}</span>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="rounded-full bg-card px-2 py-0.5 text-[11px] font-medium text-heading ring-1 ring-border/70">{evidenceLabel(e.type)}</span>
                   <span className="font-medium">{e.title}</span>
-                  {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline">Open link <ExternalLink className="size-3" /></a>}
+                  {e.url && <a href={e.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-route underline-offset-2 hover:underline">Open link <ExternalLink className="size-3" /></a>}
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="mt-0.5 text-xs text-muted-foreground">
                   {e.occurred_on ? formatDate(e.occurred_on) : `Added ${formatDate(e.created_at)}`}
                   {e.source === "learning_session" && " · from a learning session"}
                 </div>
                 {e.description && <p className="mt-1 text-xs text-muted-foreground">{e.description}</p>}
               </div>
-              <Button size="icon-xs" variant="ghost" aria-label={`Delete evidence ${e.title}`} onClick={() => setConfirm({ kind: "evidence", item: e })}><Trash2 /></Button>
+              <Button size="icon-xs" variant="ghost" className="text-muted-foreground hover:text-destructive" aria-label={`Delete evidence ${e.title}`} onClick={() => setConfirm({ kind: "evidence", item: e })}><Trash2 /></Button>
             </li>
           ))}
         </ul>
-      ) : <p className="text-xs text-muted-foreground">No evidence yet.</p>}
+      ) : <p className="text-xs text-muted-foreground">No evidence yet. Add a course, project or job to move this skill up.</p>}
 
       <AddEvidenceDialog skill={skill} open={addOpen} onOpenChange={setAddOpen} />
 
@@ -162,7 +164,7 @@ function SkillCard({ skill }: { skill: Skill }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </li>
   );
 }
 
@@ -172,29 +174,26 @@ function ScoreHistory() {
   const rows = Array.isArray(h.data) ? h.data.slice(0, 8) : [];
   if (!rows.length) return null;
   return (
-    <Card data-testid="score-history">
-      <CardHeader>
-        <CardTitle className="text-base">How your evidence changed your matches</CardTitle>
-        <CardDescription>When a skill reaches project or work evidence, the jobs that ask for it are re-scored. Courses alone don't change scores.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ul className="divide-y text-sm">
-          {rows.map((r) => {
-            const up = (r.new_score ?? 0) >= (r.old_score ?? 0);
-            return (
-              <li key={r.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2">
-                <span className="min-w-0"><a className="font-medium hover:underline" href={`#/discover?job=${r.user_job_id}`}>{r.title}</a>
-                  <span className="text-muted-foreground"> · {r.company}</span>
-                  <span className="block text-xs text-muted-foreground">{r.reason} · {formatDate(r.created_at)}</span></span>
-                <span className={up ? "font-semibold text-emerald-700 dark:text-emerald-400" : "font-semibold text-rose-700 dark:text-rose-400"}>
-                  {Math.round(r.old_score ?? 0)}% → {Math.round(r.new_score ?? 0)}%
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </CardContent>
-    </Card>
+    <Panel data-testid="score-history" title="How your evidence changed your matches" icon={<TrendingUp />}
+           description="When a skill reaches project or work evidence, the jobs that ask for it are re-scored. Courses alone don't change scores."
+           bodyClassName="px-0 pb-1 sm:px-0">
+      <ul className="divide-y divide-border/70 text-[13px]">
+        {rows.map((r) => {
+          const up = (r.new_score ?? 0) >= (r.old_score ?? 0);
+          return (
+            <li key={r.id} className="flex items-start justify-between gap-3 px-4 py-2.5 sm:px-5">
+              <span className="min-w-0"><a className="font-medium hover:underline" href={`#/discover?job=${r.user_job_id}`}>{r.title}</a>
+                <span className="text-muted-foreground"> · {r.company}</span>
+                <span className="block text-xs text-muted-foreground">{r.reason} · {formatDate(r.created_at)}</span></span>
+              <span className={cn("readout inline-flex shrink-0 items-center gap-1 font-semibold", up ? "text-route" : "text-destructive")}>
+                {up ? <ArrowUpRight className="size-3.5" aria-hidden /> : <ArrowDownRight className="size-3.5" aria-hidden />}
+                {Math.round(r.old_score ?? 0)}% → {Math.round(r.new_score ?? 0)}%
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
   );
 }
 

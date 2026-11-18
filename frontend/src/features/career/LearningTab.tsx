@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookOpen, CheckCircle2, ExternalLink, Eye, Loader2, Pause, Play, ShieldCheck, Square, Timer } from "lucide-react";
+import { BookOpen, CheckCircle2, ExternalLink, Eye, History, Info, Link2, Link2Off, ListChecks, Loader2, Pause, Play, ShieldCheck, Square, Timer } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,6 +11,7 @@ import { EmptyState, Field, NativeSelect } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Note, Panel, StatusDot, type Tone } from "@/features/growth/ui";
 import {
   backendMessage, ck, consentRequired, useCompleteSession, useGapDetail, useGaps, useLearningSessions, useSessionAction, useSetConsent,
   useStartSession,
@@ -42,7 +42,7 @@ export function LearningTab({ gapId, onSelectGap }: { gapId: number | null; onSe
   const startSession = (body: StartBody) => {
     setResult(null);
     start.mutate(body, {
-      onSuccess: () => { setConsentPrompt(null); toast.success("Learning session started"); },
+      onSuccess: () => { setConsentPrompt(null); toast.success("Learning session started. Time to lock in."); },
       onError: (err) => {
         const c = consentRequired(err);
         if (c) setConsentPrompt({ ...c, body });
@@ -61,34 +61,29 @@ export function LearningTab({ gapId, onSelectGap }: { gapId: number | null; onSe
   };
 
   return (
-    <div className="space-y-6">
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Eye className="size-3.5" /> {TRACKING_NOTE}. Opening a link alone is never counted as learning.</p>
+    <div className="space-y-4">
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Eye className="size-3.5" aria-hidden /> {TRACKING_NOTE}. Opening a link alone is never counted as learning.</p>
 
       {consent && (
-        <Card className="border-primary/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><ShieldCheck className="size-4" /> {consent.message}</CardTitle>
-            <CardDescription>Learning sessions measure your time only with your permission. You can turn this off any time in Settings → Privacy & consent.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <blockquote className="rounded-lg border-l-4 border-primary/40 bg-muted/40 px-3 py-2 text-sm">{consent.text}</blockquote>
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={allowAndRetry} disabled={setConsent.isPending || start.isPending}>
-                {(setConsent.isPending || start.isPending) && <Loader2 className="animate-spin" />} Turn on learning tracking
-              </Button>
-              <Button variant="outline" onClick={() => setConsentPrompt(null)}>Not now</Button>
-            </div>
-          </CardContent>
-        </Card>
+        <section className="rounded-2xl bg-card p-4 ring-1 ring-violet/30 animate-in fade-in-0 slide-in-from-top-1 duration-200 sm:p-5">
+          <h3 className="flex items-center gap-2 font-display text-[15px] font-bold text-heading"><ShieldCheck className="size-4 text-violet" aria-hidden /> {consent.message}</h3>
+          <p className="mt-1 text-[13px] text-muted-foreground">Learning sessions measure your time only with your permission. You can turn this off any time in Settings → Privacy & consent.</p>
+          <blockquote className="mt-3 rounded-xl border-l-4 border-violet/40 bg-lavender/50 px-3 py-2 text-[13px]">{consent.text}</blockquote>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={allowAndRetry} disabled={setConsent.isPending || start.isPending}>
+              {(setConsent.isPending || start.isPending) && <Loader2 className="animate-spin" />} Turn on learning tracking
+            </Button>
+            <Button variant="outline" onClick={() => setConsentPrompt(null)}>Not now</Button>
+          </div>
+        </section>
       )}
 
-      {current && <ActiveSession key={current.id} session={current} onFinished={setResult} />}
       {result && (
-        <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+        <div role="status" className="flex items-start gap-2 rounded-2xl bg-success-tint px-4 py-3 text-sm animate-in fade-in-0 slide-in-from-top-1 duration-200">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
           <div>
-            <div className="font-medium">Session finished: {result.session.skill} is now "{result.skill_state_label}".</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="font-medium text-success">Session finished: {result.session.skill} is now "{result.skill_state_label}".</div>
+            <div className="text-xs text-foreground/75">
               {minutes(Math.floor(result.session.active_seconds / 60))} active, {minutes(Math.floor(result.session.idle_seconds / 60))} idle.
               Your evidence was saved under Skills & evidence.
             </div>
@@ -96,47 +91,47 @@ export function LearningTab({ gapId, onSelectGap }: { gapId: number | null; onSe
         </div>
       )}
 
-      {gaps.isLoading ? <Skeleton className="h-40" /> : openGaps.length === 0 ? (
-        <EmptyState icon={<BookOpen className="size-8" />} title="Nothing to learn yet">Learning suggestions appear once JobPilot finds a skill gap in your matches.</EmptyState>
-      ) : (
-        <Card>
-          <CardHeader className="gap-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <CardTitle>Learning resources</CardTitle>
-                <CardDescription>Hand-picked, free where possible, from official or well-known sites.</CardDescription>
-              </div>
-              <Field label="Skill" htmlFor="learn-gap" className="sm:w-64">
-                <NativeSelect id="learn-gap" value={selected ? String(selected) : ""} onChange={(v) => onSelectGap(Number(v))} className="w-full"
-                              options={openGaps.map((g) => ({ value: String(g.id), label: g.skill }))} />
-              </Field>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {detail.isLoading ? <Skeleton className="h-32" /> : detail.isError ? <p className="text-sm text-destructive">{errorMessage(detail.error)}</p> : detail.data && (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Your level in {detail.data.skill}: <span className="font-medium text-foreground">{stateLabel(detail.data.evidence_state)}</span>.
-                  Suggested level: <span className="font-medium text-foreground">{detail.data.learning.level_suggested}</span>.
-                </p>
-                {detail.data.learning.note && <p className="text-xs text-amber-700 dark:text-amber-400">{detail.data.learning.note}</p>}
-                <ul className="space-y-2">
-                  {detail.data.learning.resources.map((r) => (
-                    <ResourceItem key={r.id} r={r} running={current?.resource_id === r.id && current.status === "active"}
-                                  starting={start.isPending && start.variables?.resource_id === r.id}
-                                  onStart={() => startSession({ resource_id: r.id, gap_id: detail.data!.id })} />
-                  ))}
-                </ul>
-                <Button variant="outline" size="sm" disabled={start.isPending} onClick={() => startSession({ gap_id: detail.data!.id })}>
-                  <Play /> Start a session for {detail.data.skill} without a specific resource
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <SessionHistory loading={sessions.isLoading} data={sessions.data} />
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="min-w-0 space-y-4">
+          {current && <ActiveSession key={current.id} session={current} onFinished={setResult} />}
+          {gaps.isLoading ? <Skeleton className="h-64 rounded-2xl" /> : openGaps.length === 0 ? (
+            <EmptyState icon={<BookOpen className="size-8" />} title="Nothing to learn yet">Learning suggestions appear once JobPilot finds a skill gap in your matches.</EmptyState>
+          ) : (
+            <Panel title="Your learning plan" icon={<ListChecks />}
+                   description="Hand-picked, free where possible, from official or well-known sites. Work top to bottom."
+                   actions={
+                     <Field label="Skill" htmlFor="learn-gap" className="flex items-center gap-2 space-y-0">
+                       <NativeSelect id="learn-gap" value={selected ? String(selected) : ""} onChange={(v) => onSelectGap(Number(v))} className="h-8 min-w-40 rounded-full px-3 text-[13px]"
+                                     options={openGaps.map((g) => ({ value: String(g.id), label: g.skill }))} />
+                     </Field>
+                   }>
+              {detail.isLoading ? <Skeleton className="h-40 rounded-xl" /> : detail.isError ? <p className="text-sm text-destructive">{errorMessage(detail.error)}</p> : detail.data && (
+                <div className="space-y-3">
+                  <dl className="flex flex-wrap gap-x-5 gap-y-1 text-[13px]">
+                    <div className="flex gap-1.5"><dt className="text-muted-foreground">Your level in {detail.data.skill}:</dt><dd className="font-medium text-foreground">{stateLabel(detail.data.evidence_state)}</dd></div>
+                    <div className="flex gap-1.5"><dt className="text-muted-foreground">Suggested level:</dt><dd className="font-medium text-foreground capitalize">{detail.data.learning.level_suggested}</dd></div>
+                  </dl>
+                  {detail.data.learning.note && <Note tone="caution" icon={<Info />}>{detail.data.learning.note}</Note>}
+                  <ol className="space-y-2">
+                    {detail.data.learning.resources.map((r, i) => (
+                      <ResourceItem key={r.id} r={r} step={i + 1} running={current?.resource_id === r.id && current.status === "active"}
+                                    starting={start.isPending && start.variables?.resource_id === r.id}
+                                    onStart={() => startSession({ resource_id: r.id, gap_id: detail.data!.id })} />
+                    ))}
+                  </ol>
+                  <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+                    <Button variant="outline" size="sm" disabled={start.isPending} onClick={() => startSession({ gap_id: detail.data!.id })}>
+                      <Play /> Start a session for {detail.data.skill} without a specific resource
+                    </Button>
+                    <span className="text-xs text-muted-foreground">Finishing a session saves it as evidence for the skill.</span>
+                  </div>
+                </div>
+              )}
+            </Panel>
+          )}
+        </div>
+        <SessionHistory loading={sessions.isLoading} data={sessions.data} />
+      </div>
     </div>
   );
 }
@@ -147,24 +142,27 @@ function linkStatusText(r: LearningResource): string {
   return "Link not checked yet";
 }
 
-function ResourceItem({ r, running, starting, onStart }: { r: LearningResource; running: boolean; starting: boolean; onStart: () => void }) {
+function ResourceItem({ r, step, running, starting, onStart }: { r: LearningResource; step: number; running: boolean; starting: boolean; onStart: () => void }) {
   return (
-    <li className="rounded-lg border p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+    <li className={cn("flex gap-3 rounded-xl px-3 py-3 ring-1 transition-colors duration-150", running ? "bg-route-tint/60 ring-route/30" : "ring-border/70 hover:bg-paper-sunk/50")}>
+      <span aria-hidden className="readout flex size-6 shrink-0 items-center justify-center rounded-full bg-paper-sunk text-[12px] font-semibold text-heading">{step}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline">
-            {r.title} <ExternalLink className="size-3" />
+          <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-heading underline-offset-2 hover:underline">
+            {r.title} <ExternalLink className="size-3 text-muted-foreground" aria-hidden />
           </a>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span>{r.provider}</span><span>· {r.type}</span><span>· {r.level}</span>
             {r.duration_minutes != null && <span>· about {minutes(r.duration_minutes)}</span>}
             {r.is_free && <FreeBadge />}
-            <span className={cn(r.link_status === "ok" ? "text-emerald-700 dark:text-emerald-400" : "")}>· {linkStatusText(r)}</span>
+            <span className={cn("inline-flex items-center gap-1", r.link_status === "ok" && "text-foreground/75")}>
+              {r.link_status === "ok" ? <Link2 className="size-3" aria-hidden /> : <Link2Off className="size-3" aria-hidden />}· {linkStatusText(r)}
+            </span>
           </div>
           <p className="text-xs text-muted-foreground">Why this: {r.relevance}</p>
         </div>
-        {running ? <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary"><Timer className="size-3.5" /> In progress</span> : (
-          <Button size="sm" className="shrink-0" disabled={starting} onClick={onStart}>{starting ? <Loader2 className="animate-spin" /> : <Play />} Start learning</Button>
+        {running ? <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-route"><Timer className="size-3.5" aria-hidden /> In progress</span> : (
+          <Button size="sm" variant={step === 1 ? "default" : "outline"} className="shrink-0 self-start" disabled={starting} onClick={onStart}>{starting ? <Loader2 className="animate-spin" /> : <Play />} Start learning</Button>
         )}
       </div>
     </li>
@@ -237,34 +235,33 @@ function ActiveSession({ session, onFinished }: { session: LearningSession; onFi
   };
 
   return (
-    <Card className="border-primary/40">
-      <CardContent className="space-y-3 pt-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-primary">{running ? "Learning session running" : "Learning session paused"}</div>
-            <div className="text-lg font-semibold">{session.skill}</div>
+    <section aria-label="Current learning session" className="rounded-2xl bg-card p-4 ring-2 ring-route/30 shadow-[var(--shadow-raised)] sm:p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="eyebrow inline-flex items-center gap-1.5 text-route">
+            <span aria-hidden className={cn("size-1.5 rounded-full", running ? "animate-pulse bg-route" : "bg-muted-foreground")} />
+            {running ? "Learning session running" : "Learning session paused"}
           </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className={cn("font-mono text-3xl font-semibold tabular-nums", !running && "text-muted-foreground")} aria-label="Session time" role="timer">{clock(shown)}</div>
-              <div className="text-xs text-muted-foreground">
-                {minutes(Math.floor(session.active_seconds / 60))} active · {minutes(Math.floor(session.idle_seconds / 60))} idle
-              </div>
-            </div>
+          <div className="mt-1 font-display text-[20px] font-bold text-heading">{session.skill}</div>
+        </div>
+        <div className="text-left sm:text-right">
+          <div className={cn("readout text-[32px] leading-none font-semibold text-heading", !running && "text-muted-foreground")} aria-label="Session time" role="timer">{clock(shown)}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {minutes(Math.floor(session.active_seconds / 60))} active · {minutes(Math.floor(session.idle_seconds / 60))} idle
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={toggle} disabled={pauseResume.isPending}>{running ? <><Pause /> Pause</> : <><Play /> Resume</>}</Button>
-          <Button size="sm" onClick={() => setFinishOpen(true)}><Square /> Finish</Button>
-        </div>
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Eye className="size-3.5" /> {TRACKING_NOTE}. Time counts as active only while this page is visible and you have used the mouse or keyboard in the last 2 minutes.
-        </p>
-        {running && !visible && <p className="text-xs text-amber-700 dark:text-amber-400">Not counting: this page is hidden.</p>}
-        {running && visible && idleNow && <p className="text-xs text-amber-700 dark:text-amber-400">You seem idle. Move the mouse or type to keep counting active time.</p>}
-      </CardContent>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={toggle} disabled={pauseResume.isPending}>{running ? <><Pause /> Pause</> : <><Play /> Resume</>}</Button>
+        <Button size="sm" onClick={() => setFinishOpen(true)}><Square /> Finish</Button>
+      </div>
+      <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground">
+        <Eye className="mt-px size-3.5 shrink-0" aria-hidden /> {TRACKING_NOTE}. Time counts as active only while this page is visible and you have used the mouse or keyboard in the last 2 minutes.
+      </p>
+      {running && !visible && <p className="mt-1 text-xs font-medium text-caution">Not counting: this page is hidden.</p>}
+      {running && visible && idleNow && <p className="mt-1 text-xs font-medium text-caution">You seem idle. Move the mouse or type to keep counting active time.</p>}
       <FinishDialog session={session} open={finishOpen} onOpenChange={setFinishOpen} onFinished={onFinished} />
-    </Card>
+    </section>
   );
 }
 
@@ -330,41 +327,33 @@ function FinishDialog({ session, open, onOpenChange, onFinished }: {
 
 const sessionStatus: Record<string, string> = { active: "Running", paused: "Paused", completed: "Finished" };
 
+const sessionTone: Record<string, Tone> = { active: "route", paused: "caution", completed: "success" };
+
 function SessionHistory({ loading, data }: { loading: boolean; data?: { sessions: LearningSession[]; stats: { days: number; sessions: number; completed: number; active_minutes: number; idle_minutes: number } } }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Your learning sessions</CardTitle>
-        {data && (
-          <CardDescription>
-            Last {data.stats.days} days: {data.stats.sessions} session(s), {data.stats.completed} finished, {minutes(data.stats.active_minutes)} active,
-            {" "}{minutes(data.stats.idle_minutes)} idle.
-          </CardDescription>
-        )}
-      </CardHeader>
-      <CardContent>
-        {loading ? <Skeleton className="h-20" /> : !data?.sessions.length ? <p className="text-sm text-muted-foreground">No sessions yet.</p> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-muted-foreground">
-                <tr><th className="pb-2 font-medium">Skill</th><th className="pb-2 font-medium">Started</th><th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 text-right font-medium">Active</th><th className="pb-2 text-right font-medium">Idle</th></tr>
-              </thead>
-              <tbody className="divide-y">
-                {data.sessions.map((s) => (
-                  <tr key={s.id}>
-                    <td className="py-2">{s.skill}</td>
-                    <td className="py-2 text-muted-foreground">{formatDate(s.started_at, true)}</td>
-                    <td className="py-2">{sessionStatus[s.status] ?? s.status}</td>
-                    <td className="py-2 text-right tabular-nums">{minutes(Math.floor(s.active_seconds / 60))}</td>
-                    <td className="py-2 text-right tabular-nums">{minutes(Math.floor(s.idle_seconds / 60))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <Panel title="Your learning sessions" icon={<History />} bodyClassName="px-0 pb-1 sm:px-0"
+           description={data ? <>Last {data.stats.days} days: {data.stats.sessions} session(s), {data.stats.completed} finished.</> : undefined}>
+      {data && (
+        <dl className="mx-4 mb-2 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-border/70 ring-1 ring-border/70 sm:mx-5">
+          <div className="bg-paper-sunk/60 px-3 py-2"><dt className="text-[11px] text-muted-foreground">Active</dt><dd className="readout text-[15px] font-semibold text-heading">{minutes(data.stats.active_minutes)}</dd></div>
+          <div className="bg-paper-sunk/60 px-3 py-2"><dt className="text-[11px] text-muted-foreground">Idle</dt><dd className="readout text-[15px] font-semibold text-heading">{minutes(data.stats.idle_minutes)}</dd></div>
+        </dl>
+      )}
+      {loading ? <Skeleton className="mx-4 h-20 sm:mx-5" /> : !data?.sessions.length ? <p className="px-4 pb-3 text-sm text-muted-foreground sm:px-5">No sessions yet. Your first one starts from the plan.</p> : (
+        <ul className="divide-y divide-border/70">
+          {data.sessions.map((s) => (
+            <li key={s.id} className="px-4 py-2.5 text-[13px] sm:px-5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate font-medium">{s.skill}</span>
+                <StatusDot tone={sessionTone[s.status] ?? "muted"} className="text-xs">{sessionStatus[s.status] ?? s.status}</StatusDot>
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">
+                {formatDate(s.started_at, true)} · <span className="readout">{minutes(Math.floor(s.active_seconds / 60))}</span> active · <span className="readout">{minutes(Math.floor(s.idle_seconds / 60))}</span> idle
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }

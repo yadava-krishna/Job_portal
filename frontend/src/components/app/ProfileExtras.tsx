@@ -3,11 +3,11 @@ import { Check, Download, Eye, Loader2, Plus, Star, Trash2, UploadCloud } from "
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ErrorState, Field, LoadingState, NativeSelect } from "@/components/app/common";
+import { Panel } from "@/components/settings/primitives";
 import { downloadFile, errorMessage, previewFile } from "@/lib/api";
 import { bytes, formatDate } from "@/lib/format";
 import { NOTIFICATION_KINDS, useNotificationPrefs, useResumeAction, useResumes, useSaveNotificationPrefs, type NotificationKind, type NotificationPrefs } from "@/services/queries";
@@ -22,15 +22,12 @@ export function ResumeVersions() {
   const [editing, setEditing] = useState<{ id: number; name: string } | null>(null);
   const run = (a: Parameters<typeof act.mutate>[0], ok: string) => act.mutate(a, { onSuccess: () => toast.success(ok), onError: (e) => toast.error(errorMessage(e)) });
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Resume versions</CardTitle>
-        <CardDescription>Keep role-specific resumes. The default is offered first by the Smart Apply extension (you can pick another resume or a Resume Studio version) and recorded on applications. Changing the default does not change your confirmed profile.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <Panel title="Resume versions"
+           description="Keep role-specific resumes. The default is offered first by the Smart Apply extension (you can pick another resume or a Resume Studio version) and recorded on applications. Changing the default does not change your confirmed profile.">
+      <div className="space-y-3">
         {resumes.isLoading && <Loader2 className="animate-spin" />}
         {resumes.data?.map((r) => (
-          <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm">
+          <div key={r.id} className={`flex flex-wrap items-center justify-between gap-2 rounded-xl p-3 text-sm ring-1 transition-colors duration-200 ${r.is_active ? "bg-route-tint/50 ring-route/25" : "ring-border"}`}>
             <div className="min-w-0">
               {editing?.id === r.id ? (
                 <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); run({ kind: "rename", id: r.id, name: editing.name }, "Renamed"); setEditing(null); }}>
@@ -43,21 +40,21 @@ export function ResumeVersions() {
               <div className="text-xs text-muted-foreground">{r.page_count} page(s) · {bytes(r.size_bytes)} · uploaded {formatDate(r.uploaded_at)}</div>
             </div>
             <div className="flex items-center gap-1">
-              {r.is_active ? <Badge>Default</Badge> : <Button size="sm" variant="outline" onClick={() => run({ kind: "default", id: r.id }, "Default resume changed")}><Star /> Make default</Button>}
+              {r.is_active ? <Badge className="animate-in fade-in-0 zoom-in-95 duration-200">Default</Badge> : <Button size="sm" variant="outline" onClick={() => run({ kind: "default", id: r.id }, "Default resume changed")}><Star /> Make default</Button>}
               {r.original_filename.toLowerCase().endsWith(".pdf") && <Button size="icon-sm" variant="ghost" aria-label="Preview" onClick={() => previewFile(`/profile/resumes/${r.id}/file?inline=true`).catch((e) => toast.error(errorMessage(e)))}><Eye /></Button>}
               <Button size="icon-sm" variant="ghost" aria-label="Download" onClick={() => downloadFile(`/profile/resumes/${r.id}/file`, r.original_filename).catch((e) => toast.error(errorMessage(e)))}><Download /></Button>
               {!r.is_active && <Button size="icon-sm" variant="ghost" aria-label="Delete" onClick={() => run({ kind: "delete", id: r.id }, "Deleted")}><Trash2 /></Button>}
             </div>
           </div>
         ))}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-4">
           <input ref={fileRef} type="file" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" aria-label="Add a resume version"
                  onChange={(e) => { const f = e.target.files?.[0]; if (f) run({ kind: "upload", file: f, makeDefault }, makeDefault ? "Uploaded. Review your profile below." : "Added"); e.target.value = ""; }} />
           <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={act.isPending}>{act.isPending ? <Loader2 className="animate-spin" /> : <UploadCloud />} Add a version</Button>
-          <label className="flex items-center gap-2 text-sm"><Switch checked={makeDefault} onCheckedChange={(c) => setMakeDefault(!!c)} /> Make it the default (and re-read it into the profile for review)</label>
+          <label className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground"><Switch checked={makeDefault} onCheckedChange={(c) => setMakeDefault(!!c)} /> Make it the default (and re-read it into the profile for review)</label>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -69,14 +66,14 @@ export function AnswerBank({ facts, onChange }: { facts: VerifiedFacts; onChange
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-semibold">Your saved answers</h3>
+        <h3 className="text-[13px] font-semibold text-heading">Your saved answers</h3>
         <p className="text-xs text-muted-foreground">
           Write the answer once; it is used when an application asks the same (or a very similar) question. Answers marked
           "One job only" are offered as a suggestion for you to check, never filled as confirmed. Demographic questions are never answered for you.
         </p>
       </div>
       {items.map((it, i) => (
-        <div key={i} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[1fr_1fr_auto]">
+        <div key={i} className="grid gap-2 rounded-xl bg-paper-sunk/60 p-3 ring-1 ring-border/70 animate-in fade-in-0 slide-in-from-top-1 duration-200 sm:grid-cols-[1fr_1fr_auto]">
           <Input value={it.question} placeholder="Question, e.g. Are you comfortable working from office?" aria-label={`Question ${i + 1}`}
                  onChange={(e) => patch(i, { question: e.target.value })} />
           <Textarea rows={1} value={it.answer} placeholder="Your answer" aria-label={`Answer ${i + 1}`}
@@ -133,23 +130,20 @@ export function NotificationTypeSettings() {
     });
   };
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Which alerts you get</CardTitle>
-        <CardDescription>Alerts appear under the bell at the top of the page. Each switch saves straight away. Turning a type off stops new alerts of that type; ones you already have stay.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <Panel title="Which alerts you get"
+           description="Alerts appear under the bell at the top of the page. Each switch saves straight away. Turning a type off stops new alerts of that type; ones you already have stay.">
+      <div>
         {prefs.isPending ? <LoadingState label="Loading your alert settings…" />
           : prefs.isError ? <ErrorState title="Your alert settings couldn't be loaded" error={prefs.error} onRetry={() => void prefs.refetch()} />
           : !kinds ? <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">These switches need a newer JobPilot server. Ask the portal owner to update it.</p>
           : (
-            <ul className="divide-y rounded-lg border">
+            <ul className="divide-y overflow-hidden rounded-xl ring-1 ring-border">
               {NOTIFICATION_KINDS.map((kind) => {
                 const on = pending[kind] ?? kinds[kind];
                 const row = rows[kind];
                 const id = `notify-kind-${kind}`;
                 return (
-                  <li key={kind} className="flex items-start gap-3 px-3 py-2.5">
+                  <li key={kind} className="flex items-start gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <label htmlFor={id} className="text-sm font-medium">{KIND_LABELS[kind].label}</label>
                       <p id={`${id}-desc`} className="text-xs text-muted-foreground">{KIND_LABELS[kind].description}</p>
@@ -157,7 +151,7 @@ export function NotificationTypeSettings() {
                     </div>
                     <span aria-live="polite" className="mt-0.5 w-14 shrink-0 text-right text-xs text-muted-foreground">
                       {row?.state === "saving" ? <Loader2 className="ml-auto size-3.5 animate-spin" aria-label="Saving" />
-                        : row?.state === "saved" ? <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400"><Check className="size-3.5" aria-hidden />Saved</span>
+                        : row?.state === "saved" ? <span className="inline-flex items-center gap-1 text-success animate-in fade-in-0 zoom-in-90 duration-200"><Check className="jp-bump size-3.5" aria-hidden />Saved</span>
                         : null}
                     </span>
                     <Switch id={id} className="mt-0.5" checked={on} aria-describedby={`${id}-desc`} disabled={row?.state === "saving"}
@@ -167,8 +161,8 @@ export function NotificationTypeSettings() {
               })}
             </ul>
           )}
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -183,19 +177,14 @@ export function NotificationSettings() {
   // Server values until the first edit; after that, later cache updates (e.g. an alert-type switch saving) leave the
   // edits not yet saved here alone.
   const p: NewJobPrefs | null = edits ?? (data ? { delivery: data.delivery, min_score: data.min_score, sources: data.sources } : null);
-  const header = (
-    <CardHeader>
-      <CardTitle>New job alerts</CardTitle>
-      <CardDescription>How alerts about new matching jobs reach you. A high score is a guide to read the job, not proof that it suits you.</CardDescription>
-    </CardHeader>
-  );
-  if (prefs.isError && !p) return <Card>{header}<CardContent><ErrorState title="Your alert settings couldn't be loaded" error={prefs.error} onRetry={() => void prefs.refetch()} /></CardContent></Card>;
-  if (!p || !data) return <Card>{header}<CardContent><LoadingState /></CardContent></Card>;
+  const title = "New job alerts";
+  const description = "How alerts about new matching jobs reach you. A high score is a guide to read the job, not proof that it suits you.";
+  if (prefs.isError && !p) return <Panel title={title} description={description}><ErrorState title="Your alert settings couldn't be loaded" error={prefs.error} onRetry={() => void prefs.refetch()} /></Panel>;
+  if (!p || !data) return <Panel title={title} description={description}><LoadingState /></Panel>;
   const toggleSource = (s: string) => setP({ ...p, sources: p.sources.includes(s) ? p.sources.filter((x) => x !== s) : [...p.sources, s] });
   return (
-    <Card>
-      {header}
-      <CardContent className="space-y-4 text-sm">
+    <Panel title={title} description={description}>
+      <div className="space-y-5 text-sm">
         {!data.new_matches && <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">New matching job alerts are switched off above. These settings apply when you switch them back on.</p>}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Delivery">
@@ -203,23 +192,23 @@ export function NotificationSettings() {
                           options={[{ value: "immediate", label: "One alert per job" }, { value: "daily_digest", label: "One daily summary" }]} />
           </Field>
           <Field label="Minimum match score" hint="Empty: use each saved search's own threshold.">
-            <Input type="number" min={0} max={100} value={p.min_score ?? ""} onChange={(e) => setP({ ...p, min_score: e.target.value === "" ? null : Number(e.target.value) })} />
+            <Input className="readout max-w-32" type="number" min={0} max={100} value={p.min_score ?? ""} onChange={(e) => setP({ ...p, min_score: e.target.value === "" ? null : Number(e.target.value) })} />
           </Field>
         </div>
         <div>
-          <div className="mb-1 font-medium">Only from these sources <span className="font-normal text-muted-foreground">(none selected = all)</span></div>
+          <div className="mb-2 font-medium">Only from these sources <span className="font-normal text-muted-foreground">(none selected = all)</span></div>
           <div className="flex flex-wrap gap-2">
             {SOURCES.map(([id, label]) => (
               <button key={id} type="button" aria-pressed={p.sources.includes(id)} onClick={() => toggleSource(id)}
-                      className={`rounded-full border px-3 py-1 text-xs ${p.sources.includes(id) ? "border-primary bg-primary/10 text-primary" : ""}`}>{label}</button>
+                      className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition-[background-color,color,box-shadow] duration-150 focus-visible:outline-2 focus-visible:outline-ring active:scale-[.97] ${p.sources.includes(id) ? "bg-route-tint text-route ring-route/40" : "bg-card text-muted-foreground ring-border hover:text-foreground hover:ring-foreground/25"}`}>{label}</button>
             ))}
           </div>
         </div>
         <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">E-mail delivery is not available yet: it needs an e-mail (SMTP) account configured on the server.</p>
-        <div className="flex justify-end">
-          <Button onClick={() => save.mutate(p, { onSuccess: () => toast.success("Saved"), onError: (e) => toast.error(errorMessage(e)) })} disabled={save.isPending}>Save</Button>
+        <div data-save-bar className="flex justify-end">
+          <Button onClick={() => save.mutate(p, { onSuccess: () => toast.success("Saved. Locked in."), onError: (e) => toast.error(errorMessage(e)) })} disabled={save.isPending}>Save</Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

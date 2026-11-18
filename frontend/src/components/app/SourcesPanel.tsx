@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Database, ShieldCheck, Play, CheckCircle2, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { Archive, Loader2, Play, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { StatusDot, type DotTone } from "@/components/app/discovery";
+import { timeAgo } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 interface SourceConnector {
   source_id: string;
@@ -21,7 +25,7 @@ export function SourcesPanel() {
   const [sources, setSources] = useState<SourceConnector[]>([]);
   const [loading, setLoading] = useState(true);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<Record<string, string>>({});
+  const [testResult, setTestResult] = useState<Record<string, { ok: boolean; text: string }>>({});
 
   const loadSources = async () => {
     try {
@@ -45,129 +49,109 @@ export function SourcesPanel() {
       const res = await api.post(`/discovery/connectors/${sourceId}/test`);
       setTestResult((prev) => ({
         ...prev,
-        [sourceId]: `Found ${res.data.jobs_found} jobs`,
+        [sourceId]: { ok: true, text: `Found ${res.data.jobs_found} jobs` },
       }));
     } catch (err: any) {
       setTestResult((prev) => ({
         ...prev,
-        [sourceId]: err.response?.data?.detail || "Test failed",
+        [sourceId]: { ok: false, text: err.response?.data?.detail || "Test failed" },
       }));
     } finally {
       setTestingId(null);
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const statusMeta = (status: string): [DotTone, string, string] => {
     switch (status) {
-      case "ok":
-        return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-      case "degraded":
-        return <AlertTriangle className="h-4 w-4 text-amber-500" />;
-      case "failing":
-        return <XCircle className="h-4 w-4 text-destructive" />;
-      default:
-        return <ShieldCheck className="h-4 w-4 text-muted-foreground" />;
+      case "ok": return ["healthy", "Healthy", "text-success"];
+      case "degraded": return ["attention", "Degraded", "text-caution"];
+      case "failing": return ["failing", "Failing", "text-destructive"];
+      default: return ["idle", status === "unknown" ? "Not checked" : status.replace(/_/g, " "), "text-muted-foreground"];
     }
   };
 
-  const [reapMessage, setReapMessage] = useState<string | null>(null);
+  const [reapMessage, setReapMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const handleReap = async () => {
     try {
       const res = await api.post("/discovery/reap-expired?max_age_days=60");
-      setReapMessage(`Archived ${res.data.reaped_count} expired postings`);
+      setReapMessage({ ok: true, text: `Archived ${res.data.reaped_count} expired postings` });
       setTimeout(() => setReapMessage(null), 4000);
     } catch {
-      setReapMessage("Failed to clean stale postings");
+      setReapMessage({ ok: false, text: "Failed to clean stale postings" });
       setTimeout(() => setReapMessage(null), 3000);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-            <Database className="h-5 w-5 text-primary" /> Multi-Source Discovery Connectors
+    <section className="rounded-2xl bg-card ring-1 ring-border">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 font-display text-[15px] font-bold tracking-[-0.01em] text-heading">
+            Discovery connectors
+            {sources.length > 0 && <span className="readout rounded-full bg-paper-sunk px-2 py-px text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border">{sources.length}</span>}
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Active verified job sources discovered via Scrapling, APIs, sitemaps, and feeds.
-          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Verified job sources reached through APIs, sitemaps and feeds.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {reapMessage && (
-            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-              {reapMessage}
-            </span>
+            <span role="status" className={cn("text-xs font-medium", reapMessage.ok ? "text-success" : "text-destructive")}>{reapMessage.text}</span>
           )}
-          <button
-            onClick={handleReap}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
-            title="Scan for listings older than 60 days and mark them expired"
-          >
-            Archive Stale (60d+)
-          </button>
-          <button
-            onClick={loadSources}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted/50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </button>
+          <Button size="sm" variant="outline" onClick={handleReap} title="Scan for listings older than 60 days and mark them expired">
+            <Archive /> Archive stale (60d+)
+          </Button>
+          <Button size="sm" variant="ghost" onClick={loadSources} disabled={loading}>
+            <RefreshCw className={cn(loading && "animate-spin")} /> Refresh
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {sources.map((src) => (
-          <div key={src.source_id} className="rounded-xl border border-border bg-card p-4 shadow-xs space-y-3 flex flex-col justify-between">
-            <div>
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h4 className="font-medium text-sm text-foreground">{src.name}</h4>
-                  <p className="text-xs text-muted-foreground font-mono">{src.domain}</p>
+      {loading && !sources.length ? (
+        <div className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading connectors…</div>
+      ) : !sources.length ? (
+        <p className="px-4 py-6 text-sm text-muted-foreground">No connectors reported.</p>
+      ) : (
+        <ul className="divide-y">
+          {sources.map((src) => {
+            const [tone, label, cls] = statusMeta(src.status);
+            const result = testResult[src.source_id];
+            return (
+              <li key={src.source_id} className="grid gap-x-4 gap-y-2 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-medium text-foreground">{src.name}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground">{src.domain}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1.5 text-[10.5px]">
+                    <span className="rounded-full bg-lavender px-2 py-px font-medium text-violet uppercase">{src.category.replace(/_/g, " ")}</span>
+                    <span className="rounded-full bg-paper-sunk px-2 py-px text-muted-foreground ring-1 ring-inset ring-border">{src.access_method.toUpperCase()}</span>
+                    <span className="readout rounded-full bg-paper-sunk px-2 py-px text-muted-foreground ring-1 ring-inset ring-border">{src.rate_limit_rpm} req/min</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-medium capitalize">
-                  {getStatusIcon(src.status)}
-                  <span>{src.status}</span>
+                <div className="min-w-0 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <StatusDot tone={tone} />
+                    <span className={cn("font-medium capitalize", cls)}>{label}</span>
+                  </div>
+                  <div className="mt-0.5 text-muted-foreground">
+                    <span className="readout font-semibold text-foreground">{src.jobs_discovered}</span> discovered
+                    {src.last_success_at && <> · last OK {timeAgo(src.last_success_at)}</>}
+                  </div>
+                  {src.last_error && <div className="mt-0.5 truncate text-caution" title={src.last_error}>{src.last_error}</div>}
                 </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-1.5 text-[10px]">
-                <span className="rounded-md bg-secondary px-2 py-0.5 text-secondary-foreground font-medium uppercase">
-                  {src.category.replace("_", " ")}
-                </span>
-                <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground">
-                  {src.access_method.toUpperCase()}
-                </span>
-                <span className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground">
-                  {src.rate_limit_rpm} req/min
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                <strong className="text-foreground">{src.jobs_discovered}</strong> discovered
-              </span>
-
-              <div className="flex items-center gap-2">
-                {testResult[src.source_id] && (
-                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
-                    {testResult[src.source_id]}
-                  </span>
-                )}
-                <button
-                  onClick={() => handleTest(src.source_id)}
-                  disabled={testingId === src.source_id}
-                  className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
-                >
-                  <Play className={`h-3 w-3 ${testingId === src.source_id ? "animate-spin" : ""}`} />
-                  Test
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+                <div className="flex items-center gap-2 sm:justify-end">
+                  {result && (
+                    <span className={cn("text-[11px] font-medium", result.ok ? "text-success" : "text-destructive")}>{result.text}</span>
+                  )}
+                  <Button size="xs" variant="outline" onClick={() => handleTest(src.source_id)} disabled={testingId === src.source_id}>
+                    {testingId === src.source_id ? <Loader2 className="animate-spin" /> : <Play />} Test
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }

@@ -1,15 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Activity, Building2, ExternalLink, Loader2, Pencil, Play, Plus, Radar, Search, Trash2 } from "lucide-react";
+import { Activity, Building2, CalendarClock, Check, ExternalLink, Loader2, Pause, Pencil, Play, Plus, Radar, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, Field, NativeSelect, PageHeader, PlatformBadge, TagInput } from "@/components/app/common";
-import { RunSummary, SourceHealthList } from "@/components/app/discovery";
+import { RunSummary, SourceHealthList, StatusDot, statusTone, type DotTone } from "@/components/app/discovery";
+import { CompanyMark } from "@/components/app/JobCard";
 import { CareerUrlForm } from "@/components/app/CareerUrlForm";
 import { SourcesPanel } from "@/components/app/SourcesPanel";
 import { errorMessage } from "@/lib/api";
@@ -50,8 +50,8 @@ function Checks<T extends string>({ options, value, onChange, label }: { options
   return (
     <fieldset className="flex flex-wrap gap-2" aria-label={label}>
       {opts.map((o) => (
-        <label key={o.id} className={cn("flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium",
-          value.includes(o.id) ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted")}>
+        <label key={o.id} className={cn("flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-150 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring",
+          value.includes(o.id) ? "border-route/40 bg-route-tint text-route" : "bg-card hover:bg-muted")}>
           <input type="checkbox" className="sr-only" checked={value.includes(o.id)} onChange={() => onChange(toggle(value, o.id))} />
           {o.label}
         </label>
@@ -168,13 +168,21 @@ function criteriaSummary(s: SavedSearch): string {
   return parts.join(" · ");
 }
 
-function SearchCard({ s, onEdit }: { s: SavedSearch; onEdit: () => void }) {
+function scheduleText(s: SavedSearch): string {
+  if (!s.enabled) return "Not scheduled";
+  return s.schedule === "manual" ? "Runs when you start it" : s.schedule === "daily" ? "Runs daily" : "Runs weekly";
+}
+
+const sourceLabel = (src: SearchSource) => (src === "adzuna_api" ? "Adzuna" : src === "remote_feeds" ? "Remote feeds" : ATS_LABEL[src]);
+
+function SearchRow({ s, onEdit }: { s: SavedSearch; onEdit: () => void }) {
   const run = useRunSearch();
   const del = useDeleteSearch();
   const invalidate = useInvalidateWork();
   const navigate = useNavigate();
   const [progress, setProgress] = useState<string | null>(null);
   const last = s.last_run;
+  const lastTone = progress ? "active" : last ? statusTone(last.status) : "idle";
 
   const runNow = () => run.mutate(s.id, {
     onSuccess: async (r) => {
@@ -190,30 +198,48 @@ function SearchCard({ s, onEdit }: { s: SavedSearch; onEdit: () => void }) {
   });
 
   return (
-    <Card className="gap-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="font-semibold">{s.name}
-            {s.origin === "starter" && <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-xs font-normal text-primary" title="Created automatically from your preferences; titles and locations follow your preferences.">From your profile</span>}
-            {!s.enabled && <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">Paused</span>}</h3>
-          <p className="text-sm text-muted-foreground">{criteriaSummary(s)}</p>
-          <div className="mt-1 flex flex-wrap gap-1">{s.criteria.sources.map((src) => <PlatformBadge key={src} platform={src === "adzuna_api" ? "Adzuna" : src === "remote_feeds" ? "Remote feeds" : ATS_LABEL[src]} />)}</div>
+    <li className={cn("group/search px-4 py-3.5 transition-colors duration-150 hover:bg-paper-sunk/50 sm:px-5", !s.enabled && "bg-paper-sunk/30")}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <div className="flex min-w-0 flex-1 gap-3.5">
+          <span aria-hidden className={cn("mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl", s.enabled ? "bg-route-tint text-route" : "bg-muted text-muted-foreground")}>
+            {s.enabled ? <Radar className="size-[18px]" /> : <Pause className="size-[18px]" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-display text-[15.5px] font-bold tracking-[-0.01em] text-heading">
+              {s.name}
+              {s.origin === "starter" && <span className="rounded-full bg-lavender px-2 py-0.5 font-sans text-[11px] font-medium text-violet" title="Created automatically from your preferences; titles and locations follow your preferences.">From your profile</span>}
+              {!s.enabled && <span className="rounded-full bg-muted px-2 py-0.5 font-sans text-[11px] font-medium text-muted-foreground">Paused</span>}
+            </h3>
+            <p className="mt-0.5 truncate text-[13px] text-muted-foreground" title={criteriaSummary(s)}>{criteriaSummary(s)}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5"><CalendarClock className="size-3.5" aria-hidden />{scheduleText(s)}{s.enabled && s.next_run_at ? ` · next ${formatDate(s.next_run_at, true)}` : ""}</span>
+              <span className="inline-flex items-center gap-1.5" title={last?.summary ?? undefined}>
+                <StatusDot tone={lastTone} />
+                {progress ? "Running now" : s.last_run_at ? `Last run ${timeAgo(s.last_run_at)}` : "Never run"}
+              </span>
+              {last && last.status !== "running" && !progress && (
+                <span><span className="readout font-medium text-foreground">{last.jobs_found}</span> matched · <span className="readout font-medium text-foreground">{last.jobs_new}</span> new · <span className="readout font-medium text-foreground">{last.jobs_matched}</span> shortlisted</span>
+              )}
+              <span className="flex flex-wrap items-center gap-1" title={s.criteria.sources.map(sourceLabel).join(", ")}>
+                {s.criteria.sources.slice(0, 3).map((src) => <PlatformBadge key={src} platform={sourceLabel(src)} />)}
+                {s.criteria.sources.length > 3 && <span className="text-muted-foreground">+{s.criteria.sources.length - 3} more</span>}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={runNow} disabled={run.isPending || !!progress}>{progress ? <Loader2 className="animate-spin" /> : <Play />} Run now</Button>
-          <Button size="sm" variant="outline" onClick={() => navigate(`/discover?search=${s.id}`)}><Search /> View matches</Button>
-          <Button size="sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${s.name}`}><Pencil /></Button>
-          <Button size="sm" variant="ghost" aria-label={`Delete ${s.name}`} onClick={() => { if (confirm(`Delete "${s.name}"? Jobs it found stay in your feed.`)) del.mutate(s.id, { onError: (e) => toast.error(errorMessage(e)) }); }}><Trash2 /></Button>
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 sm:pl-[3.375rem] md:pl-0">
+          <Button size="sm" variant="secondary" onClick={runNow} disabled={run.isPending || !!progress}>{progress ? <Loader2 className="animate-spin" /> : <Play />} Run now</Button>
+          <Button size="sm" variant="ghost" onClick={() => navigate(`/discover?search=${s.id}`)}><Search /> View matches</Button>
+          <Button size="icon-sm" variant="ghost" onClick={onEdit} aria-label={`Edit ${s.name}`} title="Edit"><Pencil /></Button>
+          <Button size="icon-sm" variant="ghost" className="hover:text-destructive" aria-label={`Delete ${s.name}`} title="Delete"
+                  onClick={() => { if (confirm(`Delete "${s.name}"? Jobs it found stay in your feed.`)) del.mutate(s.id, { onError: (e) => toast.error(errorMessage(e)) }); }}><Trash2 /></Button>
         </div>
       </div>
-      <div className="grid gap-x-6 gap-y-1 text-sm text-muted-foreground sm:grid-cols-3">
-        <span>Schedule: <strong className="text-foreground">{s.schedule === "manual" ? "manual" : s.schedule}</strong>{s.next_run_at ? ` · next ${formatDate(s.next_run_at, true)}` : ""}</span>
-        <span>Last run: {s.last_run_at ? timeAgo(s.last_run_at) : "never"}</span>
-        {last && last.status !== "running" && <span>{last.jobs_found} matched · {last.jobs_new} new · {last.jobs_matched} shortlisted</span>}
-      </div>
-      {progress && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> {progress}</p>}
-      {last && !progress && last.status !== "running" && <RunSummary run={last} compact={last.status === "completed"} />}
-    </Card>
+      {progress && <p className="mt-2 flex items-center gap-2 text-sm text-route sm:pl-[3.375rem] animate-in fade-in-0 duration-200"><Loader2 className="size-4 animate-spin" /> {progress}</p>}
+      {last && !progress && last.status !== "running" && last.status !== "completed" && (
+        <div className="mt-2.5 rounded-xl bg-paper-sunk p-3 md:ml-[3.375rem]"><RunSummary run={last} /></div>
+      )}
+    </li>
   );
 }
 
@@ -221,14 +247,25 @@ function SearchesTab() {
   const searches = useSavedSearches();
   const [editing, setEditing] = useState<SavedSearch | null>(null);
   const [open, setOpen] = useState(false);
+  const list = searches.data ?? [];
+  const active = list.filter((s) => s.enabled).length;
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end"><Button onClick={() => { setEditing(null); setOpen(true); }}><Plus /> New search</Button></div>
-      {searches.isLoading ? <Skeleton className="h-32" /> : !searches.data?.length ? (
-        <EmptyState icon={<Radar className="size-8" />} title="No saved searches yet">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[13px] text-muted-foreground">
+          {list.length ? <><span className="readout font-medium text-foreground">{active}</span> of <span className="readout">{list.length}</span> searches running on a schedule. New matches land in Discover.</> : "Searches run on a schedule and send new matches to Discover."}
+        </p>
+        <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus /> New search</Button>
+      </div>
+      {searches.isLoading ? <Skeleton className="h-40 rounded-2xl" /> : !list.length ? (
+        <EmptyState icon={<Radar className="size-8" />} title="No saved searches yet. Let's set one up.">
           Create one to scan your companies' official job boards on a schedule. New matches are scored against your resume and land in Discover.
         </EmptyState>
-      ) : searches.data.map((s) => <SearchCard key={s.id} s={s} onEdit={() => { setEditing(s); setOpen(true); }} />)}
+      ) : (
+        <ul className="divide-y overflow-hidden rounded-2xl bg-card ring-1 ring-border">
+          {list.map((s) => <SearchRow key={s.id} s={s} onEdit={() => { setEditing(s); setOpen(true); }} />)}
+        </ul>
+      )}
       {open && <SearchDialog open={open} initial={editing} onClose={() => setOpen(false)} />}
     </div>
   );
@@ -236,28 +273,49 @@ function SearchesTab() {
 
 // ---- companies --------------------------------------------------------------------------------------------
 
-const statusText: Record<string, [string, string]> = {
-  ok: ["Board OK", "text-emerald-700 dark:text-emerald-300"],
-  empty: ["No open jobs", "text-muted-foreground"],
-  not_found: ["Board not found", "text-rose-700 dark:text-rose-300"],
-  error: ["Couldn't reach board", "text-amber-700 dark:text-amber-300"],
+const statusText: Record<string, [string, DotTone, string]> = {
+  ok: ["Board OK", "healthy", "text-success"],
+  empty: ["No open jobs", "idle", "text-muted-foreground"],
+  not_found: ["Board not found", "failing", "text-destructive"],
+  error: ["Couldn't reach board", "attention", "text-caution"],
 };
+
+function Panel({ title, count, actions, children, className }: { title: ReactNode; count?: number; actions?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <section className={cn("rounded-2xl bg-card ring-1 ring-border", className)}>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+        <h3 className="flex items-center gap-2 font-display text-[15px] font-bold tracking-[-0.01em] text-heading">
+          {title}{count != null && <span className="readout rounded-full bg-paper-sunk px-2 py-px text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border">{count}</span>}
+        </h3>
+        {actions}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 function CompanyRow({ c }: { c: Company }) {
   const unwatch = useUnwatchCompany();
-  const [label, tone] = c.last_status ? statusText[c.last_status] : ["Not checked yet", "text-muted-foreground"];
+  const [label, tone, cls] = c.last_status ? statusText[c.last_status] : ["Not checked yet", "idle" as DotTone, "text-muted-foreground"];
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-      <div className="min-w-0">
-        <span className="font-medium">{c.name}</span> <PlatformBadge platform={ATS_LABEL[c.ats]} />
-        {c.industry && <span className="ml-1 text-xs text-muted-foreground">{c.industry}</span>}
-        <div className={cn("text-xs", tone)} title={c.last_error ?? undefined}>
-          {label}{c.job_count != null && c.last_status === "ok" ? ` · ${c.job_count} open jobs` : ""}{c.last_fetched_at ? ` · checked ${timeAgo(c.last_fetched_at)}` : ""}
+    <li className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 hover:bg-paper-sunk/50">
+      <CompanyMark name={c.name} className="size-9 text-[12px]" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-medium text-foreground">{c.name}</span> <PlatformBadge platform={ATS_LABEL[c.ats]} />
+          {c.industry && <span className="text-xs text-muted-foreground">{c.industry}</span>}
+        </div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs" title={c.last_error ?? undefined}>
+          <StatusDot tone={tone} />
+          <span className={cn("font-medium", cls)}>{label}</span>
+          <span className="text-muted-foreground">
+            {c.job_count != null && c.last_status === "ok" ? <> · <span className="readout">{c.job_count}</span> open jobs</> : ""}{c.last_fetched_at ? ` · checked ${timeAgo(c.last_fetched_at)}` : ""}
+          </span>
         </div>
       </div>
-      <div className="flex gap-1">
-        <Button size="sm" variant="ghost" render={<a href={c.board_url} target="_blank" rel="noopener noreferrer" />} aria-label={`Open ${c.name} job board`}><ExternalLink /></Button>
-        <Button size="sm" variant="ghost" aria-label={`Stop watching ${c.name}`} onClick={() => unwatch.mutate(c.id, { onError: (e) => toast.error(errorMessage(e)) })}><Trash2 /></Button>
+      <div className="flex shrink-0 gap-0.5">
+        <Button size="icon-sm" variant="ghost" render={<a href={c.board_url} target="_blank" rel="noopener noreferrer" />} aria-label={`Open ${c.name} job board`} title="Open job board"><ExternalLink /></Button>
+        <Button size="icon-sm" variant="ghost" className="hover:text-destructive" aria-label={`Stop watching ${c.name}`} title="Stop watching" onClick={() => unwatch.mutate(c.id, { onError: (e) => toast.error(errorMessage(e)) })}><Trash2 /></Button>
       </div>
     </li>
   );
@@ -265,16 +323,19 @@ function CompanyRow({ c }: { c: Company }) {
 
 function DirectoryList({ items, empty }: { items: DirectoryCompany[] | undefined; empty: string }) {
   const watch = useWatchCompany();
-  if (!items) return <Skeleton className="h-24" />;
-  if (!items.length) return <p className="text-sm text-muted-foreground">{empty}</p>;
+  if (!items) return <div className="p-4"><Skeleton className="h-24 rounded-xl" /></div>;
+  if (!items.length) return <p className="px-4 py-6 text-center text-sm text-muted-foreground">{empty}</p>;
   return (
-    <ul className="divide-y rounded-lg border">
+    <ul className="divide-y">
       {items.map((d) => (
-        <li key={`${d.ats}:${d.token}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-          <span className="min-w-0">{d.name} <PlatformBadge platform={ATS_LABEL[d.ats]} />{d.industry && <span className="ml-1 text-xs text-muted-foreground">{d.industry}</span>}</span>
-          {d.watched ? <span className="text-xs text-muted-foreground">Watching</span> : (
+        <li key={`${d.ats}:${d.token}`} className="flex items-center gap-3 px-4 py-2.5 text-sm transition-colors duration-150 hover:bg-paper-sunk/50">
+          <CompanyMark name={d.name} className="size-8 text-[11px]" />
+          <span className="min-w-0 flex-1">
+            <span className="font-medium">{d.name}</span> <PlatformBadge platform={ATS_LABEL[d.ats]} />{d.industry && <span className="ml-1 text-xs text-muted-foreground">{d.industry}</span>}
+          </span>
+          {d.watched ? <span className="inline-flex items-center gap-1 text-xs font-medium text-violet"><Check className="size-3.5" aria-hidden /> Watching</span> : (
             <Button size="sm" variant="outline" disabled={watch.isPending}
-                    onClick={() => watch.mutate({ ats: d.ats, token: d.token, name: d.name }, { onSuccess: () => toast.success(`Watching ${d.name}`), onError: (e) => toast.error(errorMessage(e)) })}>
+                    onClick={() => watch.mutate({ ats: d.ats, token: d.token, name: d.name }, { onSuccess: () => toast.success(`Watching ${d.name}. On your radar ✨`), onError: (e) => toast.error(errorMessage(e)) })}>
               <Plus /> Watch
             </Button>
           )}
@@ -294,6 +355,9 @@ function CompaniesTab() {
   const [ats, setAts] = useState("");
   const directory = useCompanyDirectory(q, ats);
   const unwatched = (suggested.data ?? []).filter((s) => !s.watched);
+  const searching = q.trim().length >= 2;
+  const list = watchlist.data ?? [];
+  const problems = list.filter((c) => c.last_status === "not_found" || c.last_status === "error").length;
 
   const addUrl = (e: FormEvent) => {
     e.preventDefault();
@@ -301,69 +365,79 @@ function CompaniesTab() {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="space-y-4">
-        <CareerUrlForm onSuccess={() => void watchlist.refetch()} />
-        <Card className="gap-3 p-4">
-          <h3 className="font-semibold">Add a company by its careers page or job-board link</h3>
-          <form onSubmit={addUrl} className="flex gap-2">
-            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.company.com/careers or https://jobs.lever.co/company" aria-label="Careers page or job board URL" required />
-            <Button type="submit" disabled={watch.isPending}>{watch.isPending ? <Loader2 className="animate-spin" /> : <Plus />} Add</Button>
-          </form>
-          <p className="text-xs text-muted-foreground">Paste the company's careers page and JobPilot finds the job board it uses, or paste a Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee link directly. The board is checked through the provider's official API before it's added. Careers sites on other systems (for example Workday) can't be searched automatically.</p>
-        </Card>
-        <Card className="gap-3 p-4">
-          <h3 className="font-semibold">Your watchlist ({watchlist.data?.length ?? 0})</h3>
-          {watchlist.isLoading ? <Skeleton className="h-24" /> : !watchlist.data?.length
-            ? <p className="text-sm text-muted-foreground">No companies yet. Add suggested ones or search the directory.</p>
-            : <ul className="divide-y rounded-lg border">{watchlist.data.map((c) => <CompanyRow key={c.id} c={c} />)}</ul>}
-        </Card>
-      </div>
-      <div className="space-y-4">
-        <Card className="gap-3 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold">Suggested employers hiring in India</h3>
-            {unwatched.length > 0 && (
-              <Button size="sm" variant="outline" disabled={watchMany.isPending}
-                      onClick={() => watchMany.mutate(unwatched.map((s) => ({ ats: s.ats, token: s.token })), { onSuccess: (r) => toast.success(`Watching ${r.length} companies`), onError: (e) => toast.error(errorMessage(e)) })}>
-                Watch all ({unwatched.length})
-              </Button>
-            )}
+        <Panel title="Your watchlist" count={list.length}
+               actions={list.length > 0 && <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><StatusDot tone={problems ? "attention" : "healthy"} />{problems ? `${problems} board${problems === 1 ? "" : "s"} need${problems === 1 ? "s" : ""} attention` : "All boards reachable"}</span>}>
+          <div className="space-y-2 border-b p-3">
+            <form onSubmit={addUrl} className="flex gap-2">
+              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.company.com/careers or https://jobs.lever.co/company" aria-label="Careers page or job board URL" required />
+              <Button type="submit" disabled={watch.isPending}>{watch.isPending ? <Loader2 className="animate-spin" /> : <Plus />} Add</Button>
+            </form>
+            <p className="px-1 text-[11.5px] leading-relaxed text-muted-foreground">Paste the company's careers page and JobPilot finds the job board it uses, or paste a Greenhouse, Lever, Ashby, SmartRecruiters or Recruitee link directly. The board is checked through the provider's official API before it's added. Careers sites on other systems (for example Workday) can't be searched automatically.</p>
           </div>
-          <div className="max-h-80 overflow-y-auto"><DirectoryList items={suggested.data} empty="No suggestions." /></div>
-        </Card>
-        <Card className="gap-3 p-4">
-          <h3 className="font-semibold">Search the company directory</h3>
-          <div className="flex gap-2">
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Company name" aria-label="Search companies" />
-            <NativeSelect ariaLabel="Job board type" value={ats} onChange={setAts} options={[{ value: "", label: "All boards" }, { value: "greenhouse", label: "Greenhouse" }, { value: "lever", label: "Lever" }, { value: "ashby", label: "Ashby" }, { value: "smartrecruiters", label: "SmartRecruiters" }, { value: "recruitee", label: "Recruitee" }]} />
-          </div>
-          {q.trim().length >= 2 && <div className="max-h-80 overflow-y-auto"><DirectoryList items={directory.data} empty="No matches. Try the company's careers-page link instead." /></div>}
-          <p className="text-xs text-muted-foreground">Directory data includes board lists from JobSync (MIT licence). Some boards may have moved; JobPilot checks each one before adding it.</p>
-        </Card>
+          {watchlist.isLoading ? <div className="p-4"><Skeleton className="h-24 rounded-xl" /></div> : !list.length
+            ? <p className="px-4 py-8 text-center text-sm text-muted-foreground"><span className="block font-medium text-foreground">No companies yet.</span>Add suggested ones or search the directory.</p>
+            : <ul className="max-h-[26rem] divide-y overflow-y-auto">{list.map((c) => <CompanyRow key={c.id} c={c} />)}</ul>}
+        </Panel>
+        <section className="rounded-2xl bg-card p-4 ring-1 ring-border"><CareerUrlForm onSuccess={() => void watchlist.refetch()} /></section>
       </div>
+      <Panel title={searching ? "Company directory" : "Suggested employers hiring in India"} count={searching ? directory.data?.length : suggested.data?.length}
+             actions={!searching && unwatched.length > 0 && (
+               <Button size="sm" variant="outline" disabled={watchMany.isPending}
+                       onClick={() => watchMany.mutate(unwatched.map((s) => ({ ats: s.ats, token: s.token })), { onSuccess: (r) => toast.success(`Watching ${r.length} companies`), onError: (e) => toast.error(errorMessage(e)) })}>
+                 Watch all ({unwatched.length})
+               </Button>
+             )}>
+        <div className="flex gap-2 border-b p-3">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search the company directory" aria-label="Search companies" className="pl-9" />
+          </div>
+          <NativeSelect ariaLabel="Job board type" value={ats} onChange={setAts} options={[{ value: "", label: "All boards" }, { value: "greenhouse", label: "Greenhouse" }, { value: "lever", label: "Lever" }, { value: "ashby", label: "Ashby" }, { value: "smartrecruiters", label: "SmartRecruiters" }, { value: "recruitee", label: "Recruitee" }]} />
+        </div>
+        <div className="max-h-[30rem] overflow-y-auto">
+          {searching
+            ? <DirectoryList items={directory.data} empty="No matches. Try the company's careers-page link instead." />
+            : <DirectoryList items={suggested.data} empty="No suggestions." />}
+        </div>
+        <p className="border-t px-4 py-2.5 text-[11px] text-muted-foreground">Directory data includes board lists from JobSync (MIT licence). Some boards may have moved; JobPilot checks each one before adding it.</p>
+      </Panel>
     </div>
   );
 }
 
 function SourcesTab() {
   const health = useSourceHealth();
-  if (health.isLoading) return <Skeleton className="h-64" />;
-  if (health.isError || !health.data) return <p className="text-sm text-destructive">{errorMessage(health.error)}</p>;
+  if (health.isLoading) return <Skeleton className="h-64 rounded-2xl" />;
+  if (health.isError || !health.data) return <p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{errorMessage(health.error)}</p>;
   const d = health.data;
+  const count = (tone: DotTone) => d.sources.filter((s) => statusTone(s.connection) === tone).length;
+  const healthy = count("healthy"), attention = count("attention"), failing = count("failing");
   return (
-    <div className="space-y-6">
-      <Card className="gap-3 p-4">
-        <h3 className="font-semibold">Latest discovery run</h3>
-        {d.last_run ? <RunSummary run={d.last_run} /> : <p className="text-sm text-muted-foreground">Discovery hasn't run yet. Use “Run discovery now” on Discover.</p>}
-      </Card>
-      <Card className="gap-3 p-4">
-        <div>
-          <h3 className="font-semibold">Discovery health</h3>
-          <p className="text-sm text-muted-foreground">{d.enabled_searches} of {d.saved_searches} saved searches enabled. LinkedIn, Indeed and Naukri are never scraped: use the clipper, job links or their alert emails.</p>
-        </div>
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <Panel title="Latest discovery run">
+          <div className="p-4">{d.last_run ? <RunSummary run={d.last_run} /> : <p className="text-sm text-muted-foreground">Discovery hasn't run yet. Use “Run discovery now” on Discover.</p>}</div>
+        </Panel>
+        <Panel title="At a glance">
+          <div className="grid grid-cols-3 divide-x">
+            {([["healthy", healthy, "Healthy"], ["attention", attention, "Need attention"], ["failing", failing, "Failing"]] as const).map(([tone, n, label]) => (
+              <div key={tone} className="px-4 py-3.5">
+                <div className="readout text-[24px] leading-none font-semibold text-heading">{n}</div>
+                <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><StatusDot tone={n ? tone : "idle"} />{label}</div>
+              </div>
+            ))}
+          </div>
+          <p className="border-t px-4 py-2.5 text-xs text-muted-foreground"><span className="readout">{d.enabled_searches}</span> of <span className="readout">{d.saved_searches}</span> saved searches enabled. LinkedIn, Indeed and Naukri are never scraped: use the clipper, job links or their alert emails.</p>
+        </Panel>
+      </div>
+      <section className="space-y-2">
+        <h3 className="flex items-center gap-2 px-1 font-display text-[15px] font-bold tracking-[-0.01em] text-heading">
+          Discovery health <span className="readout rounded-full bg-paper-sunk px-2 py-px text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border">{d.sources.length}</span>
+        </h3>
         <SourceHealthList sources={d.sources} />
-      </Card>
+      </section>
       <SourcesPanel />
     </div>
   );
@@ -372,20 +446,27 @@ function SourcesTab() {
 export function SearchesPage() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "searches";
+  const searches = useSavedSearches();
+  const watchlist = useWatchlist();
   return (
     <>
-      <PageHeader title="Searches & companies"
+      <PageHeader title={<>Searches <em>&</em> companies</>}
                   description="Saved searches scan employers' official job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Recruitee), public remote-job feeds (Remotive, Himalayas, RemoteOK, Arbeitnow) and, optionally, Adzuna. Nothing is applied for you." />
       <Tabs value={tab} onValueChange={(v) => setParams({ tab: String(v) }, { replace: true })}>
         <TabsList className="max-w-full justify-start overflow-x-auto">
-          <TabsTrigger value="searches"><Radar className="size-4" /> Saved searches</TabsTrigger>
-          <TabsTrigger value="companies"><Building2 className="size-4" /> Companies</TabsTrigger>
+          <TabsTrigger value="searches"><Radar className="size-4" /> Saved searches<TabCount n={searches.data?.length} /></TabsTrigger>
+          <TabsTrigger value="companies"><Building2 className="size-4" /> Companies<TabCount n={watchlist.data?.length} /></TabsTrigger>
           <TabsTrigger value="sources"><Activity className="size-4" /> Source health</TabsTrigger>
         </TabsList>
-        <TabsContent value="sources" className="pt-4"><SourcesTab /></TabsContent>
-        <TabsContent value="searches" className="pt-4"><SearchesTab /></TabsContent>
-        <TabsContent value="companies" className="pt-4"><CompaniesTab /></TabsContent>
+        <TabsContent value="sources" className="pt-3"><SourcesTab /></TabsContent>
+        <TabsContent value="searches" className="pt-3"><SearchesTab /></TabsContent>
+        <TabsContent value="companies" className="pt-3"><CompaniesTab /></TabsContent>
       </Tabs>
     </>
   );
+}
+
+function TabCount({ n }: { n: number | undefined }) {
+  if (!n) return null;
+  return <span aria-hidden className="readout ml-0.5 rounded-full bg-paper-sunk px-1.5 text-[10.5px] leading-[18px] font-semibold text-muted-foreground ring-1 ring-inset ring-border">{n}</span>;
 }

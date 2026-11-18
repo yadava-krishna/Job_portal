@@ -2,12 +2,12 @@ import { cn } from "@/lib/utils";
 import { scoreTone } from "@/lib/format";
 import type { Eligibility, ScoreDimension } from "./types";
 
-const barTone = { excellent: "bg-emerald-500", good: "bg-sky-500", moderate: "bg-amber-500", low: "bg-rose-500", none: "bg-muted" };
+const barTone = { excellent: "bg-route", good: "bg-violet", moderate: "bg-caution", low: "bg-destructive/70", none: "bg-muted" };
 
 const eligibilityTone: Record<Eligibility, string> = {
-  pass: "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100",
-  fail: "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-100",
-  unknown: "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100",
+  pass: "border-success/30 bg-success-tint text-success",
+  fail: "border-destructive/30 bg-destructive/10 text-destructive",
+  unknown: "border-caution/30 bg-caution-tint text-caution",
 };
 const eligibilityHint: Record<Eligibility, string> = {
   pass: "Nothing in the listing rules you out.",

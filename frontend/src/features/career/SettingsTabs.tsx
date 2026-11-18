@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Panel } from "@/components/settings/primitives";
 import { Switch } from "@/components/ui/switch";
 import { Field, LoadingState, NativeSelect, TagInput } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
@@ -34,7 +34,7 @@ const EMPTY: CareerGoals = { search_mode: "india", target_countries: [], seniori
 
 export function CareerGoalsForm() {
   const goals = useCareerGoals();
-  if (goals.isLoading) return <Loader2 className="animate-spin" />;
+  if (goals.isLoading) return <LoadingState />;
   return <GoalsEditor initial={goals.data ?? EMPTY} />;
 }
 
@@ -52,20 +52,15 @@ function GoalsEditor({ initial }: { initial: CareerGoals }) {
   const invalid = badTargets.length > 0 || badAuth.length > 0;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Career goals</CardTitle>
-        <CardDescription>
-          These decide which jobs you are matched with and whether you count as eligible (for example, whether you can legally work there).
-          Saving re-scores your jobs.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Where do you want to work?</legend>
+    <Panel title="Matching and eligibility"
+           description="These decide which jobs you are matched with and whether you count as eligible (for example, whether you can legally work there). Saving re-scores your jobs.">
+      <div className="space-y-6">
+        <fieldset className="space-y-2.5">
+          <legend className="mb-2.5 text-[13px] font-semibold text-heading">Where do you want to work?</legend>
           <div className="grid gap-2 sm:grid-cols-3">
             {MODES.map((m) => (
-              <label key={m.value} className={cn("flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm", f.search_mode === m.value && "border-primary bg-primary/5")}>
+              <label key={m.value} className={cn("flex cursor-pointer items-start gap-2.5 rounded-xl p-3.5 text-sm ring-1 transition-[background-color,box-shadow] duration-200 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring",
+                f.search_mode === m.value ? "bg-route-tint/60 ring-2 ring-route/50" : "ring-border hover:ring-foreground/25")}>
                 <input type="radio" name="search_mode" value={m.value} checked={f.search_mode === m.value} onChange={() => setF({ ...f, search_mode: m.value })} className="mt-0.5 accent-primary" />
                 <span><span className="font-medium">{m.label}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
               </label>
@@ -73,7 +68,7 @@ function GoalsEditor({ initial }: { initial: CareerGoals }) {
           </div>
         </fieldset>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-x-5 gap-y-4 border-t pt-5 sm:grid-cols-2">
           <Field label="Countries you want to work in" htmlFor="cg-targets"
                  hint={badTargets.length ? <span className="text-destructive">Use two-letter country codes (e.g. GB, DE, AE). Not valid: {badTargets.join(", ")}</span>
                    : <>Two-letter country codes, e.g. GB for the United Kingdom, DE for Germany.{describe(f.target_countries) && ` Selected: ${describe(f.target_countries)}.`}</>}>
@@ -95,15 +90,15 @@ function GoalsEditor({ initial }: { initial: CareerGoals }) {
           </Field>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link to="/international" className="text-sm text-primary underline-offset-4 hover:underline">See visa routes for these countries</Link>
+        <Link to="/international" className="inline-block text-sm text-primary underline-offset-4 hover:underline">See visa routes for these countries</Link>
+        <div data-save-bar className="flex items-center justify-end gap-3">
           <Button disabled={invalid || save.isPending}
                   onClick={() => save.mutate(f, { onSuccess: () => toast.success("Saved. Your jobs are being re-scored."), onError: (e) => toast.error(errorMessage(e)) })}>
             {save.isPending && <Loader2 className="animate-spin" />} Save career goals
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }
 
@@ -120,22 +115,16 @@ export function PrivacyConsents() {
   const consents = useConsents();
   const set = useSetConsent();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Privacy & consent</CardTitle>
-        <CardDescription>
-          Each of these is off until you turn it on, and you can turn any of them off again at any time.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <Panel title="Your choices" description="Each of these is off until you turn it on, and you can turn any of them off again at any time.">
+      <div className="space-y-4">
         {consents.isLoading ? <LoadingState /> : consents.isError ? <p className="text-sm text-destructive">{errorMessage(consents.error)}</p> : (
-          <ul className="divide-y rounded-xl border">
+          <ul className="divide-y overflow-hidden rounded-xl ring-1 ring-border">
             {(consents.data ?? []).map((c) => (
-              <li key={c.kind} className="flex items-start justify-between gap-4 p-4">
+              <li key={c.kind} className={cn("flex items-start justify-between gap-4 p-4 transition-colors duration-200", c.granted ? "bg-card" : "bg-paper-sunk/50")}>
                 <div className="space-y-1">
-                  <div className="text-sm font-medium">{CONSENT_TITLES[c.kind] ?? c.kind.replaceAll("_", " ")}</div>
+                  <div className="text-sm font-semibold text-heading">{CONSENT_TITLES[c.kind] ?? c.kind.replaceAll("_", " ")}</div>
                   <p className="text-sm text-muted-foreground">{c.text}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p key={String(c.granted)} className="text-xs text-muted-foreground animate-in fade-in-0 duration-200">
                     {c.granted ? `On since ${formatDate(c.granted_at)}` : c.revoked_at ? `Turned off ${formatDate(c.revoked_at)}` : "Off"}
                   </p>
                 </div>
@@ -147,11 +136,11 @@ export function PrivacyConsents() {
             ))}
           </ul>
         )}
-        <p className="text-sm text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           To download a copy of everything JobPilot holds about you, or to delete your account, go to{" "}
           <Link to="/settings?tab=account" className="text-primary underline-offset-4 hover:underline">Account & connection</Link>.
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

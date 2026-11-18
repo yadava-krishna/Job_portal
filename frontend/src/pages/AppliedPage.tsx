@@ -1,34 +1,34 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Calendar, ExternalLink, Loader2, MessageSquareText, Plus, Trash2, XCircle } from "lucide-react";
+import { useState } from "react";
+import { BellRing, Calendar, ExternalLink, Send, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState, LoadingState, NativeSelect, PageHeader, PlatformBadge, ScoreBadge, StageBadge, StatusBadge } from "@/components/app/common";
+import { EmptyState, ErrorState, LoadingState, NativeSelect, PageHeader } from "@/components/app/common";
+import { CompanyMark } from "@/components/app/JobCard";
 import { ApplyDialog } from "@/components/app/ApplyDialog";
-import { api, downloadFile, errorMessage } from "@/lib/api";
+import { downloadFile, errorMessage } from "@/lib/api";
 import { formatDate, stageLabels, statusLabels } from "@/lib/format";
-import { useApplication, useApplicationAction, useApplications, useUpdateTracking } from "@/services/queries";
-import type { Application, ApplicationContact, Interview, Offer, Stage, UserJob } from "@/types/api";
-import { FunnelPanel, InterviewFeedbackDialog, RejectionDialog, RejectionLabel } from "@/features/growth/applications";
+import { cn } from "@/lib/utils";
+import { useApplicationAction, useApplications } from "@/services/queries";
+import type { Application, Stage, UserJob } from "@/types/api";
+import { RejectionDialog, RejectionLabel } from "@/features/growth/applications";
 import { useReasonLabels } from "@/features/growth/queries";
 import { PipelineBoard } from "@/features/applications/PipelineBoard";
-import { eventDetail, eventLabel } from "@/features/applications/events";
+import { ApplicationDetailDialog, type RejectTarget } from "@/features/applications/ApplicationDetail";
+import { STRIP, StageStrip, stripKeyOf, type StripKey } from "@/features/applications/StageStrip";
+import { ApplyStatePill, WherePill } from "@/features/applications/pills";
+import { daysSince, followUpState } from "@/features/applications/events";
 import type { RejectionResult } from "@/features/growth/types";
 
-// The backend's interview fields (round_name, interviewers, location) and rejection fields, which the shared types don't list yet.
-type InterviewRow = Interview & { round_name?: string | null; interviewers?: string | null; location?: string | null; interview_type?: string | null; feedback_at?: string | null };
 type WithRejection = { rejection_reason?: string | null; rejection_reason_known?: boolean | null };
-type RejectTarget = { id: number; title: string; company: string };
 
 const STAGES: Stage[] = ["applied", "screening", "assessment", "interview", "offer", "rejected"];
 const MOVE_TO: Stage[] = [...STAGES, "archived"];
 const STATUS_FILTERS = ["all", "PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED", "FAILED", "WITHDRAWN"];
+const PENDING = ["PREPARED", "OPENED", "CONFIRMATION_PENDING"];
+/** The list and board fill the space left under the header, strip and tabs, and scroll inside it on larger screens. */
+const FILL = "lg:max-h-[max(22rem,calc(100dvh-20.5rem))]";
 
 function asUserJob(a: Application): UserJob {
   return { user_job_id: a.user_job_id ?? 0, status: a.status === "SUBMITTED" ? "applied" : "shortlisted", is_saved: false, match_score: a.match_score,
@@ -38,6 +38,8 @@ function asUserJob(a: Application): UserJob {
 
 export function AppliedPage() {
   const [filter, setFilter] = useState("all");
+  const [stage, setStage] = useState<StripKey | null>(null);
+  const [view, setView] = useState<string>("list");
   const apps = useApplications(filter === "all" ? undefined : [filter]);
   const all = useApplications();
   const action = useApplicationAction();
@@ -59,99 +61,151 @@ export function AppliedPage() {
     return { reason: r.rejection_reason ?? null, known: r.rejection_reason_known ?? null };
   };
   const toTarget = (a: Application): RejectTarget => ({ id: a.id, title: a.job.title, company: a.job.company });
-  const submitted = (all.data ?? []).filter((a) => a.status === "SUBMITTED");
-  const pending = (all.data ?? []).filter((a) => ["PREPARED", "OPENED", "CONFIRMATION_PENDING"].includes(a.status));
+  const everything = all.data ?? [];
+  const submitted = everything.filter((a) => a.status === "SUBMITTED");
+  const pending = everything.filter((a) => PENDING.includes(a.status));
+  const rows = (apps.data ?? []).filter((a) => !stage || stripKeyOf(a) === stage);
+  const boardFocus: Stage | null = stage === "closed" ? "rejected" : stage;
 
-  const moveStage = (a: Application, stage: Stage) => action.mutate({ kind: "stage", id: a.id, stage }, {
-    onSuccess: () => toast.success(`Moved to ${stageLabels[stage]}`), onError: (e) => toast.error(errorMessage(e)),
+  const moveStage = (a: Application, to: Stage) => action.mutate({ kind: "stage", id: a.id, stage: to }, {
+    onSuccess: () => toast.success(to === "offer" ? "Moved to Offer. Huge." : `Moved to ${stageLabels[to]}`), onError: (e) => toast.error(errorMessage(e)),
   });
+  const pickStage = (k: StripKey | null) => { setStage(k); if (k && view === "pending") setView("list"); };
 
   return (
     <>
       <PageHeader
         title="Applications"
-        description="Everything you prepared or applied to, and where each application stands."
+        description="Every shot you've taken and where it stands, from prepared to offer. Stay locked in."
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void downloadFile("/interviews/calendar.ics", "jobpilot-interviews.ics").catch((e) => toast.error(errorMessage(e)))}
-          >
-            <Calendar className="size-4" /> Download calendar (.ics)
+          <Button variant="outline" size="sm"
+                  onClick={() => void downloadFile("/interviews/calendar.ics", "jobpilot-interviews.ics").catch((e) => toast.error(errorMessage(e)))}>
+            <Calendar className="size-4" /> Interview calendar (.ics)
           </Button>
         }
       />
-      <div className="mb-6"><FunnelPanel /></div>
-      <Tabs defaultValue="list">
-        <TabsList>
-          <TabsTrigger value="list">All applications</TabsTrigger>
-          <TabsTrigger value="board">Pipeline board ({submitted.length})</TabsTrigger>
-          <TabsTrigger value="pending">Pending ({pending.length})</TabsTrigger>
-        </TabsList>
 
-        <TabsContent value="list" className="pt-4">
-          <div className="mb-3 flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Status</span>
-            <NativeSelect ariaLabel="Filter by status" value={filter} onChange={setFilter} options={STATUS_FILTERS.map((s) => ({ value: s, label: s === "all" ? "All" : statusLabels[s] }))} />
-          </div>
-          {apps.isLoading ? <LoadingState /> : !apps.data?.length ? (
-            <EmptyState title="No applications yet">Use Apply on a job to prepare one. It appears here once prepared and moves to Submitted after you confirm.</EmptyState>
+      {all.isError ? <ErrorState error={all.error} onRetry={() => void all.refetch()} className="mb-4" /> : <StageStrip apps={everything} value={stage} onChange={pickStage} />}
+
+      <Tabs value={view} onValueChange={(v) => setView(String(v))} className="mt-4 gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="list">List <Count n={rows.length} /></TabsTrigger>
+            <TabsTrigger value="board">Board <Count n={submitted.length} /></TabsTrigger>
+            <TabsTrigger value="pending">Pending <Count n={pending.length} tone={pending.length ? "warn" : undefined} /></TabsTrigger>
+          </TabsList>
+          {stage && view !== "pending" && (
+            <button type="button" onClick={() => setStage(null)}
+                    className="mr-auto inline-flex items-center gap-1 rounded-full bg-ink px-2.5 py-1 text-[12px] font-medium text-background animate-in fade-in-0 zoom-in-95 duration-200 hover:opacity-90">
+              {STRIP.find((s) => s.key === stage)?.label} only <X className="size-3" aria-hidden /><span className="sr-only">Clear stage filter</span>
+            </button>
+          )}
+          {view === "list" && (
+            <label className="flex items-center gap-2 text-[13px] text-muted-foreground">
+              Status
+              <NativeSelect ariaLabel="Filter by status" value={filter} onChange={setFilter} className="h-8 rounded-full px-3 text-[13px]"
+                            options={STATUS_FILTERS.map((s) => ({ value: s, label: s === "all" ? "All statuses" : statusLabels[s] }))} />
+            </label>
+          )}
+          {view === "board" && <p className="hidden text-xs text-muted-foreground md:block">Drag a card to move it, or use its menu.</p>}
+        </div>
+
+        <TabsContent value="list">
+          {apps.isLoading ? <LoadingState /> : apps.isError ? <ErrorState error={apps.error} onRetry={() => void apps.refetch()} /> : !rows.length ? (
+            stage || filter !== "all"
+              ? <EmptyState title="Nothing here rn">No applications match {stage ? `the ${stageLabels[stage] ?? "Closed"} stage` : "this status"}. <button type="button" className="font-medium text-route hover:underline" onClick={() => { setStage(null); setFilter("all"); }}>Show everything</button></EmptyState>
+              : <EmptyState icon={<Send className="size-7" />} title="Your pipeline starts here">Use Apply on a job to prepare one. It shows up here once prepared, and counts as submitted only after you confirm.</EmptyState>
           ) : (
-            <Card className="overflow-x-auto p-0">
-              <table className="w-full min-w-[820px] text-sm">
-                <thead className="border-b bg-muted/50 text-left text-muted-foreground">
-                  <tr>{["Company", "Job title", "Platform", "Applied on", "Status", "Stage", "Match", "Reference", ""].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
-                </thead>
-                <tbody className="divide-y">
-                  {apps.data.map((a) => (
-                    <tr key={a.id} className="hover:bg-muted/30">
-                      <td className="px-3 py-2 font-medium">{a.job.company}</td>
-                      <td className="px-3 py-2"><button className="text-left hover:underline" onClick={() => setDetailId(a.id)}>{a.job.title}</button></td>
-                      <td className="px-3 py-2"><PlatformBadge platform={a.job.platform} /></td>
-                      <td className="px-3 py-2 whitespace-nowrap">{a.submitted_at ? formatDate(a.submitted_at) : <span className="text-muted-foreground">—</span>}</td>
-                      <td className="px-3 py-2"><StatusBadge status={a.status} /></td>
-                      <td className="px-3 py-2"><StageBadge stage={a.stage} />{rejectionOf(a).reason && <div className="mt-0.5"><RejectionLabel {...rejectionOf(a)} labels={reasonLabels} /></div>}</td>
-                      <td className="px-3 py-2"><ScoreBadge score={a.match_score} /></td>
-                      <td className="px-3 py-2 font-mono text-xs">{a.reference_id ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex justify-end gap-1">
-                          {a.status !== "SUBMITTED" && a.status !== "WITHDRAWN" && <Button size="xs" onClick={() => setResume(asUserJob(a))}>Continue</Button>}
-                          {a.status === "SUBMITTED" && !rejectionOf(a).reason && <Button size="xs" variant="outline" onClick={() => setRejecting(toTarget(a))}>Record rejection</Button>}
-                          {a.job.job_url && <Button size="icon-xs" variant="ghost" aria-label="Open original listing" render={<a href={a.job.job_url} target="_blank" rel="noopener noreferrer" />}><ExternalLink /></Button>}
+            <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-border">
+              <div className={cn("overflow-y-auto overscroll-contain", FILL)}>
+                <div aria-hidden className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1fr)_11rem_8rem_7rem_3.5rem_8.5rem] gap-3 border-b bg-paper-sunk/95 px-4 py-2 text-[11.5px] font-medium text-muted-foreground backdrop-blur md:grid">
+                  <span>Role</span><span>Where it stands</span><span>Applied</span><span>Follow-up</span><span className="text-right">Match</span><span />
+                </div>
+                <ul className="divide-y divide-border/70">
+                  {rows.map((a) => {
+                    const days = daysSince(a.submitted_at);
+                    const fu = followUpState(a.follow_up_at);
+                    const rej = rejectionOf(a);
+                    return (
+                      <li key={a.id} className="group/row grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-2.5 transition-colors duration-150 hover:bg-paper-sunk/60 md:grid-cols-[minmax(0,1fr)_11rem_8rem_7rem_3.5rem_8.5rem]">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <CompanyMark name={a.job.company || "?"} className="size-9 rounded-lg text-[12px]" />
+                          <div className="min-w-0">
+                            <button type="button" onClick={() => setDetailId(a.id)}
+                                    className="block max-w-full truncate text-left text-[14px] font-semibold text-heading decoration-route/40 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">{a.job.title}</button>
+                            <div className="truncate text-[12.5px] text-muted-foreground">{a.job.company} · {a.job.platform}{a.reference_id && <span className="readout"> · Ref {a.reference_id}</span>}</div>
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Card>
+                        <div className="flex min-w-0 flex-col items-end gap-1 md:items-start">
+                          <WherePill app={a} />
+                          {rej.reason && <RejectionLabel {...rej} labels={reasonLabels} />}
+                          {a.status !== "SUBMITTED" && <ApplyStatePill state={a.apply_state} label={a.apply_state_label} className="whitespace-normal" />}
+                        </div>
+                        <div className="readout text-[12.5px] text-muted-foreground max-md:col-span-2 max-md:inline">
+                          {a.submitted_at ? <span title={formatDate(a.submitted_at, true)}><span className="text-foreground">{days === 0 ? "Today" : `${days}d ago`}</span><span className="text-muted-foreground"> · {new Date(a.submitted_at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}</span></span>
+                            : <span className="font-sans">Not submitted</span>}
+                        </div>
+                        <div className="text-[12.5px] max-md:hidden">
+                          {fu === "due" ? <span className="inline-flex items-center gap-1 rounded-full bg-caution-tint px-2 py-0.5 font-medium text-caution"><BellRing className="size-3" /> Due</span>
+                            : fu === "upcoming" ? <span className="readout text-muted-foreground">{formatDate(a.follow_up_at!)}</span> : <span className="text-muted-foreground/60">—</span>}
+                        </div>
+                        <div className="readout text-right text-[13px] font-medium max-md:hidden">{a.match_score == null ? <span className="text-muted-foreground">–</span> : `${Math.round(a.match_score)}%`}</div>
+                        <div className="flex items-center justify-end gap-1 max-md:col-span-2 max-md:justify-start">
+                          {a.status !== "SUBMITTED" && a.status !== "WITHDRAWN" && <Button size="xs" className="px-2.5" onClick={() => setResume(asUserJob(a))}>Continue</Button>}
+                          {a.status === "SUBMITTED" && !rej.reason && (
+                            <Button size="xs" variant="ghost" className="text-muted-foreground transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:focus-visible:opacity-100" onClick={() => setRejecting(toTarget(a))}>Record rejection</Button>
+                          )}
+                          {a.job.job_url && <Button size="icon-xs" variant="ghost" aria-label="Open original listing" className="text-muted-foreground" render={<a href={a.job.job_url} target="_blank" rel="noopener noreferrer" />}><ExternalLink /></Button>}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </div>
           )}
         </TabsContent>
 
-        <TabsContent value="board" className="pt-4">
-          {!submitted.length ? <EmptyState title="No submitted applications yet">After you confirm a submission it appears here. Move it along as you hear back.</EmptyState> : (
-            <PipelineBoard apps={submitted} stages={STAGES} moveTo={MOVE_TO} onMove={moveStage} onOpen={setDetailId}
+        <TabsContent value="board">
+          {all.isLoading ? <LoadingState /> : !submitted.length ? (
+            <EmptyState title="No applications sent yet. Your first W is loading.">After you confirm a submission it lands here. Move it along as you hear back.</EmptyState>
+          ) : (
+            <PipelineBoard apps={submitted} stages={STAGES} moveTo={MOVE_TO} onMove={moveStage} onOpen={setDetailId} focus={boardFocus}
+                           className={cn("max-h-[70dvh]", FILL)}
                            extra={(a) => rejectionOf(a).reason ? <RejectionLabel {...rejectionOf(a)} labels={reasonLabels} /> : null} />
           )}
         </TabsContent>
 
-        <TabsContent value="pending" className="pt-4">
-          {!pending.length ? <EmptyState title="Nothing pending">Prepared or opened applications that you haven't confirmed appear here.</EmptyState> : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {pending.map((a) => (
-                <Card key={a.id} className="flex-row items-center justify-between gap-3 p-4">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{a.job.title}</div>
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{a.job.company} <StatusBadge status={a.status} />
-                      {a.apply_state_label && <Badge variant={a.apply_state === "submission_uncertain" ? "destructive" : "secondary"} title="Smart Apply progress from the browser extension">{a.apply_state_label}</Badge>}</div>
-                  </div>
-                  <Button size="sm" onClick={() => setResume(asUserJob(a))}>Continue</Button>
-                </Card>
-              ))}
+        <TabsContent value="pending">
+          {all.isLoading ? <LoadingState /> : !pending.length ? (
+            <EmptyState title="All caught up. Love that for you.">Prepared or opened applications you haven't confirmed yet wait here.</EmptyState>
+          ) : (
+            <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-border">
+              <p className="border-b bg-caution-tint/50 px-4 py-2 text-[12.5px] text-caution">
+                Opening a form doesn't count as applying. Tell us how each one went so your numbers stay honest.
+              </p>
+              <ul className={cn("divide-y divide-border/70 overflow-y-auto", FILL)}>
+                {pending.map((a) => (
+                  <li key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap">
+                    <CompanyMark name={a.job.company || "?"} className="size-9 rounded-lg text-[12px]" />
+                    <div className="min-w-0 flex-1">
+                      <button type="button" onClick={() => setDetailId(a.id)} className="block max-w-full truncate text-left text-[14px] font-semibold text-heading hover:underline">{a.job.title}</button>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                        {a.job.company}
+                        <WherePill app={a} />
+                        <ApplyStatePill state={a.apply_state} label={a.apply_state_label} />
+                        <span className="readout">· prepared {formatDate(a.created_at)}</span>
+                      </div>
+                    </div>
+                    <Button size="sm" onClick={() => setResume(asUserJob(a))}>{a.status === "PREPARED" ? "Continue" : "Confirm outcome"}</Button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </TabsContent>
       </Tabs>
+
       <ApplicationDetailDialog id={detailId} onClose={() => setDetailId(null)} onReject={setRejecting}
                                rejection={detailId != null ? rejections[detailId] : undefined} reasonLabels={reasonLabels} />
       <ApplyDialog item={resume} onClose={() => setResume(null)} />
@@ -160,445 +214,6 @@ export function AppliedPage() {
   );
 }
 
-function ApplicationDetailDialog({ id, onClose, onReject, rejection, reasonLabels }: {
-  id: number | null; onClose: () => void; onReject: (t: RejectTarget) => void; rejection?: RejectionResult; reasonLabels: Record<string, string>;
-}) {
-  const { data } = useApplication(id);
-  const action = useApplicationAction();
-  const rej = rejection ?? (data as (typeof data & WithRejection) | undefined);
-
-  return (
-    <Dialog open={id != null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
-        {!data ? <LoadingState /> : (
-          <>
-            <DialogHeader>
-              <DialogTitle>{data.job.title}</DialogTitle>
-              <DialogDescription>{data.job.company} · {data.job.platform} · <StatusBadge status={data.status} /></DialogDescription>
-            </DialogHeader>
-
-            <Tabs defaultValue="overview" className="mt-2">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="interviews">Interviews</TabsTrigger>
-                <TabsTrigger value="offer">Offer</TabsTrigger>
-                <TabsTrigger value="contacts">Contacts</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview" className="space-y-4 pt-3">
-                <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-1.5 text-sm">
-                  <dt className="text-muted-foreground">Prepared</dt><dd>{formatDate(data.created_at, true)}</dd>
-                  <dt className="text-muted-foreground">Submitted</dt><dd>{data.submitted_at ? formatDate(data.submitted_at, true) : "—"}</dd>
-                  <dt className="text-muted-foreground">Reference</dt><dd>{data.reference_id ?? "—"}</dd>
-                  <dt className="text-muted-foreground">How you applied</dt><dd>{data.submission_method ?? "—"}</dd>
-                  {data.apply_state_label && <><dt className="text-muted-foreground">Smart Apply</dt><dd>{data.apply_state_label}{data.apply_state_at ? ` · ${formatDate(data.apply_state_at, true)}` : ""}</dd></>}
-                  <dt className="text-muted-foreground">Resume used</dt><dd>{data.resume_used ?? "—"}</dd>
-                  {rej?.rejection_reason && <><dt className="text-muted-foreground">Rejection reason</dt><dd><RejectionLabel reason={rej.rejection_reason} known={rej.rejection_reason_known} labels={reasonLabels} /></dd></>}
-                  {data.job.job_url && <><dt className="text-muted-foreground">Original listing</dt><dd><a className="underline" href={data.job.job_url} target="_blank" rel="noopener noreferrer">Open</a></dd></>}
-                </dl>
-                <TrackingForm id={data.id} notes={data.notes} followUp={data.follow_up_at ?? null} />
-                <div>
-                  <h4 className="mb-2 text-sm font-medium">History</h4>
-                  <ol className="space-y-1.5 border-l pl-4 text-sm">
-                    {data.events.map((e) => (
-                      <li key={e.id}><span className="font-medium">{eventLabel(e)}</span> <span className="text-muted-foreground">· {formatDate(e.created_at, true)}</span>{eventDetail(e) && <div className="text-xs text-muted-foreground">{eventDetail(e)}</div>}</li>
-                    ))}
-                  </ol>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="interviews" className="pt-3">
-                <InterviewsSection applicationId={data.id} />
-              </TabsContent>
-
-              <TabsContent value="offer" className="pt-3">
-                <OfferSection applicationId={data.id} />
-              </TabsContent>
-
-              <TabsContent value="contacts" className="pt-3">
-                <ContactsSection applicationId={data.id} />
-              </TabsContent>
-            </Tabs>
-
-            {data.status !== "WITHDRAWN" && (
-              <div className="mt-4 flex justify-end gap-2 border-t pt-3">
-                {data.status === "SUBMITTED" && !rej?.rejection_reason && (
-                  <Button variant="outline" size="sm" onClick={() => onReject({ id: data.id, title: data.job.title, company: data.job.company })}><XCircle /> Record rejection</Button>
-                )}
-                {data.status !== "SUBMITTED" && <Button variant="outline" size="sm" onClick={() => action.mutate({ kind: "fail", id: data.id, reason: "Marked failed by user" }, { onError: (e) => toast.error(errorMessage(e)) })}>Mark failed</Button>}
-                <Button variant="outline" size="sm" onClick={() => action.mutate({ kind: "withdraw", id: data.id }, { onSuccess: () => toast("Withdrawn"), onError: (e) => toast.error(errorMessage(e)) })}>Withdraw</Button>
-              </div>
-            )}
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function TrackingForm({ id, notes, followUp }: { id: number; notes: string | null; followUp: string | null }) {
-  const save = useUpdateTracking();
-  const [n, setN] = useState(notes ?? "");
-  const [f, setF] = useState(followUp ? followUp.slice(0, 10) : "");
-  useEffect(() => { setN(notes ?? ""); setF(followUp ? followUp.slice(0, 10) : ""); }, [id, notes, followUp]);
-  return (
-    <div className="space-y-2 rounded-lg border p-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_10rem]">
-        <label className="text-sm"><span className="mb-1 block text-muted-foreground">Notes</span>
-          <Textarea rows={2} value={n} onChange={(e) => setN(e.target.value)} placeholder="Contacts, interview prep, anything to remember" /></label>
-        <label className="text-sm"><span className="mb-1 block text-muted-foreground">Follow up on</span>
-          <Input type="date" value={f} onChange={(e) => setF(e.target.value)} /></label>
-      </div>
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" disabled={save.isPending}
-                onClick={() => save.mutate({ id, notes: n || null, follow_up_at: f ? `${f}T09:00:00` : null },
-                  { onSuccess: () => toast.success("Saved"), onError: (e) => toast.error(errorMessage(e)) })}>Save notes</Button>
-      </div>
-    </div>
-  );
-}
-
-function InterviewsSection({ applicationId }: { applicationId: number }) {
-  const [items, setItems] = useState<InterviewRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [feedbackFor, setFeedbackFor] = useState<{ id: number; label: string } | null>(null);
-  const [round, setRound] = useState("Screening");
-  const [schedAt, setSchedAt] = useState("");
-  const [duration, setDuration] = useState(45);
-  const [meetingUrl, setMeetingUrl] = useState("");
-  const [interviewer, setInterviewer] = useState("");
-  const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const load = () => {
-    setLoading(true);
-    api.get<InterviewRow[]>(`/interviews?application_id=${applicationId}`)
-      .then((res) => setItems(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, [applicationId]);
-
-  const handleAdd = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!schedAt) return toast.error("Select interview date and time");
-    try {
-      setSubmitting(true);
-      await api.post(`/applications/${applicationId}/interviews`, {
-        round_name: round,
-        scheduled_at: new Date(schedAt).toISOString(),
-        duration_minutes: duration,
-        location: meetingUrl || null,
-        interviewers: interviewer || null,
-        notes: notes || null,
-      });
-      toast.success("Interview scheduled");
-      setMeetingUrl("");
-      setInterviewer("");
-      setNotes("");
-      load();
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (ivId: number) => {
-    try {
-      await api.delete(`/interviews/${ivId}`);
-      toast.success("Interview removed");
-      load();
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      {loading ? <LoadingState /> : items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No interviews scheduled yet for this application.</p>
-      ) : (
-        <div className="space-y-2">
-          {items.map((iv) => {
-            const name = iv.round_name ?? iv.round ?? "Interview";
-            const who = iv.interviewers ?? iv.interviewer;
-            const link = iv.meeting_url ?? (iv.location?.startsWith("http") ? iv.location : null);
-            return (
-              <div key={iv.id} className="flex items-center justify-between gap-2 rounded-lg border p-3 text-sm">
-                <div>
-                  <div className="font-medium text-foreground">{name}{iv.duration_minutes ? ` (${iv.duration_minutes}m)` : ""}</div>
-                  <div className="text-xs text-muted-foreground">{formatDate(iv.scheduled_at, true)}{iv.outcome && iv.outcome !== "scheduled" ? ` · ${iv.outcome}` : ""}{iv.feedback_at ? " · feedback saved" : ""}</div>
-                  {who && <div className="text-xs text-muted-foreground">With: {who}</div>}
-                  {link ? (
-                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline block mt-0.5">
-                      Meeting link
-                    </a>
-                  ) : iv.location && <div className="text-xs text-muted-foreground">{iv.location}</div>}
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button size="xs" variant="outline" onClick={() => setFeedbackFor({ id: iv.id, label: `${name}, ${formatDate(iv.scheduled_at)}` })}>
-                    <MessageSquareText /> How did it go?
-                  </Button>
-                  <Button size="icon-xs" variant="ghost" aria-label="Remove interview" onClick={() => handleDelete(iv.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <form onSubmit={handleAdd} className="rounded-lg border p-3 space-y-3 bg-muted/20">
-        <h5 className="text-xs font-semibold text-foreground">Schedule Interview</h5>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <label className="block text-muted-foreground mb-1">Round</label>
-            <Input value={round} onChange={(e) => setRound(e.target.value)} placeholder="e.g. Technical Round 1" required />
-          </div>
-          <div>
-            <label className="block text-muted-foreground mb-1">Date & Time</label>
-            <Input type="datetime-local" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} required />
-          </div>
-          <div>
-            <label className="block text-muted-foreground mb-1">Interviewer (optional)</label>
-            <Input value={interviewer} onChange={(e) => setInterviewer(e.target.value)} placeholder="e.g. John Doe" />
-          </div>
-          <div>
-            <label className="block text-muted-foreground mb-1">Duration (minutes)</label>
-            <Input type="number" min={15} max={240} value={duration} onChange={(e) => setDuration(Number(e.target.value))} />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-muted-foreground mb-1">Meeting URL (optional)</label>
-            <Input value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://meet.google.com/..." />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-muted-foreground mb-1">Notes (optional)</label>
-            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Topics, preparation links, etc." />
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <Button size="sm" type="submit" disabled={submitting}>
-            {submitting ? <Loader2 className="animate-spin size-3.5" /> : <Plus className="size-3.5" />} Schedule
-          </Button>
-        </div>
-      </form>
-      <InterviewFeedbackDialog interview={feedbackFor} onClose={() => setFeedbackFor(null)} onSaved={load} />
-    </div>
-  );
-}
-
-function OfferSection({ applicationId }: { applicationId: number }) {
-  const [baseSalary, setBaseSalary] = useState<string>("");
-  const [currency, setCurrency] = useState("INR");
-  const [bonus, setBonus] = useState<string>("");
-  const [equity, setEquity] = useState("");
-  const [status, setStatus] = useState("received");
-  const [deadline, setDeadline] = useState("");
-  const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    api.get<Offer[]>("/offers")
-      .then((res) => {
-        const found = res.data.find((o) => o.application_id === applicationId);
-        if (found) {
-          setBaseSalary(found.base_salary != null ? String(found.base_salary) : "");
-          setCurrency(found.currency || "INR");
-          setBonus(found.bonus != null ? String(found.bonus) : "");
-          setEquity(found.equity || "");
-          setStatus(found.status || "received");
-          const due = (found as Offer & { decision_deadline?: string | null }).decision_deadline ?? found.deadline;
-          setDeadline(due ? due.slice(0, 10) : "");
-          setNotes(found.notes || "");
-        }
-      })
-      .catch(() => {});
-  }, [applicationId]);
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      setSubmitting(true);
-      await api.put(`/applications/${applicationId}/offer`, {
-        base_salary: baseSalary ? Number(baseSalary) : null,
-        currency,
-        bonus: bonus ? Number(bonus) : null,
-        equity: equity || null,
-        decision_deadline: deadline || null,
-        status,
-        notes: notes || null,
-      });
-      toast.success("Offer details saved");
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="rounded-lg border p-3 space-y-3 bg-muted/20">
-      <h5 className="text-xs font-semibold text-foreground">Offer Details</h5>
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <label className="block text-muted-foreground mb-1">Base Salary</label>
-          <Input type="number" value={baseSalary} onChange={(e) => setBaseSalary(e.target.value)} placeholder="e.g. 1500000" />
-        </div>
-        <div>
-          <label className="block text-muted-foreground mb-1">Currency</label>
-          <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="INR, USD, EUR" />
-        </div>
-        <div>
-          <label className="block text-muted-foreground mb-1">Bonus</label>
-          <Input type="number" value={bonus} onChange={(e) => setBonus(e.target.value)} placeholder="e.g. 200000" />
-        </div>
-        <div>
-          <label className="block text-muted-foreground mb-1">Equity</label>
-          <Input value={equity} onChange={(e) => setEquity(e.target.value)} placeholder="e.g. 5,000 ESOPs / 4-yr vest" />
-        </div>
-        <div>
-          <label className="block text-muted-foreground mb-1">Decision Deadline</label>
-          <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-        </div>
-        <div>
-          <label className="block text-muted-foreground mb-1">Status</label>
-          <NativeSelect
-            ariaLabel="Offer status"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: "received", label: "Offer Received" },
-              { value: "negotiating", label: "Negotiating" },
-              { value: "accepted", label: "Accepted" },
-              { value: "declined", label: "Declined" },
-            ]}
-          />
-        </div>
-        <div className="col-span-2">
-          <label className="block text-muted-foreground mb-1">Notes</label>
-          <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Benefits, insurance, start date details..." />
-        </div>
-      </div>
-      <div className="flex justify-end">
-        <Button size="sm" type="submit" disabled={submitting}>
-          {submitting ? <Loader2 className="animate-spin size-3.5" /> : null} Save Offer
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function ContactsSection({ applicationId }: { applicationId: number }) {
-  const [items, setItems] = useState<ApplicationContact[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [linkedin, setLinkedin] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const load = () => {
-    setLoading(true);
-    api.get<ApplicationContact[]>(`/applications/${applicationId}/contacts`)
-      .then((res) => setItems(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, [applicationId]);
-
-  const handleAdd = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    try {
-      setSubmitting(true);
-      await api.post(`/applications/${applicationId}/contacts`, {
-        name: name.trim(),
-        role: role.trim() || null,
-        email: email.trim() || null,
-        phone: phone.trim() || null,
-        linkedin_url: linkedin.trim() || null,
-      });
-      toast.success("Contact added");
-      setName("");
-      setRole("");
-      setEmail("");
-      setPhone("");
-      setLinkedin("");
-      load();
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (contactId: number) => {
-    try {
-      await api.delete(`/contacts/${contactId}`);
-      toast.success("Contact removed");
-      load();
-    } catch (err) {
-      toast.error(errorMessage(err));
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      {loading ? <LoadingState /> : items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No contacts saved yet for this application.</p>
-      ) : (
-        <div className="space-y-2">
-          {items.map((c: ApplicationContact) => (
-            <div key={c.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
-              <div>
-                <div className="font-medium text-foreground">{c.name} {c.role && <span className="text-xs text-muted-foreground">({c.role})</span>}</div>
-                {c.email && <div className="text-xs text-muted-foreground">Email: {c.email}</div>}
-                {c.phone && <div className="text-xs text-muted-foreground">Phone: {c.phone}</div>}
-                {c.linkedin_url && (
-                  <a href={c.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline block mt-0.5">
-                    LinkedIn Profile
-                  </a>
-                )}
-              </div>
-              <Button size="icon-xs" variant="ghost" aria-label={`Remove contact ${c.name}`} onClick={() => handleDelete(c.id)}><Trash2 className="size-3.5 text-destructive" /></Button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <form onSubmit={handleAdd} className="rounded-lg border p-3 space-y-3 bg-muted/20">
-        <h5 className="text-xs font-semibold text-foreground">Add Contact</h5>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <label className="block text-muted-foreground mb-1">Name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Recruiter / Hiring Manager" required />
-          </div>
-          <div>
-            <label className="block text-muted-foreground mb-1">Role / Title</label>
-            <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Technical Recruiter" />
-          </div>
-          <div>
-            <label className="block text-muted-foreground mb-1">Email</label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="recruiter@company.com" />
-          </div>
-          <div>
-            <label className="block text-muted-foreground mb-1">Phone</label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 ..." />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-muted-foreground mb-1">LinkedIn URL</label>
-            <Input value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." />
-          </div>
-        </div>
-        <div className="flex justify-end">
-          <Button size="sm" type="submit" disabled={submitting}>
-            {submitting ? <Loader2 className="animate-spin size-3.5" /> : <Plus className="size-3.5" />} Add Contact
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
+function Count({ n, tone }: { n: number; tone?: "warn" }) {
+  return <span className={cn("readout ml-0.5 rounded-full px-1.5 text-[11px]", tone === "warn" ? "bg-caution-tint text-caution" : "bg-muted text-muted-foreground")}>{n}</span>;
 }

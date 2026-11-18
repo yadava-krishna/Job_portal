@@ -1,13 +1,12 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2 } from "lucide-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { OfflineScreen } from "@/components/app/OfflineScreen";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ConnectionProvider, useConnection } from "@/contexts/ConnectionContext";
-import { AppLayout } from "@/layouts/AppLayout";
+import { AppLayout, BrandMark } from "@/layouts/AppLayout";
 import { decodeClip, stashClip } from "@/lib/clipper";
 import { LoginPage, RegisterPage } from "@/pages/AuthPages";
 import { useOnboarding } from "@/services/queries";
@@ -43,36 +42,51 @@ const queryClient = new QueryClient({
   },
 });
 
-function Splash({ text }: { text: string }) {
-  return <div className="flex min-h-dvh items-center justify-center gap-2 text-sm text-muted-foreground"><Loader2 className="animate-spin" /> {text}</div>;
+/** One boot screen for every gate (connecting, restoring the session, checking setup), so the user sees one calm
+ *  screen instead of three messages in a row. It only explains itself when a step is genuinely slow. */
+function Splash({ text, slowText }: { text: string; slowText?: string }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const t1 = setTimeout(() => setElapsed(1), 1200);
+    const t2 = setTimeout(() => setElapsed(2), 6000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+  return (
+    <div role="status" aria-live="polite" className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background px-6 text-center">
+      <BrandMark className="size-11 animate-pulse [animation-duration:1.6s]" />
+      <p className={`text-sm text-muted-foreground transition-opacity duration-300 ${elapsed ? "opacity-100" : "opacity-0"}`}>
+        {elapsed === 2 && slowText ? slowText : text}
+      </p>
+    </div>
+  );
 }
 
 /** Blocks the whole UI (search, apply, profile changes, downloads) unless the backend is online. */
 function BackendGate() {
   const { state } = useConnection();
-  if (state === "resolving" || state === "checking") return <Splash text="Connecting to the job portal…" />;
+  if (state === "resolving" || state === "checking") return <Splash text="Getting things ready for you…" slowText="Still connecting to the job portal. It may be waking up, hang tight." />;
   if (state !== "online") return <OfflineScreen />;
-  return <Suspense fallback={<Splash text="Loading…" />}><Outlet /></Suspense>;
+  return <Suspense fallback={<Splash text="Getting things ready for you…" />}><Outlet /></Suspense>;
 }
 
 function RequireAuth() {
   const { status } = useAuth();
   const location = useLocation();
-  if (status === "unknown") return <Splash text="Restoring your session…" />;
+  if (status === "unknown") return <Splash text="Getting things ready for you…" slowText="Still signing you in…" />;
   if (status === "anonymous") return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   return <Outlet />;
 }
 
 function RequireOnboarded() {
   const { data, isLoading } = useOnboarding();
-  if (isLoading) return <Splash text="Loading…" />;
+  if (isLoading) return <Splash text="Getting things ready for you…" />;
   if (data && !data.completed) return <Navigate to="/onboarding" replace />;
   return <Outlet />;
 }
 
 function GuestOnly() {
   const { status } = useAuth();
-  if (status === "unknown") return <Splash text="Restoring your session…" />;
+  if (status === "unknown") return <Splash text="Getting things ready for you…" slowText="Still signing you in…" />;
   if (status === "authenticated") return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 }

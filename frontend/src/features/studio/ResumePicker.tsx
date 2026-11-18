@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { NativeSelect } from "@/components/app/common";
 import { errorMessage } from "@/lib/api";
 import { useAttachResumeVersion, useStudioVersions, type AttachResult } from "./api";
+import { templateName } from "./templateCopy";
 
 /**
  * "Resume to use" for an application: pick a Resume Studio version. The backend exports it (cached) and records the
@@ -34,7 +35,7 @@ export function ResumeVersionPicker({ applicationId, initialVersionId, onAttache
 
   const options = [
     ...(selected == null ? [{ value: "", label: "Uploaded resume (default)" }] : []),
-    ...list.map((v) => ({ value: String(v.id), label: `${v.name} · ${v.template_name}${v.status === "locked" ? " · locked" : ""}` })),
+    ...list.map((v) => ({ value: String(v.id), label: `${v.name} · ${templateName(v.template_key, v.template_name)}${v.status === "locked" ? " · locked" : ""}` })),
   ];
   return (
     <div className="space-y-1.5">
@@ -45,7 +46,7 @@ export function ResumeVersionPicker({ applicationId, initialVersionId, onAttache
         {(attach.isPending || versions.isLoading) && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
       </div>
       {result?.resume_checksum && (
-        <p className="flex items-start gap-1.5 text-xs text-emerald-800 dark:text-emerald-200">
+        <p className="flex items-start gap-1.5 text-xs text-success">
           <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
           <span>This exact file will be recorded with the application. Checksum <code className="font-mono">{result.resume_checksum.slice(0, 12)}</code></span>
         </p>

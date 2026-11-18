@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, BadgeCheck, CheckCircle2, CircleHelp, ExternalLink, Globe2, Loader2, Settings2, XCircle } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Building2, CalendarCheck, CheckCircle2, CircleAlert, CircleHelp, ExternalLink, Globe2, Lightbulb, Loader2, Settings2, UserRound, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, PageHeader } from "@/components/app/common";
@@ -13,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useCareerGoals, useCountries, useCountryFit, useVisaRoutes, useWatchRoute } from "@/features/career/hooks";
 import { ConfidenceBadge } from "@/features/career/labels";
 import type { RouteFit } from "@/features/career/types";
+import { Note, Panel } from "@/features/growth/ui";
 
 const NOTICE = "General information only, not legal or immigration advice and not a prediction of approval. Rules change: always confirm on the official page before you act.";
 
@@ -28,41 +28,45 @@ export function InternationalPage() {
 
   return (
     <>
-      <PageHeader title="Working abroad" description="Visa routes for the countries you're interested in, and how your profile compares."
+      <PageHeader eyebrow="Work abroad" title={<>Passport era? <em>Let's map it</em>.</>}
+                  description="Visa routes for the countries you're interested in, and how your profile compares."
                   actions={<Button variant="outline" render={<Link to="/settings?tab=career-goals" />}><Settings2 /> Set where you want to work</Button>} />
 
-      <div role="note" className="mb-6 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-        <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+      <div role="note" className="mb-4 flex items-start gap-3 rounded-2xl bg-caution-tint px-4 py-3 text-[13px]">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-caution" aria-hidden />
         <div>
-          <p className="font-semibold">This is not legal advice.</p>
-          <p className="text-muted-foreground">{fit.data?.notice ?? NOTICE}</p>
+          <p className="font-semibold text-caution">This is not legal advice.</p>
+          <p className="text-foreground/80">{fit.data?.notice ?? NOTICE}</p>
         </div>
       </div>
 
       {goals.data && goals.data.search_mode === "india" && (
-        <p className="mb-4 text-sm text-muted-foreground">
+        <p className="mb-4 text-[13px] text-muted-foreground">
           Your job search is set to India only.{" "}
-          <Link to="/settings?tab=career-goals" className="text-primary underline-offset-4 hover:underline">Change it to International or Both</Link> to include jobs abroad in your matches.
+          <Link to="/settings?tab=career-goals" className="font-medium text-route underline-offset-4 hover:underline">Change it to International or Both</Link> to include jobs abroad in your matches.
         </p>
       )}
 
-      <section aria-label="Countries" className="mb-6">
-        <h2 className="mb-2 text-sm font-medium">Choose a country</h2>
+      <section aria-labelledby="countries-h" className="mb-4">
+        <h2 id="countries-h" className="mb-2 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">Choose a country</h2>
         {countries.isLoading ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+          <div className="flex flex-wrap gap-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-11 w-36 rounded-2xl" />)}</div>
         ) : countries.isError ? <p className="text-sm text-destructive">{errorMessage(countries.error)}</p> : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {list.map((c) => (
-              <button key={c.code} type="button" onClick={() => setPicked(c.code)} aria-pressed={country === c.code}
-                      className={cn("rounded-xl border bg-card p-3 text-left transition-colors hover:border-primary/50",
-                        country === c.code && "border-primary ring-2 ring-primary/30")}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{c.name}</span>
-                  <span className="text-xs text-muted-foreground">{c.code}</span>
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground">{c.region ?? ""}{c.region ? " · " : ""}{c.routes} route{c.routes === 1 ? "" : "s"}</div>
-              </button>
-            ))}
+          <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap">
+            {list.map((c) => {
+              const on = country === c.code;
+              return (
+                <button key={c.code} type="button" onClick={() => setPicked(c.code)} aria-pressed={on}
+                        className={cn("flex shrink-0 items-center gap-2.5 rounded-2xl bg-card py-1.5 pr-3.5 pl-1.5 text-left ring-1 transition-[box-shadow,background-color] duration-150",
+                          on ? "ring-2 ring-route/45 shadow-[var(--shadow-raised)]" : "ring-border hover:bg-paper-sunk/60")}>
+                  <span aria-hidden className={cn("readout flex h-8 w-9 items-center justify-center rounded-xl text-[12px] font-semibold", on ? "bg-route text-primary-foreground" : "bg-paper-sunk text-heading")}>{c.code}</span>
+                  <span>
+                    <span className="block text-[13.5px] font-semibold text-heading">{c.name}</span>
+                    <span className="block text-[11.5px] text-muted-foreground">{c.region ?? ""}{c.region ? " · " : ""}{c.routes} route{c.routes === 1 ? "" : "s"}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -71,7 +75,7 @@ export function InternationalPage() {
         <EmptyState icon={<Globe2 className="size-8" />} title="Pick a country to see its visa routes">
           We'll show the main work routes, what they generally need, and how your profile compares.
         </EmptyState>
-      ) : fit.isLoading ? <Skeleton className="h-64" /> : fit.isError ? (
+      ) : fit.isLoading ? <Skeleton className="h-64 rounded-2xl" /> : fit.isError ? (
         <EmptyState title="Couldn't load this country">{errorMessage(fit.error)}</EmptyState>
       ) : fit.data && <CountryFitView code={country} />}
     </>
@@ -84,46 +88,50 @@ function CountryFitView({ code }: { code: string }) {
   const watchFlags = new Map((watched.data ?? []).map((r) => [r.id, r.watching]));
   const p = fit.profile_used;
   return (
-    <div className="space-y-6">
-      {fit.already_authorised && (
-        <div role="status" className="flex items-start gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 text-sm">
-          <BadgeCheck className="mt-0.5 size-5 shrink-0 text-emerald-600" />
-          <div>
-            <p className="font-semibold">You said you can already work in {fit.country.name}.</p>
-            <p className="text-muted-foreground">You may not need a visa route. The routes below are shown for reference.</p>
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 space-y-4">
+        {fit.already_authorised && (
+          <div role="status" className="flex items-start gap-3 rounded-2xl bg-success-tint px-4 py-3 text-[13px]">
+            <BadgeCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden />
+            <div>
+              <p className="font-semibold text-success">You said you can already work in {fit.country.name}.</p>
+              <p className="text-foreground/80">You may not need a visa route. The routes below are shown for reference.</p>
+            </div>
           </div>
+        )}
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-[20px] font-bold tracking-[-0.02em]">Routes into {fit.country.name}</h2>
+          <span className="text-xs text-muted-foreground"><span className="readout">{fit.routes.length}</span> route{fit.routes.length === 1 ? "" : "s"} catalogued</span>
         </div>
-      )}
-
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">{fit.country.name}</h2>
-          <p className="text-xs text-muted-foreground">
-            Compared using: {p.years_experience} years of experience · education {p.education ?? "not found in your profile"}
-            {" "}· languages {p.languages.length ? p.languages.join(", ") : "none listed"}
-          </p>
-        </div>
-        {fit.country.official_source_url && (
-          <a href={fit.country.official_source_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-            Official immigration site <ExternalLink className="size-3.5" />
-          </a>
+        {fit.routes.length === 0 ? <EmptyState title="No routes catalogued for this country yet" /> : (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {fit.routes.map((r) => <RouteCard key={r.id} route={r} watching={watchFlags.get(r.id) ?? r.watching} watchKnown={!!watched.data} />)}
+          </div>
         )}
       </div>
 
-      {fit.routes.length === 0 ? <EmptyState title="No routes catalogued for this country yet" /> : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {fit.routes.map((r) => <RouteCard key={r.id} route={r} watching={watchFlags.get(r.id) ?? r.watching} watchKnown={!!watched.data} />)}
-        </div>
-      )}
-
-      {fit.relocation_tips.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Tips if you plan to relocate</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="list-disc space-y-1 pl-5 text-sm">{fit.relocation_tips.map((t) => <li key={t}>{t}</li>)}</ul>
-          </CardContent>
-        </Card>
-      )}
+      <div className="space-y-4">
+        <Panel title="Compared using" icon={<UserRound />} description="From your profile. Update it in Settings if anything is off.">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[13px]">
+            <dt className="text-muted-foreground">Experience</dt><dd><span className="readout">{p.years_experience}</span> years</dd>
+            <dt className="text-muted-foreground">Education</dt><dd className="capitalize">{p.education ?? "not found in your profile"}</dd>
+            <dt className="text-muted-foreground">Languages</dt><dd>{p.languages.length ? p.languages.join(", ") : "none listed"}</dd>
+          </dl>
+          {fit.country.official_source_url && (
+            <a href={fit.country.official_source_url} target="_blank" rel="noopener noreferrer"
+               className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-route underline-offset-4 hover:underline">
+              Official immigration site <ExternalLink className="size-3.5" aria-hidden />
+            </a>
+          )}
+        </Panel>
+        {fit.relocation_tips.length > 0 && (
+          <Panel title="Tips if you plan to relocate" icon={<Lightbulb />}>
+            <ul className="space-y-2 text-[13px]">
+              {fit.relocation_tips.map((t) => <li key={t} className="flex gap-2"><span aria-hidden className="mt-1.5 size-1.5 shrink-0 rounded-full bg-violet" />{t}</li>)}
+            </ul>
+          </Panel>
+        )}
+      </div>
     </div>
   );
 }
@@ -138,49 +146,46 @@ function RouteCard({ route, watching, watchKnown }: { route: RouteFit; watching:
   const watch = useWatchRoute();
   const { strengths, gaps, unknown, summary } = route.fit;
   return (
-    <Card>
-      <CardHeader className="gap-2">
+    <article className="flex flex-col rounded-2xl bg-card ring-1 ring-border">
+      <div className="space-y-2 px-4 pt-4 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <CardTitle>{route.name}</CardTitle>
+          <h3 className="font-display text-[16px] font-bold text-heading">{route.name}</h3>
           <ConfidenceBadge confidence={route.confidence} />
         </div>
-        <CardDescription>{route.summary}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span>{sponsorshipText(route.requires_sponsorship)}</span>
-          <span>Official page last checked: {route.last_checked_at ? formatDate(route.last_checked_at) : "not yet"}</span>
+        <p className="text-[13px] text-muted-foreground">{route.summary}</p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1"><Building2 className="size-3" aria-hidden />{sponsorshipText(route.requires_sponsorship)}</span>
+          <span className="inline-flex items-center gap-1"><CalendarCheck className="size-3" aria-hidden />Official page last checked: {route.last_checked_at ? formatDate(route.last_checked_at) : "not yet"}</span>
           {route.review_by && <span>Review due {formatDate(route.review_by)}</span>}
         </div>
+      </div>
+      <div className="flex-1 space-y-3 px-4 pt-3 pb-4 text-[13px] sm:px-5">
         {route.source_changed_at && (
-          <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-800 dark:text-amber-300">
-            The official page changed on {formatDate(route.source_changed_at)}. Read it before relying on this summary.
-          </p>
+          <Note tone="caution" icon={<AlertTriangle />}>The official page changed on {formatDate(route.source_changed_at)}. Read it before relying on this summary.</Note>
         )}
-
-        <div className={cn("rounded-lg px-3 py-2 text-sm font-medium", gaps.length ? "bg-amber-500/10 text-amber-800 dark:text-amber-300" : "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300")}>
+        <div className={cn("flex items-center gap-2 rounded-xl px-3 py-2 font-medium", gaps.length ? "bg-caution-tint text-caution" : "bg-route-tint text-route")}>
+          {gaps.length ? <CircleAlert className="size-4 shrink-0" aria-hidden /> : <CheckCircle2 className="size-4 shrink-0" aria-hidden />}
           {summary}
         </div>
-        <FitList icon={<CheckCircle2 className="size-3.5 text-emerald-600" />} title="In your favour" items={strengths} />
-        <FitList icon={<XCircle className="size-3.5 text-rose-600" />} title="Gaps" items={gaps} />
+        <FitList icon={<CheckCircle2 className="size-3.5 text-route" />} title="In your favour" items={strengths} />
+        <FitList icon={<XCircle className="size-3.5 text-destructive" />} title="Gaps" items={gaps} />
         <FitList icon={<CircleHelp className="size-3.5 text-muted-foreground" />} title="Couldn't tell from your profile" items={unknown} />
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-          <a href={route.source_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline">
-            Official source <ExternalLink className="size-3.5" />
-          </a>
-          <label className="flex items-center gap-2 text-xs">
-            {watch.isPending && <Loader2 className="size-3 animate-spin" />}
-            <Switch checked={watching} disabled={!watchKnown || watch.isPending} aria-label={`Tell me if the official page for ${route.name} changes`}
-                    onCheckedChange={(c) => watch.mutate({ id: route.id, watching: !!c }, {
-                      onSuccess: (r) => toast.success(r.watching ? "We'll tell you if the official page changes" : "Stopped watching this route"),
-                      onError: (e) => toast.error(errorMessage(e)),
-                    })} />
-            Tell me if the official page changes
-          </label>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 px-4 py-3 text-[13px] sm:px-5">
+        <a href={route.source_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-route underline-offset-4 hover:underline">
+          Official source <ExternalLink className="size-3.5" aria-hidden />
+        </a>
+        <label className="flex items-center gap-2 text-xs">
+          {watch.isPending && <Loader2 className="size-3 animate-spin" />}
+          <Switch checked={watching} disabled={!watchKnown || watch.isPending} aria-label={`Tell me if the official page for ${route.name} changes`}
+                  onCheckedChange={(c) => watch.mutate({ id: route.id, watching: !!c }, {
+                    onSuccess: (r) => toast.success(r.watching ? "On it. We'll tell you if the official page changes" : "Stopped watching this route"),
+                    onError: (e) => toast.error(errorMessage(e)),
+                  })} />
+          Tell me if the official page changes
+        </label>
+      </div>
+    </article>
   );
 }
 
@@ -188,8 +193,8 @@ function FitList({ icon, title, items }: { icon: React.ReactNode; title: string;
   if (!items.length) return null;
   return (
     <div>
-      <div className="mb-1 text-xs font-medium text-muted-foreground">{title}</div>
-      <ul className="space-y-1">{items.map((t) => <li key={t} className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0">{icon}</span>{t}</li>)}</ul>
+      <div className="mb-1 text-[11px] font-semibold tracking-[0.04em] text-muted-foreground uppercase">{title}</div>
+      <ul className="space-y-1">{items.map((t) => <li key={t} className="flex items-start gap-1.5"><span className="mt-0.5 shrink-0" aria-hidden>{icon}</span>{t}</li>)}</ul>
     </div>
   );
 }

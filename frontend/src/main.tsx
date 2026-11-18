@@ -16,6 +16,14 @@ window.addEventListener("vite:preloadError", (event) => {
   window.location.reload();
 });
 
+// Apply the saved theme before the first paint, on every screen (sign-in, loading, onboarding too), not only once the
+// theme toggle mounts. Done here rather than in an inline <script> because the CSP forbids inline scripts.
+try {
+  const stored = localStorage.getItem("jobpilot.theme");
+  const dark = stored ? stored === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.classList.toggle("dark", dark);
+} catch { /* storage unavailable: light theme */ }
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     {/* No inline <style> elements from Base UI (the CSP blocks them); their CSS is in index.css. */}

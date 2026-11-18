@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JobPilot type and color lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wdth,wght@75..100,400..700&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#16181c; --mute:#61656e; --line:#e2e1dc; --bg:#f6f5f2; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 "Geist", system-ui, sans-serif; }
+  main { max-width: 1240px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .note { color: var(--mute); margin: 0 0 28px; max-width: 70ch; }
+  h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); margin: 40px 0 12px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(380px,1fr)); gap: 12px; }
+  .spec { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px 20px; }
+  .spec .tag { font: 500 11px/1 "Geist Mono", monospace; color: var(--mute); margin-bottom: 14px; display:flex; justify-content:space-between; }
+  .spec .d { font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; font-weight: 650; margin: 0 0 4px; }
+  .spec .h { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 14px 0 2px; }
+  .spec .meta { font-size: 13px; color: var(--mute); }
+  .spec p { font-size: 14px; line-height: 1.55; margin: 10px 0; max-width: 60ch; }
+  .spec .num { display:flex; gap:18px; font-size: 13px; color: var(--mute); }
+  .spec .num b { display:block; font-size: 22px; color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .spec .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .spec .chips span { font-size: 12px; border:1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+  .row1 { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .score { font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  /* palettes */
+  .pal { border-radius: 12px; overflow:hidden; border:1px solid var(--line); margin-bottom: 16px; }
+  .mock { display:grid; grid-template-columns: 180px 1fr 300px; min-height: 250px; }
+  .mock .side { padding: 14px 10px; border-right: 1px solid var(--b); background: var(--side); }
+  .mock .side div { padding: 6px 10px; border-radius: 6px; font-size: 13px; color: var(--t2); }
+  .mock .side div.on { background: var(--sel); color: var(--t1); font-weight: 600; box-shadow: inset 2px 0 0 var(--p); }
+  .mock .list { padding: 14px; background: var(--bgc); }
+  .mock .job { background: var(--s); border:1px solid var(--b); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; display:flex; justify-content:space-between; gap:10px; color: var(--t1); }
+  .mock .job.sel { border-color: var(--p); }
+  .mock .job small { color: var(--t2); display:block; font-size: 12px; }
+  .mock .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; display:inline-flex; gap:4px; align-items:center; }
+  .mock .detail { background: var(--e); border-left: 1px solid var(--b); padding: 16px; color: var(--t1); }
+  .mock .btn { display:inline-block; background: var(--p); color: var(--pf); font-weight: 600; font-size: 13px; padding: 8px 14px; border-radius: 7px; margin-top: 10px; }
+  .mock .btn2 { display:inline-block; border:1px solid var(--b2); color: var(--t1); font-size: 13px; padding: 7px 12px; border-radius: 7px; margin: 10px 0 0 6px; }
+  .toks { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 0; background:#fff; }
+  .tok { padding: 8px 10px; border-top:1px solid var(--line); border-right:1px solid var(--line); font: 11px/1.4 "Geist Mono", monospace; }
+  .tok i { display:block; height: 26px; border-radius: 4px; border:1px solid rgba(0,0,0,.08); margin-bottom: 6px; }
+  .tok .cr { color: var(--mute); }
+  .bad { color: #b3362c !important; font-weight: 600; }
+  @media (max-width: 760px) { .mock { grid-template-columns: 1fr; } .mock .side { display:none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Type and color lab</h1>
+  <p class="note">The same JobPilot content in every candidate pairing, then the three palettes on a real Discover layout. Contrast ratios are computed live in this page (WCAG 2.x). Lab page only: nothing here touches the app.</p>
+
+  <h2>Type pairings: display / body / numbers</h2>
+  <div class="grid" id="specs"></div>
+
+  <h2>Palettes on a Discover mock</h2>
+  <div id="pals"></div>
+</main>
+<script>
+const pairs = [
+  ["1 · Geist / Inter / Geist Mono", "Geist", "Inter", "Geist Mono", "Brief candidate"],
+  ["2 · Satoshi / Satoshi / IBM Plex Mono", "Satoshi", "Satoshi", "IBM Plex Mono", "Brief candidate · Fontshare (ITF FFL)"],
+  ["3 · Manrope / Inter / Inter tnum", "Manrope", "Inter", "Inter", "Brief candidate"],
+  ["4 · Plus Jakarta Sans / same / Geist Mono", "Plus Jakarta Sans", "Plus Jakarta Sans", "Geist Mono", "Brief candidate"],
+  ["5 · DM Sans / DM Sans / IBM Plex Mono", "DM Sans", "DM Sans", "IBM Plex Mono", "Brief candidate"],
+  ["6 · Instrument Sans / same / JetBrains Mono", "Instrument Sans", "Instrument Sans", "JetBrains Mono", "Added candidate"],
+  ["7 · Bricolage Grotesque / Hanken Grotesk / Geist Mono", "Bricolage Grotesque", "Hanken Grotesk", "Geist Mono", "Added candidate"],
+  ["8 · Geist / Geist / Geist Mono (today)", "Geist", "Geist", "Geist Mono", "Current app baseline"],
+];
+const specs = document.getElementById("specs");
+for (const [name, d, b, m, why] of pairs) {
+  const el = document.createElement("section");
+  el.className = "spec";
+  el.innerHTML = `
+    <div class="tag"><span>${name}</span><span>${why}</span></div>
+    <div class="d" style="font-family:'${d}'">Discover</div>
+    <div class="meta" style="font-family:'${b}'">38 new matches since yesterday · 12 internships</div>
+    <div class="row1">
+      <div>
+        <div class="h" style="font-family:'${d}'">Junior Data Analyst, Payments Risk</div>
+        <div class="meta" style="font-family:'${b}'">Razorpay · Bengaluru · Hybrid · 0–2 yrs</div>
+      </div>
+      <div class="score" style="font-family:'${m}'">82</div>
+    </div>
+    <p style="font-family:'${b}'">You'll build SQL dashboards that flag unusual payment patterns, and work with the risk team to turn them into rules. Python and SQL are required; dbt is a plus. Il1 0O rn m — legibility check.</p>
+    <div class="num" style="font-family:'${m}'">
+      <div><b>1,284</b>found</div><div><b>46</b>applied</div><div><b>11.0%</b>replies</div><div><b>₹6.5L</b>median</div>
+    </div>
+    <div class="chips" style="font-family:'${b}'"><span>SQL</span><span>Python</span><span>dbt</span><span>Eligible</span></div>`;
+  specs.appendChild(el);
+}
+
+const palettes = [
+  { name: "A · Dossier (editorial light)", t: {
+    bg:"#F6F5F2", side:"#EFEEEA", s:"#FFFFFF", e:"#FFFFFF", t1:"#1B1D21", t2:"#5D616A", b:"#E3E1DB", b2:"#CBC8C0",
+    p:"#2B4BB0", pf:"#FFFFFF", sec:"#33363C", acc:"#36707F", hov:"#ECEAE5", sel:"#E5EAF7",
+    ok:"#2E7A4E", warn:"#9A5F0E", err:"#B3362C", info:"#2A6796" } },
+  { name: "B · Night Shift (midnight professional)", t: {
+    bg:"#0E1014", side:"#0B0D10", s:"#15181E", e:"#1B1F27", t1:"#E8EAEE", t2:"#9AA0AC", b:"#252A33", b2:"#353B47",
+    p:"#5DBAAE", pf:"#0B1412", sec:"#8E8AD8", acc:"#6FA8E6", hov:"#1A1E25", sel:"#18272A",
+    ok:"#52C285", warn:"#E2AA4A", err:"#EF6C61", info:"#6FA8E6" } },
+  { name: "C · Magenta Line, light (modern signature)", t: {
+    bg:"#F6F6F9", side:"#FFFFFF", s:"#FFFFFF", e:"#FFFFFF", t1:"#14151B", t2:"#5A5E6B", b:"#E1E2E9", b2:"#C9CBD6",
+    p:"#B8175F", pf:"#FFFFFF", sec:"#1E2240", acc:"#0B7A90", hov:"#F0F0F5", sel:"#FBEAF2",
+    ok:"#177246", warn:"#8F5A00", err:"#C4352B", info:"#0B7A90" } },
+  { name: "C · Magenta Line, dark", t: {
+    bg:"#0D0E14", side:"#0A0B10", s:"#15161F", e:"#1C1E29", t1:"#ECEDF3", t2:"#9B9EAF", b:"#272A38", b2:"#383C4E",
+    p:"#F0579C", pf:"#16070E", sec:"#C9CCF0", acc:"#4FCFE3", hov:"#1A1C26", sel:"#2A1622",
+    ok:"#4CCB8C", warn:"#F2B33E", err:"#F26659", info:"#4FCFE3" } },
+];
+const hex = (h) => [1,3,5].map(i => parseInt(h.slice(i,i+2),16)/255).map(c => c <= .03928 ? c/12.92 : ((c+.055)/1.055)**2.4);
+const lum = (h) => { const [r,g,b] = hex(h); return .2126*r + .7152*g + .0722*b; };
+const cr = (a,b) => { const [x,y] = [lum(a),lum(b)].sort((m,n)=>n-m); return (x+.05)/(y+.05); };
+const labels = { bg:"Background", s:"Surface", e:"Elevated", t1:"Text primary", t2:"Text secondary", b:"Border", p:"Primary", sec:"Secondary", acc:"Accent", hov:"Hover", sel:"Selected", ok:"Success", warn:"Warning", err:"Error", info:"Information" };
+const textish = ["t1","t2","p","acc","ok","warn","err","info","sec"];
+const pals = document.getElementById("pals");
+for (const {name, t} of palettes) {
+  const wrap = document.createElement("section");
+  wrap.className = "pal";
+  const vars = Object.entries(t).map(([k,v]) => `--${k==="bg"?"bgc":k}:${v}`).join(";");
+  const chip = (fg, label, icon) => `<span class="pill" style="color:${fg};background:${fg}1f">${icon} ${label}</span>`;
+  wrap.innerHTML = `
+    <div class="mock" style="${vars};font-family:'Geist'">
+      <div class="side"><div style="font-weight:700;color:${t.t1};padding-bottom:12px">${name.split("(")[0]}</div>
+        <div>Home</div><div class="on">Jobs</div><div>Applications</div><div>Career</div></div>
+      <div class="list">
+        <div class="job sel"><div><b>Junior Data Analyst</b><small>Razorpay · Bengaluru · Hybrid</small>
+          <div style="margin-top:6px">${chip(t.ok,"Eligible","✓")} ${chip(t.info,"New","●")}</div></div><div style="font:500 22px 'Geist Mono';color:${t.p}">82</div></div>
+        <div class="job"><div><b>Product Design Intern</b><small>Zerodha · Remote · Internship</small>
+          <div style="margin-top:6px">${chip(t.warn,"Check visa","!")} ${chip(t.acc,"Applied","→")}</div></div><div style="font:500 22px 'Geist Mono';color:${t.t2}">64</div></div>
+        <div class="job"><div><b>Backend Engineer II</b><small>Swiggy · Bengaluru · 3–5 yrs</small>
+          <div style="margin-top:6px">${chip(t.err,"Not eligible","×")}</div></div><div style="font:500 22px 'Geist Mono';color:${t.t2}">41</div></div>
+      </div>
+      <div class="detail"><div style="font-size:12px;color:${t.t2}">Razorpay</div><div style="font-size:18px;font-weight:600;letter-spacing:-.01em">Junior Data Analyst</div>
+        <div style="font-size:13px;color:${t.t2};margin-top:6px">Strong match: 5 of 6 must-have skills, location fits, 0–2 yrs fits.</div>
+        <span class="btn">Apply with Smart Apply</span><span class="btn2">Save</span></div>
+    </div>
+    <div class="toks">${Object.entries(labels).map(([k,l]) => {
+      const v = t[k]; let c = "";
+      if (textish.includes(k)) { const r1 = cr(v,t.bg), r2 = cr(v,t.s); const bad = Math.min(r1,r2) < (k==="sec"||k==="t2"?4.5:4.5);
+        c = `<span class="cr ${bad?"bad":""}">on bg ${r1.toFixed(2)} · on surface ${r2.toFixed(2)}</span>`; }
+      if (k==="p") c += `<br><span class="cr ${cr(t.pf,v)<4.5?"bad":""}">label on primary ${cr(t.pf,v).toFixed(2)}</span>`;
+      if (k==="b") c = `<span class="cr">vs bg ${cr(v,t.bg).toFixed(2)} (decorative)</span>`;
+      return `<div class="tok"><i style="background:${v}"></i>${l}<br>${v}<br>${c}</div>`; }).join("")}</div>`;
+  pals.appendChild(wrap);
+}
+</script>
+</body>
+</html>

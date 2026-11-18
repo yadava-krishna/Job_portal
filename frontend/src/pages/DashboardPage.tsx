@@ -1,11 +1,9 @@
-import { Link } from "react-router-dom";
 import { Activity, Bookmark, Briefcase, Clock, Gauge, Search, Server, Sparkles } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PageHeader, PlatformBadge } from "@/components/app/common";
-import { ActionCentre } from "@/features/dashboard/ActionCentre";
+import { PlatformBadge } from "@/components/app/common";
+import { ActionCentre, HomeHero } from "@/features/dashboard/ActionCentre";
 import { eventLabel } from "@/features/applications/events";
 import { useConnection } from "@/contexts/ConnectionContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,11 +14,11 @@ import { CareerSnapshotCard, WhatHappensNext } from "@/features/career/SnapshotC
 
 export function StatCard({ label, value, icon: Icon, hint }: { label: string; value: React.ReactNode; icon: React.ElementType; hint?: string }) {
   return (
-    <Card className="gap-1 p-4">
-      <div className="flex items-center justify-between text-sm text-muted-foreground">{label}<Icon className="size-4" /></div>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
-    </Card>
+    <div className="flex flex-col gap-1 px-4 py-3">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">{label}<Icon className="size-3.5" aria-hidden /></div>
+      <div className="readout text-[24px] leading-none font-semibold text-heading">{value}</div>
+      {hint && <div className="text-[11px] text-muted-foreground">{hint}</div>}
+    </div>
   );
 }
 
@@ -40,7 +38,7 @@ export function DashboardPage() {
     <Card>
       <CardHeader><CardTitle className="flex items-center gap-2"><Server className="size-4" /> Backend status</CardTitle></CardHeader>
       <CardContent className="space-y-2 text-sm">
-        <Row label="Connection" value={<span className="flex items-center gap-2"><span className="size-2 rounded-full bg-emerald-500" /> Online</span>} />
+        <Row label="Connection" value={<span className="flex items-center gap-2"><span className="size-2 rounded-full bg-success" /> Online</span>} />
         <Row label="Database" value={conn.health?.database.connected ? "Connected" : "Unavailable"} />
         <Row label="Version" value={conn.health?.version ?? "—"} />
         <Row label="Daily discovery" value={conn.health?.scheduler.running ? `Next ${formatDate(conn.health.scheduler.next_run, true)}` : "Not scheduled"} />
@@ -52,9 +50,9 @@ export function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={`Welcome${user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}`} description="What needs doing next in your job search."
-                  actions={<Button render={<Link to="/discover" />}><Search /> Discover jobs</Button>} />
+      <HomeHero firstName={user?.full_name?.split(" ")[0]} />
       <div className="mb-6"><ActionCentre /></div>
+      {(snapshot.data || snapshot.isLoading) && <div className="eyebrow mb-3">Your career</div>}
       <div className="mb-6">
         {snapshot.data ? <CareerSnapshotCard snapshot={snapshot.data} /> : snapshot.isLoading ? <Skeleton className="h-56" /> : null}
       </div>
@@ -65,10 +63,11 @@ export function DashboardPage() {
         </div>
       )}
       {showTracker && <>
+      <div className="eyebrow mb-3">Your numbers</div>
       {!s ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+        <Skeleton className="h-20 rounded-2xl" />
       ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+        <div className="grid grid-cols-2 divide-border rounded-2xl bg-card ring-1 ring-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
           <StatCard label="Discovered" value={s.total_discovered} icon={Search} hint={`${s.discovered_today} today`} />
           <StatCard label="Shortlisted" value={s.total_shortlisted} icon={Sparkles} />
           <StatCard label="Applied" value={s.total_applied} icon={Briefcase} hint={`${s.applied_today} today`} />
@@ -78,19 +77,25 @@ export function DashboardPage() {
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <details className="group mt-4 rounded-2xl bg-card ring-1 ring-border open:pb-4">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-2xl px-5 py-3.5 text-sm font-semibold text-heading transition-colors hover:bg-paper-sunk [&::-webkit-details-marker]:hidden">
+          Trends, platforms and activity
+          <span className="text-xs font-normal text-muted-foreground group-open:hidden">Show</span><span className="hidden text-xs font-normal text-muted-foreground group-open:inline">Hide</span>
+        </summary>
+        <div className="animate-in px-4 duration-200 fade-in-0 slide-in-from-top-1">
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>Last 30 days</CardTitle><CardDescription>Jobs discovered and applications submitted per day</CardDescription></CardHeader>
           <CardContent className="h-64">
             {analytics.data ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={analytics.data.series} margin={{ left: -20, right: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="var(--border)" />
                   <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} fontSize={11} />
                   <YAxis allowDecimals={false} fontSize={11} />
                   <Tooltip />
-                  <Area type="monotone" dataKey="discovered" name="Discovered" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.15} />
-                  <Area type="monotone" dataKey="applied" name="Applied" stroke="#10b981" fill="#10b981" fillOpacity={0.25} />
+                  <Area type="monotone" dataKey="discovered" name="Discovered" stroke="var(--chart-2)" fill="var(--chart-2)" fillOpacity={0.12} />
+                  <Area type="monotone" dataKey="applied" name="Applied" stroke="var(--chart-1)" fill="var(--chart-1)" fillOpacity={0.22} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : <Skeleton className="h-full" />}
@@ -100,7 +105,7 @@ export function DashboardPage() {
         {backendCard}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader><CardTitle>By platform</CardTitle></CardHeader>
           <CardContent>
@@ -150,6 +155,8 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+        </div>
+      </details>
       </>}
     </>
   );
