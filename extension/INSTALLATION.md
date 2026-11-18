@@ -7,19 +7,19 @@ you install it unpacked. Works in Google Chrome, Microsoft Edge, Brave and other
 
 Either:
 - download it from JobPilot: **Settings → Browser extension → Download the extension (.zip)**
-  (https://yadava-krishna.github.io/Job_portal/downloads/jobpilot-smart-apply-2.0.0.zip) and unzip it, or
+  (https://yadava-krishna.github.io/Job_portal/downloads/jobpilot-smart-apply-2.1.0.zip) and unzip it, or
 - use the `extension/` folder of this repository, or `fill-with-jobpilot-2.0.0.zip` from `npm run package`.
 
-Unzip it (right-click → Extract Here). You get a folder called **JobPilot-Smart-Apply** that contains
-`manifest.json`. Keep that folder somewhere you won't delete it.
+Unzip it (right-click → Extract Here, or Extract All on Windows). You get a folder called
+**jobpilot-smart-apply-2.1.0** with `manifest.json` directly inside. Keep that folder somewhere you won't delete it.
   Chrome loads it from that folder every time, so don't delete it.
 
 ## 2. Load it
 
 1. Open `chrome://extensions` (Edge: `edge://extensions`).
 2. Turn on **Developer mode** (top right).
-3. Click **Load unpacked** and select the **JobPilot-Smart-Apply** folder itself (the one that contains
-   `manifest.json`). Choosing the .zip or your Downloads folder gives "Manifest file is missing or unreadable".
+3. Click **Load unpacked** and select the **jobpilot-smart-apply-2.1.0** folder (the one with `manifest.json`
+   directly inside). "Manifest file is missing or unreadable" means a folder one level too high or too low was chosen.
 4. Pin **JobPilot Smart Apply** from the puzzle-piece menu so the icon is always visible.
 
 The extension ID must be `ehpfmhhbnijflgagkpdbhiakldmgedgp`. The JobPilot server only accepts requests from that ID.
