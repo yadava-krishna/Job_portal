@@ -2,42 +2,52 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      Content Security Policy. GitHub Pages can't send headers, so it lives here; nginx adds frame-ancestors and the
+      other headers (frontend/security-headers.conf). It is removed in `vite dev` only (vite.config.ts), whose hot
+      reload needs an inline script. Keep it in sync with what the app loads:
+        connect-src  the backend is picked at run time (src/lib/config.ts): same origin, an ngrok address, the
+                     Cloudflare quick-tunnel fallback, or a backend on this computer.
+        frame-src    blob: is the resume preview (a PDF made in the browser, shown in an iframe).
+        style-src    no inline <style>: sonner's CSS is bundled instead of injected (vite.config.ts) and Base UI's
+                     style elements are off (CSPProvider in src/main.tsx). React's style props are set through
+                     the DOM, which a CSP does not restrict.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://*.ngrok-free.dev https://*.ngrok-free.app https://*.trycloudflare.com http://localhost:* http://127.0.0.1:*; frame-src blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>JobPilot · Job application portal</title>
     <meta name="description" content="Discover jobs, see resume match scores, and track applications." />
     <meta name="referrer" content="no-referrer" />
-    <script type="module" crossorigin src="./assets/index-BWjFeZZZ.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/format-1fQjLNou.js">
-    <link rel="modulepreload" crossorigin href="./assets/react-dom-xC37dj1U.js">
-    <link rel="modulepreload" crossorigin href="./assets/chunk-6KYCQHYJ-t5TOhCW-.js">
-    <link rel="modulepreload" crossorigin href="./assets/loader-circle-B056Tmbu.js">
-    <link rel="modulepreload" crossorigin href="./assets/dist-C8ozGE2B.js">
-    <link rel="modulepreload" crossorigin href="./assets/circle-check-RQg31ZB9.js">
-    <link rel="modulepreload" crossorigin href="./assets/triangle-exclamation-point-DY2HgB-F.js">
-    <link rel="modulepreload" crossorigin href="./assets/settings-2-B7_bx7i7.js">
-    <link rel="modulepreload" crossorigin href="./assets/common-BzJSnyMu.js">
-    <link rel="modulepreload" crossorigin href="./assets/AuthContext-DMKiWdtw.js">
-    <link rel="modulepreload" crossorigin href="./assets/useOpenChangeComplete-C0yw6UDl.js">
+    <script type="module" crossorigin src="./assets/index-DxT5VNxU.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/format-s7hH3Y8I.js">
+    <link rel="modulepreload" crossorigin href="./assets/react-dom-DQtKkiWr.js">
+    <link rel="modulepreload" crossorigin href="./assets/chunk-6KYCQHYJ-aCgsucRg.js">
+    <link rel="modulepreload" crossorigin href="./assets/dist-W3LyS3uU.js">
+    <link rel="modulepreload" crossorigin href="./assets/circle-check-BSAkd_AI.js">
+    <link rel="modulepreload" crossorigin href="./assets/settings-2-DQB9y9sf.js">
+    <link rel="modulepreload" crossorigin href="./assets/card-B1bRVtp8.js">
+    <link rel="modulepreload" crossorigin href="./assets/AuthContext-C8q523RK.js">
+    <link rel="modulepreload" crossorigin href="./assets/useOpenChangeComplete-6Ol8u39Z.js">
     <link rel="modulepreload" crossorigin href="./assets/visuallyHidden-CmQ9ItcI.js">
-    <link rel="modulepreload" crossorigin href="./assets/with-selector-CXNEzUgO.js">
-    <link rel="modulepreload" crossorigin href="./assets/dialog-D_mykqlg.js">
-    <link rel="modulepreload" crossorigin href="./assets/bookmark-Dy3DJ2qp.js">
-    <link rel="modulepreload" crossorigin href="./assets/briefcase-YQ8wQben.js">
-    <link rel="modulepreload" crossorigin href="./assets/compass-BCMq-w47.js">
-    <link rel="modulepreload" crossorigin href="./assets/file-spreadsheet-CozBfekt.js">
-    <link rel="modulepreload" crossorigin href="./assets/file-text-DqkVAHrw.js">
-    <link rel="modulepreload" crossorigin href="./assets/globe-NbbnQ2n2.js">
-    <link rel="modulepreload" crossorigin href="./assets/messages-square-Cq-XJY8g.js">
-    <link rel="modulepreload" crossorigin href="./assets/circle-x-6cAEy6Z7.js">
-    <link rel="modulepreload" crossorigin href="./assets/queries-aHT8E9Nn.js">
-    <link rel="modulepreload" crossorigin href="./assets/discovery-8MukYKml.js">
-    <link rel="modulepreload" crossorigin href="./assets/search-wFuYNa0b.js">
-    <link rel="modulepreload" crossorigin href="./assets/target-BflJWUph.js">
-    <link rel="modulepreload" crossorigin href="./assets/users-QrLUNk8V.js">
-    <link rel="modulepreload" crossorigin href="./assets/AppLayout-DMY-0wdu.js">
-    <link rel="modulepreload" crossorigin href="./assets/check-DirwI4_D.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-Jti0LQev.css">
+    <link rel="modulepreload" crossorigin href="./assets/with-selector-V6zWMoTr.js">
+    <link rel="modulepreload" crossorigin href="./assets/dialog-DVlnjTw3.js">
+    <link rel="modulepreload" crossorigin href="./assets/bookmark-jRexmMxu.js">
+    <link rel="modulepreload" crossorigin href="./assets/briefcase-C4SXyWqF.js">
+    <link rel="modulepreload" crossorigin href="./assets/compass-D5-PjR5M.js">
+    <link rel="modulepreload" crossorigin href="./assets/file-spreadsheet-Dv9Yuph7.js">
+    <link rel="modulepreload" crossorigin href="./assets/file-text-CQQOSB1-.js">
+    <link rel="modulepreload" crossorigin href="./assets/globe-8-kHeqtK.js">
+    <link rel="modulepreload" crossorigin href="./assets/messages-square-EREzqdmu.js">
+    <link rel="modulepreload" crossorigin href="./assets/search-Db0K2ib7.js">
+    <link rel="modulepreload" crossorigin href="./assets/target-D38JyGkt.js">
+    <link rel="modulepreload" crossorigin href="./assets/users-D6v2RJBC.js">
+    <link rel="modulepreload" crossorigin href="./assets/circle-x-C8apzNA2.js">
+    <link rel="modulepreload" crossorigin href="./assets/queries-DJ7F6I1w.js">
+    <link rel="modulepreload" crossorigin href="./assets/discovery-DE5qw_92.js">
+    <link rel="modulepreload" crossorigin href="./assets/AppLayout-CNbFgYC2.js">
+    <link rel="modulepreload" crossorigin href="./assets/check-DW3pRgth.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-d9lHct7_.css">
   </head>
   <body>
     <div id="root"></div>
