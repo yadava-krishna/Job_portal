@@ -76,6 +76,8 @@ class ApplicationOut(BaseModel):
     apply_state_label: str | None = None
     apply_mode: str | None = None
     apply_state_at: datetime | None = None
+    # Evidence for the outcome: {source: employer_page | user_reported, confidence: high | medium | self_reported, ...}
+    confirmation: dict[str, Any] | None = None
     job: JobListing
 
 
@@ -122,3 +124,47 @@ class EmailDraftResponse(BaseModel):
     attachment_name: str
     candidate_consent_required: bool = True
 
+
+
+class ResumeChoice(BaseModel):
+    kind: Literal["upload", "studio"]
+    id: int
+    format: Literal["pdf", "docx"] = "pdf"
+
+
+class WorkspaceAnswer(BaseModel):
+    question: str = Field(min_length=2, max_length=500)
+    answer: str | None = Field(default=None, max_length=2000)
+    remember: bool = False
+    key: str | None = Field(default=None, max_length=120)
+
+
+class WorkspaceAnswers(BaseModel):
+    items: list[WorkspaceAnswer] = Field(min_length=1, max_length=60)
+
+
+class DestinationConfirm(BaseModel):
+    url: str = Field(max_length=1000)
+
+
+class PackageOut(BaseModel):
+    application: "ApplicationDetail"
+    package: dict[str, Any]
+    saved: list[str] = Field(default_factory=list)
+    errors: list[dict[str, str]] = Field(default_factory=list)
+
+
+class HandoffOut(BaseModel):
+    application: "ApplicationDetail"
+    package: dict[str, Any]
+    url: str
+
+
+class MemoryAnswerIn(BaseModel):
+    question: str = Field(default="", max_length=500)
+    answer: str = Field(min_length=1, max_length=2000)
+    key: str | None = Field(default=None, max_length=120)
+
+
+class ClassifyIn(BaseModel):
+    question: str = Field(min_length=1, max_length=500)

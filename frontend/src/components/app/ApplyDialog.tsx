@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, CheckCircle2, CircleHelp, Copy, Download, ExternalLink, Eye, FileText, Loader2, MousePointerClick, Puzzle, Wand2, XCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, Check, CheckCircle2, CircleHelp, Copy, Download, ExternalLink, Eye, FileText, Loader2, MousePointerClick, Puzzle, Wand2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
@@ -9,11 +9,15 @@ import { Field } from "@/components/app/common";
 import { CompanyMark } from "@/components/app/JobCard";
 import { downloadFile, errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { useApplicationAction, useApplyOptions } from "@/services/queries";
+import { useApplicationAction, useApplyOptions, useApplyPackage, useApplyWorkspace } from "@/services/queries";
 import { ResumeVersionPicker } from "@/features/studio/ResumePicker";
 import type { AttachResult } from "@/features/studio/api";
 import { ApplyStatePill, StatusPill } from "@/features/applications/pills";
-import type { ApplicationDetail, UserJob } from "@/types/api";
+import { AnswersEditor } from "@/features/apply/AnswersEditor";
+import { ResumeChooser } from "@/features/apply/ResumeChooser";
+import { ChecksList, CopyReadyPanel, DestinationLine, DestinationSuggestions, ProfileSummary, ReadinessStrip, RecoveryNotice } from "@/features/apply/Overview";
+import { actionLabel } from "@/features/apply/copy";
+import type { ApplicationDetail, ApplyPackage, HandoffOut, PackageOut, UserJob } from "@/types/api";
 import { cn } from "@/lib/utils";
 import { canSmartApply, smartApplyStart, smartApplyStatus, type SmartApplyStatus } from "@/lib/smartApply";
 
@@ -26,13 +30,36 @@ const checkIcon = {
   ACTION: <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />,
 };
 
+/** A package response from a backend that has the Apply Workspace (older ones answer without it). */
+function packageOf(data: unknown): PackageOut | null {
+  const d = data as Partial<PackageOut> | undefined;
+  return d?.package && Array.isArray(d.package.answers) && d.package.readiness && d.package.destination ? (d as PackageOut) : null;
+}
+
+/** Where to start when the workspace opens: the saved state decides, so reopening resumes instead of starting over. */
+function initialStep(app: ApplicationDetail, pkg: ApplyPackage | null): Step {
+  if (app.status === "SUBMITTED" || pkg?.action === "done") return "done";
+  if (pkg?.action === "resolve_uncertain") return "returned";
+  if (pkg?.action === "resume") return "review";
+  return app.status === "OPENED" || app.status === "CONFIRMATION_PENDING" ? "returned" : "review";
+}
+
+/** How the submission is known: the employer's page (seen by Smart Apply) or the user's own word. */
+function evidenceOf(app: ApplicationDetail, confirmedNow: boolean): "employer" | "user" | null {
+  if (app.apply_state === "submitted_confirmed" || app.confirmation?.source === "employer_page") return "employer";
+  if (app.apply_state === "user_reported" || app.confirmation?.source === "user_reported" || confirmedNow) return "user";
+  return null;
+}
+
 /**
- * Apply flow. The user always submits on the original platform:
- * prepare → review package → open listing in a new tab → come back → confirm (or not).
- * Opening the listing is never treated as applying.
+ * The Apply Workspace. The user always submits on the employer's (or the job site's) own form:
+ * prepare → review the package (answers, resume, destination) → open or autofill the form → come back → confirm (or not).
+ * Opening the form is never treated as applying, and nothing is ever submitted for the user.
+ * Talks to an older backend without the package endpoint by falling back to the plain package view.
  */
 export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: () => void }) {
   const action = useApplicationAction();
+  const ws = useApplyWorkspace();
   const [step, setStep] = useState<Step>("preparing");
   const [app, setApp] = useState<ApplicationDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +69,16 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
   // How the employer form was opened in this visit (display only), and whether the user confirmed here just now.
   const [via, setVia] = useState<"smart" | "hand" | null>(null);
   const [confirmedNow, setConfirmedNow] = useState(false);
+  const [unsavedAnswers, setUnsavedAnswers] = useState(0);
   const openedRef = useRef(false);
-  const options = useApplyOptions(app?.id);
+  const initialised = useRef(false);
+
+  const pkgQuery = useApplyPackage(app?.id);
+  const pkgOut = packageOf(pkgQuery.data);
+  const pkg = pkgOut?.package ?? null;
+  const legacy = !!app && !pkg && (pkgQuery.isError || (pkgQuery.isSuccess && !pkgOut));
+  const options = useApplyOptions(legacy ? app?.id : null);
+
   // Smart Apply: undefined while checking, null when not installed in this browser.
   const [ext, setExt] = useState<SmartApplyStatus | null | undefined>(undefined);
   const [starting, setStarting] = useState(false);
@@ -65,23 +100,38 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
     setStudioResume(null);
     setVia(null);
     setConfirmedNow(false);
+    setUnsavedAnswers(0);
     openedRef.current = false;
+    initialised.current = false;
     action.mutate({ kind: "prepare", userJobId: item.user_job_id }, {
-      onSuccess: (a) => {
-        setApp(a);
-        setStep(a.status === "SUBMITTED" ? "done" : a.status === "OPENED" || a.status === "CONFIRMATION_PENDING" ? "returned" : "review");
-      },
+      onSuccess: (a) => setApp(a),
       onError: (e) => { setError(errorMessage(e)); setStep("error"); },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item?.user_job_id]);
 
-  // When the user comes back to this tab after opening the listing, refresh the application (Smart Apply may already
-  // have recorded the submission from the employer's thank-you page) and otherwise ask for the outcome.
+  // The package carries the freshest application (after a resume choice, a hand-off...). A copy cached from an
+  // earlier visit is ignored until it has been fetched again: the extension may have changed the application since.
+  const pkgFresh = pkgQuery.isFetchedAfterMount;
+  const pkgApp = pkgFresh ? pkgOut?.application : undefined;
+  useEffect(() => { if (pkgApp && pkgApp.id) setApp(pkgApp); }, [pkgApp]);
+
+  // First load: start where the application stands (recovery after a closed tab, a restart, an uncertain outcome).
+  useEffect(() => {
+    if (!app || initialised.current) return;
+    if ((pkg && pkgFresh) || legacy) {
+      initialised.current = true;
+      setStep(initialStep(app, pkg));
+    }
+  }, [app, pkg, pkgFresh, legacy]);
+
+  // When the user comes back to this tab after opening the form, refresh (Smart Apply may already have recorded the
+  // submission from the employer's thank-you page) and otherwise ask for the outcome.
   useEffect(() => {
     const onFocus = () => {
       if (!openedRef.current || step !== "review" || !item) return;
       setStep("returned");
+      void pkgQuery.refetch();
       action.mutate({ kind: "prepare", userJobId: item.user_job_id }, {
         onSuccess: (a) => { setApp(a); if (a.status === "SUBMITTED") setStep("done"); },
       });
@@ -91,9 +141,13 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, item?.user_job_id]);
 
-  if (!item) return null;
-  const busy = action.isPending;
+  const onDirty = useCallback((n: number) => setUnsavedAnswers(n), []);
 
+  if (!item) return null;
+  const busy = action.isPending || ws.isPending;
+  const locked = app?.status === "SUBMITTED";
+
+  // ---- legacy (no package endpoint) ----
   const hostedUrl = options.data?.hosted_form_url ?? null;
   const openListing = (url: string | null = item.job.job_url) => {
     if (!app || !url) return;
@@ -107,21 +161,55 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
     });
   };
 
-  const formTarget = hostedUrl ?? item.job.job_url;
-  const smart = canSmartApply(formTarget);
+  // ---- where the form is, and whether Smart Apply can fill it ----
+  const destUrl = pkg ? (pkg.destination.url ?? item.job.job_url) : (hostedUrl ?? item.job.job_url);
+  const smart = pkg ? canSmartApply(destUrl) && pkg.capabilities.autofill : canSmartApply(destUrl);
   const smartReady = smart && !!ext?.connected;
+  const autofillAction = !!pkg && (pkg.action === "review_autofill" || pkg.action === "resume");
+
+  /** Manual and native paths: the page opens in the click itself (pop-up blockers), then the hand-off is recorded. */
+  const openEmployerPage = () => {
+    if (!app || !destUrl) return;
+    window.open(destUrl, "_blank", "noopener,noreferrer");
+    openedRef.current = true;
+    setVia("hand");
+    ws.mutate({ kind: "handoff", id: app.id, smart: false }, { onError: (e) => toast.error(errorMessage(e)) });
+  };
+
   const startSmartApply = async () => {
-    if (!app || !formTarget) return;
+    if (!app || !destUrl) return;
     setStarting(true);
     try {
-      await smartApplyStart(formTarget, item.user_job_id);
+      let url = destUrl;
+      if (pkg) url = ((await ws.mutateAsync({ kind: "handoff", id: app.id, smart: true })) as HandoffOut).url || destUrl;
+      await smartApplyStart(url, item.user_job_id, app.id);
       openedRef.current = true;
       setVia("smart");
       toast.success("Opened the form. Smart Apply is filling it now: check every answer in its panel, then submit there.");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Smart Apply couldn't open this form.");
+      toast.error(errorMessage(e, "Smart Apply couldn't open this form."));
     } finally {
       setStarting(false);
+    }
+  };
+
+  const primary = () => {
+    if (!pkg) return;
+    switch (pkg.action) {
+      case "review_autofill":
+      case "resume":
+        if (smartReady) void startSmartApply();
+        else openEmployerPage();
+        return;
+      case "continue_employer":
+      case "open_native":
+        openEmployerPage();
+        return;
+      case "resolve_uncertain":
+        setStep("returned");
+        return;
+      case "done":
+        setStep("done");
     }
   };
 
@@ -130,6 +218,7 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
     action.mutate({ kind: "confirm", id: app.id, submitted, reference_id: reference, confirmation_text: confirmation }, {
       onSuccess: (a) => {
         setApp(a);
+        void pkgQuery.refetch();
         if (submitted) { setConfirmedNow(true); setStep("done"); toast.success("Application sent. Big move."); }
         else { toast("Left as not applied. You can apply later."); onClose(); }
       },
@@ -142,13 +231,17 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
     action.mutate({ kind: "pending", id: app.id }, { onSuccess: () => { toast("Saved as confirmation pending. We'll ask again later."); onClose(); } });
   };
 
-  const usedSmart = via === "smart" || (!!app?.apply_state && via !== "hand");
+  const uncertain = pkg?.action === "resolve_uncertain" || app?.apply_state === "submission_uncertain";
+  const usedSmart = via === "smart" || (!!app?.apply_state && via !== "hand" && app.apply_mode !== "manual_handoff" && app.apply_state !== "form_opened");
   const position = step === "done" ? 3 : step === "returned" ? 2 : step === "review" && via ? 1 : 0;
+  const platform = pkg?.destination.platform_name || item.job.platform;
+  const evidence = app ? evidenceOf(app, confirmedNow) : null;
+  const score = pkg?.job.match_score ?? item.match_score;
 
   return (
     <Dialog open={!!item} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[760px]">
-        <header className="border-b px-5 pt-5 pb-4 sm:px-6">
+      <DialogContent className={cn("flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0", pkg ? "sm:max-w-[880px]" : "sm:max-w-[760px]")}>
+        <header className="border-b px-4 pt-5 pb-4 sm:px-6">
           <div className="flex items-start gap-3 pr-8">
             <CompanyMark name={item.job.company || "?"} className="size-10 text-[13px]" />
             <div className="min-w-0 flex-1">
@@ -156,97 +249,80 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
                 <span className="sr-only">Apply: </span>{item.job.title}
               </DialogTitle>
               <DialogDescription className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px]">
-                <span className="font-medium text-foreground">{item.job.company}</span><span aria-hidden>·</span>{item.job.platform}
+                <span className="font-medium text-foreground">{item.job.company}</span>
+                {!pkg && <><span aria-hidden>·</span>{item.job.platform}</>}
+                {score != null && <><span aria-hidden>·</span><span className="readout" title="Match score">{Math.round(score)}% match</span></>}
                 {app && <StatusPill status={app.status} className="ml-1" />}
+                {app && pkg && <ApplyStatePill state={app.apply_state} label={app.apply_state_label} />}
               </DialogDescription>
+              {pkg && <DestinationLine dest={pkg.destination} source={pkg.job.source ?? item.job.platform} />}
             </div>
           </div>
-          <ApplyRoute position={position} step={step} smart={usedSmart || smartReady} />
+          <ApplyRoute position={position} step={step} smart={usedSmart || (smartReady && autofillAction)} />
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
-          <p aria-live="polite" className="sr-only">{caption(step, via, item.job.platform)}</p>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+          <p aria-live="polite" className="sr-only">{caption(step, via, platform, uncertain)}</p>
 
           {step === "preparing" && (
             <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground"><Loader2 className="animate-spin" /> Preparing your application package…</div>
           )}
           {step === "error" && <p role="alert" className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
 
-          {app && step === "review" && (
-            <div className="space-y-5 animate-in fade-in-0 slide-in-from-bottom-1 duration-[260ms]">
-              {app.checklist.length > 0 && (
-                <section>
-                  <h3 className="eyebrow mb-2">Checklist</h3>
-                  <ul className="grid gap-x-5 gap-y-1.5 sm:grid-cols-2">
-                    {app.checklist.map((c, i) => (
-                      <li key={i} className="flex gap-2 text-[13px]">{checkIcon[c.status]}<span><span className="font-medium">{c.check}</span>{c.detail && <span className="text-muted-foreground">: {c.detail}</span>}</span></li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-              {app.screening_answers.length > 0 && (
-                <section>
-                  <h3 className="eyebrow mb-2">Screening questions and prepared answers</h3>
-                  <div className="divide-y divide-border/70 rounded-xl ring-1 ring-border">
-                    {app.screening_answers.map((s) => (
-                      <div key={s.question} className="flex flex-col gap-1 px-3 py-2.5 text-[13px] sm:flex-row sm:justify-between sm:gap-4">
-                        <span className="font-medium">{s.question}</span>
-                        {s.status === "NEEDS_CANDIDATE_INPUT"
-                          ? <span className="self-start rounded-full bg-caution-tint px-2 py-0.5 text-xs font-medium text-caution sm:self-auto">Needs your input</span>
-                          : <span className="text-muted-foreground sm:max-w-[55%] sm:text-right">{s.answer}</span>}
-                      </div>
-                    ))}
-                  </div>
-                  {app.needs_candidate_input.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Answers marked "Needs your input" are never guessed. Add verified answers in Settings → Verified answers.</p>}
-                </section>
-              )}
-              <section className="space-y-2 rounded-xl p-3 text-sm ring-1 ring-border">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-2"><FileText className="size-4 shrink-0 text-muted-foreground" /> Resume for this application: <span className="truncate font-medium">{app.resume_used ?? "none uploaded"}</span></span>
-                  {app.resume_used && (
-                    <Button size="sm" variant="ghost" onClick={() => {
-                      const path = studioResume?.resume_export_id ? `/studio/exports/${studioResume.resume_export_id}/download` : "/profile/resume";
-                      downloadFile(path, studioResume ? "resume.pdf" : app.resume_used ?? "resume.pdf").catch((e) => toast.error(errorMessage(e)));
-                    }}><Download /> Download</Button>
-                  )}
-                </div>
-                <ResumeVersionPicker applicationId={app.id}
-                                     initialVersionId={(app as unknown as { resume_version_id?: number | null }).resume_version_id ?? null}
-                                     onAttached={(r) => { setStudioResume(r); setApp({ ...app, resume_used: r.resume_used ?? app.resume_used }); }} />
-              </section>
-              {app.cover_letter && (
-                <section>
-                  <div className="mb-2 flex items-center justify-between"><h3 className="eyebrow">Cover letter (from your resume facts)</h3>
-                    <Button size="sm" variant="ghost" onClick={() => { void navigator.clipboard.writeText(app.cover_letter ?? ""); toast.success("Copied"); }}><Copy /> Copy</Button></div>
-                  <div className="max-h-40 overflow-y-auto rounded-xl bg-paper-sunk p-3 text-[13px] whitespace-pre-wrap">{app.cover_letter}</div>
-                </section>
-              )}
-              {options.data && (
-                <SmartApplyCard message={options.data.message} smart={smart} ext={ext} onClose={onClose} />
-              )}
-              <p className="flex gap-2 rounded-xl bg-paper-sunk px-3 py-2.5 text-[13px]">
-                <MousePointerClick className="mt-0.5 size-4 shrink-0 text-route" aria-hidden />
-                <span>
-                  {smartReady
-                    ? <>Next: click <strong>Apply with Smart Apply</strong>, check the filled form, submit it on {item.job.platform}, then come back here. If Smart Apply saw the employer's thank-you page, it's already recorded for you.</>
-                    : <>Next: open the original listing, complete the application <strong>on {item.job.platform}</strong>, then come back here and confirm.</>}
-                  {" "}Opening the form does not mark it as applied.
-                </span>
-              </p>
+          {app && pkg && step === "review" && (
+            <div className="space-y-6 animate-in fade-in-0 slide-in-from-bottom-1 duration-[260ms]">
+              {pkg.action === "resume" && <RecoveryNotice app={app} />}
+              <ReadinessStrip readiness={pkg.readiness} />
+              <DestinationSuggestions appId={app.id} dest={pkg.destination} locked={locked} />
+              <ChecksList conflicts={pkg.conflicts} eligibility={pkg.eligibility} />
+              <AnswersEditor appId={app.id} answers={pkg.answers} locked={locked} onDirtyChange={onDirty} />
+              <ResumeChooser appId={app.id} resume={pkg.resume} locked={locked} />
+              <ProfileSummary pkg={pkg} onSettings={onClose} />
+              {app.cover_letter && pkg.action !== "open_native" && <CoverLetter text={app.cover_letter} />}
+              {pkg.action === "open_native" && <CopyReadyPanel pkg={pkg} coverLetter={app.cover_letter} />}
+              {smart && autofillAction && <SmartApplyCard message={pkg.capabilities.summary} smart={smart} ext={ext} onClose={onClose} />}
+              <NextStep pkg={pkg} smartReady={smartReady && autofillAction} platform={platform} />
             </div>
+          )}
+
+          {app && legacy && step === "review" && (
+            <LegacyReview app={app} setApp={setApp} studioResume={studioResume} setStudioResume={setStudioResume}
+                          message={options.data?.message} smart={smart} smartReady={smartReady} ext={ext} platform={item.job.platform} onClose={onClose} />
           )}
 
           {app && step === "returned" && (
             <div className="space-y-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-[260ms]">
-              {usedSmart ? <SmartApplyProgress state={app.apply_state} label={app.apply_state_label} platform={item.job.platform} /> : (
+              {uncertain ? (
+                <div role="note" className="rounded-xl bg-caution-tint/60 px-4 py-3 text-[13px] ring-1 ring-caution/25" data-testid="ws-uncertain">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-semibold text-heading">We can't tell if this application went through</div>
+                    <ApplyStatePill state={app.apply_state} label={app.apply_state_label} />
+                  </div>
+                  <p className="mt-1 text-foreground/80">
+                    The form was submitted (or nearly), but no confirmation from the employer was seen. Check the employer's page or your
+                    email for a confirmation, then tell us below. JobPilot will not submit it again.
+                  </p>
+                </div>
+              ) : usedSmart ? <SmartApplyProgress state={app.apply_state} label={app.apply_state_label} platform={platform} /> : (
                 <div className="rounded-xl bg-route-tint/60 px-4 py-3 text-[13px] ring-1 ring-route/20">
                   <div className="font-semibold text-heading">Waiting on you</div>
-                  <p className="mt-0.5 text-foreground/80">Finish the form on {item.job.platform} and press submit there. Then tell us how it went. Nothing is marked as applied until you say so.</p>
+                  <p className="mt-0.5 text-foreground/80">Finish the form on {platform} and press submit there. Then tell us how it went. Nothing is marked as applied until you say so.</p>
                 </div>
               )}
-              <Button variant="ghost" size="sm" className="-mt-2 text-route" onClick={() => openListing(hostedUrl ?? item.job.job_url)} disabled={busy}><ExternalLink /> Reopen listing</Button>
+              {uncertain ? (
+                destUrl && (
+                  <Button variant="ghost" size="sm" className="-mt-2 text-route" onClick={() => window.open(destUrl, "_blank", "noopener,noreferrer")}>
+                    <ExternalLink /> Open the page to check
+                  </Button>
+                )
+              ) : pkg ? (
+                <Button variant="ghost" size="sm" className="-mt-2 text-route" onClick={openEmployerPage} disabled={busy || !destUrl}><ExternalLink /> Reopen the employer's page</Button>
+              ) : (
+                <Button variant="ghost" size="sm" className="-mt-2 text-route" onClick={() => openListing(hostedUrl ?? item.job.job_url)} disabled={busy}><ExternalLink /> Reopen listing</Button>
+              )}
+              {pkg && !uncertain && !usedSmart && <CopyReadyPanel pkg={pkg} coverLetter={app.cover_letter} defaultOpen={pkg.action === "open_native"} />}
               <div>
-                <h3 className="font-display text-[16px] font-bold text-heading">Did you submit the application on {item.job.platform}?</h3>
+                <h3 className="font-display text-[16px] font-bold text-heading">Did you submit the application on {platform}?</h3>
                 <p className="text-xs text-muted-foreground">If the confirmation page showed a reference, add it. It helps when you follow up.</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -257,11 +333,17 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
           )}
 
           {app && step === "done" && (
-            <div className="flex flex-col items-center gap-2 py-6 text-center animate-in fade-in-0 zoom-in-[0.98] duration-[280ms]">
+            <div className="flex flex-col items-center gap-2 py-6 text-center animate-in fade-in-0 zoom-in-[0.98] duration-[280ms]" data-testid="ws-done">
               <span className="jp-bump flex size-14 items-center justify-center rounded-full bg-success-tint text-success ring-8 ring-success-tint/50"><CheckCircle2 className="size-7" /></span>
               <h3 className="mt-2 font-display text-[22px] font-extrabold tracking-[-0.02em] text-heading">
-                {confirmedNow ? "Application sent. Big move." : app.apply_state === "submitted_confirmed" ? "Submitted, confirmed by Smart Apply" : "Already submitted"}
+                {confirmedNow ? "Application sent. Big move." : evidence === "employer" ? "Submitted and confirmed" : "Already submitted"}
               </h3>
+              {evidence === "employer" && (
+                <p className="inline-flex items-center gap-1.5 rounded-full bg-success-tint px-3 py-1 text-[13px] font-medium text-success"><BadgeCheck className="size-4" aria-hidden /> Confirmed by the employer's page</p>
+              )}
+              {evidence === "user" && (
+                <p className="inline-flex items-center gap-1.5 rounded-full bg-paper-sunk px-3 py-1 text-[13px] font-medium text-heading ring-1 ring-border">Recorded from your confirmation (not independently verified)</p>
+              )}
               <p className="max-w-md text-sm text-muted-foreground">
                 Recorded as submitted{app.submitted_at ? <> on <span className="readout text-foreground">{formatDate(app.submitted_at, true)}</span></> : ""}.
                 {app.reference_id ? <> Reference: <span className="readout text-foreground">{app.reference_id}</span>.</> : ""} You can track its progress under Applications.
@@ -270,14 +352,29 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
           )}
         </div>
 
-        <DialogFooter className="m-0 grid grid-cols-2 gap-2 rounded-none border-t bg-card px-5 py-3 sm:flex sm:flex-wrap sm:px-6">
-          {step === "review" && (
+        <DialogFooter className="m-0 grid grid-cols-2 gap-2 rounded-none border-t bg-card px-4 py-3 sm:flex sm:flex-wrap sm:items-center sm:px-6">
+          {step === "review" && pkg && (
+            <>
+              <Button variant="ghost" onClick={onClose} className="max-sm:order-last sm:mr-auto">Close</Button>
+              {unsavedAnswers > 0 && <span className="col-span-2 text-xs text-caution sm:order-none" role="status">{unsavedAnswers} answer{unsavedAnswers === 1 ? "" : "s"} not saved yet</span>}
+              <Button variant="outline" onClick={() => setStep("returned")}>I already applied</Button>
+              {smartReady && autofillAction && (
+                <Button variant="outline" onClick={openEmployerPage} disabled={busy || starting || !destUrl}><ExternalLink /> Apply by hand</Button>
+              )}
+              <Button className="max-sm:order-first max-sm:col-span-2" onClick={primary} disabled={busy || starting || (!destUrl && pkg.action !== "resolve_uncertain" && pkg.action !== "done")}
+                      data-testid="workspace-primary">
+                {starting ? <Loader2 className="animate-spin" /> : smartReady && autofillAction ? <Wand2 /> : <ExternalLink />}
+                {actionLabel(pkg.action, pkg.destination, smartReady)}
+              </Button>
+            </>
+          )}
+          {step === "review" && legacy && (
             <>
               <Button variant="ghost" onClick={onClose} className="max-sm:order-last sm:mr-auto">Close</Button>
               <Button variant="outline" onClick={() => setStep("returned")}>I already applied</Button>
               {smartReady ? (
                 <>
-                  <Button variant="outline" onClick={() => openListing(formTarget)} disabled={busy || starting}><ExternalLink /> Apply by hand</Button>
+                  <Button variant="outline" onClick={() => openListing(destUrl)} disabled={busy || starting}><ExternalLink /> Apply by hand</Button>
                   <Button className="max-sm:order-first max-sm:col-span-2" onClick={startSmartApply} disabled={busy || starting} data-testid="smart-apply-start">
                     {starting ? <Loader2 className="animate-spin" /> : <Wand2 />} Apply with Smart Apply
                   </Button>
@@ -294,10 +391,13 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
           )}
           {step === "returned" && (
             <>
-              <Button variant="ghost" className="max-sm:order-last max-sm:col-span-2 sm:mr-auto" onClick={() => { openedRef.current = false; setVia(null); setStep("review"); }} disabled={busy}><ArrowLeft /> Back to package</Button>
+              {!uncertain && (
+                <Button variant="ghost" className="max-sm:order-last max-sm:col-span-2 sm:mr-auto" onClick={() => { openedRef.current = false; setVia(null); setStep("review"); }} disabled={busy}><ArrowLeft /> Back to package</Button>
+              )}
+              {uncertain && <Button variant="ghost" className="max-sm:order-last max-sm:col-span-2 sm:mr-auto" onClick={onClose}>Close</Button>}
               <Button variant="outline" onClick={later} disabled={busy}>Not sure yet</Button>
-              <Button variant="outline" onClick={() => confirm(false)} disabled={busy}><XCircle /> I didn't apply</Button>
-              <Button className="max-sm:order-first max-sm:col-span-2" onClick={() => confirm(true)} disabled={busy}>{busy ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} Yes, I submitted it</Button>
+              <Button variant="outline" onClick={() => confirm(false)} disabled={busy}><XCircle /> {uncertain ? "Not submitted" : "I didn't apply"}</Button>
+              <Button className="max-sm:order-first max-sm:col-span-2" onClick={() => confirm(true)} disabled={busy}>{action.isPending ? <Loader2 className="animate-spin" /> : <CheckCircle2 />} Yes, I submitted it</Button>
             </>
           )}
           {(step === "done" || step === "error") && <Button className="max-sm:col-span-2" onClick={onClose}>Done</Button>}
@@ -307,14 +407,102 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
   );
 }
 
-function caption(step: Step, via: "smart" | "hand" | null, platform: string): string {
+function caption(step: Step, via: "smart" | "hand" | null, platform: string, uncertain: boolean): string {
   switch (step) {
     case "preparing": return "Preparing your application package.";
     case "review": return via ? "The employer's form is open in a new tab." : "Package ready. Check it, then open the employer's form.";
-    case "returned": return via === "smart" ? "Waiting for your review in the Smart Apply panel. You press submit yourself." : `Waiting for you to finish on ${platform} and confirm.`;
+    case "returned":
+      if (uncertain) return "We can't tell if the application went through. Tell us what happened.";
+      return via === "smart" ? "Waiting for your review in the Smart Apply panel. You press submit yourself." : `Waiting for you to finish on ${platform} and confirm.`;
     case "done": return "Recorded as submitted.";
     default: return "Something went wrong preparing the package.";
   }
+}
+
+function CoverLetter({ text }: { text: string }) {
+  return (
+    <section>
+      <div className="mb-2 flex items-center justify-between"><h3 className="eyebrow">Cover letter (from your resume facts)</h3>
+        <Button size="sm" variant="ghost" onClick={() => { void navigator.clipboard.writeText(text); toast.success("Copied"); }}><Copy /> Copy</Button></div>
+      <div className="max-h-40 overflow-y-auto rounded-xl bg-paper-sunk p-3 text-[13px] whitespace-pre-wrap">{text}</div>
+    </section>
+  );
+}
+
+/** What happens when the primary button is pressed, in one line. */
+function NextStep({ pkg, smartReady, platform }: { pkg: ApplyPackage; smartReady: boolean; platform: string }) {
+  const text = smartReady
+    ? <>Next: <strong>{actionLabel(pkg.action, pkg.destination, true)}</strong> opens the form and fills it. Check every answer in the Smart Apply panel, submit on {platform} yourself, then come back here.</>
+    : pkg.action === "open_native"
+      ? <>Next: open the job on <strong>{platform}</strong>, paste your answers from the list above, submit there, then come back here and confirm.</>
+      : <>Next: open the employer's form, complete the application <strong>on {platform}</strong>, then come back here and confirm.</>;
+  return (
+    <p className="flex gap-2 rounded-xl bg-paper-sunk px-3 py-2.5 text-[13px]">
+      <MousePointerClick className="mt-0.5 size-4 shrink-0 text-route" aria-hidden />
+      <span>{text} Opening the form does not mark it as applied, and JobPilot never submits for you.</span>
+    </p>
+  );
+}
+
+/** The plain package view, for a backend without the Apply Workspace. */
+function LegacyReview({ app, setApp, studioResume, setStudioResume, message, smart, smartReady, ext, platform, onClose }: {
+  app: ApplicationDetail; setApp: (a: ApplicationDetail) => void; studioResume: AttachResult | null; setStudioResume: (r: AttachResult) => void;
+  message: string | undefined; smart: boolean; smartReady: boolean; ext: SmartApplyStatus | null | undefined; platform: string; onClose: () => void;
+}) {
+  return (
+    <div className="space-y-5 animate-in fade-in-0 slide-in-from-bottom-1 duration-[260ms]">
+      {app.checklist.length > 0 && (
+        <section>
+          <h3 className="eyebrow mb-2">Checklist</h3>
+          <ul className="grid gap-x-5 gap-y-1.5 sm:grid-cols-2">
+            {app.checklist.map((c, i) => (
+              <li key={i} className="flex gap-2 text-[13px]">{checkIcon[c.status]}<span><span className="font-medium">{c.check}</span>{c.detail && <span className="text-muted-foreground">: {c.detail}</span>}</span></li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {app.screening_answers.length > 0 && (
+        <section>
+          <h3 className="eyebrow mb-2">Screening questions and prepared answers</h3>
+          <div className="divide-y divide-border/70 rounded-xl ring-1 ring-border">
+            {app.screening_answers.map((s) => (
+              <div key={s.question} className="flex flex-col gap-1 px-3 py-2.5 text-[13px] sm:flex-row sm:justify-between sm:gap-4">
+                <span className="font-medium">{s.question}</span>
+                {s.status === "NEEDS_CANDIDATE_INPUT"
+                  ? <span className="self-start rounded-full bg-caution-tint px-2 py-0.5 text-xs font-medium text-caution sm:self-auto">Needs your input</span>
+                  : <span className="text-muted-foreground sm:max-w-[55%] sm:text-right">{s.answer}</span>}
+              </div>
+            ))}
+          </div>
+          {app.needs_candidate_input.length > 0 && <p className="mt-2 text-xs text-muted-foreground">Answers marked "Needs your input" are never guessed. Add verified answers in Settings → Verified answers.</p>}
+        </section>
+      )}
+      <section className="space-y-2 rounded-xl p-3 text-sm ring-1 ring-border">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2"><FileText className="size-4 shrink-0 text-muted-foreground" /> Resume for this application: <span className="truncate font-medium">{app.resume_used ?? "none uploaded"}</span></span>
+          {app.resume_used && (
+            <Button size="sm" variant="ghost" onClick={() => {
+              const path = studioResume?.resume_export_id ? `/studio/exports/${studioResume.resume_export_id}/download` : "/profile/resume";
+              downloadFile(path, studioResume ? "resume.pdf" : app.resume_used ?? "resume.pdf").catch((e) => toast.error(errorMessage(e)));
+            }}><Download /> Download</Button>
+          )}
+        </div>
+        <ResumeVersionPicker applicationId={app.id} initialVersionId={app.resume_version_id ?? null}
+                             onAttached={(r) => { setStudioResume(r); setApp({ ...app, resume_used: r.resume_used ?? app.resume_used }); }} />
+      </section>
+      {app.cover_letter && <CoverLetter text={app.cover_letter} />}
+      {message != null && <SmartApplyCard message={message} smart={smart} ext={ext} onClose={onClose} />}
+      <p className="flex gap-2 rounded-xl bg-paper-sunk px-3 py-2.5 text-[13px]">
+        <MousePointerClick className="mt-0.5 size-4 shrink-0 text-route" aria-hidden />
+        <span>
+          {smartReady
+            ? <>Next: click <strong>Apply with Smart Apply</strong>, check the filled form, submit it on {platform}, then come back here. If Smart Apply saw the employer's thank-you page, it's already recorded for you.</>
+            : <>Next: open the original listing, complete the application <strong>on {platform}</strong>, then come back here and confirm.</>}
+          {" "}Opening the form does not mark it as applied.
+        </span>
+      </p>
+    </div>
+  );
 }
 
 /** The apply journey as a route: package → employer form → your review and submit → confirmed. */
@@ -349,9 +537,9 @@ function ApplyRoute({ position, step, smart }: { position: number; step: Step; s
 
 /** What happens in the Smart Apply tab, with where it stands now. Smart Apply fills; only the user submits. */
 function SmartApplyProgress({ state, label, platform }: { state: string | null | undefined; label: string | null | undefined; platform: string }) {
-  const at = !state || state === "draft" || state === "ready_to_fill" || state === "filling" ? 0
+  const at = !state || state === "draft" || state === "ready_to_fill" || state === "form_opened" || state === "filling" ? 0
     : state === "submission_pending" || state === "submission_authorized" || state === "submission_uncertain" ? 2 : 1;
-  const warn = state === "submission_uncertain" || state === "needs_information" || state === "failed";
+  const warn = state === "submission_uncertain" || state === "needs_information" || state === "failed" || state === "interrupted";
   const items = [
     { icon: Wand2, text: "Smart Apply fills the form from your profile, resume attached" },
     { icon: Eye, text: "You check every answer in the Smart Apply panel" },
@@ -379,7 +567,7 @@ function SmartApplyProgress({ state, label, platform }: { state: string | null |
   );
 }
 
-const EXT_ZIP = `${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.1.0.zip`;
+const EXT_ZIP = `${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.2.0.zip`;
 
 /** Where Smart Apply stands in this browser, and the one next step to make one-click applying work. */
 function SmartApplyCard({ message, smart, ext, onClose }: { message: string; smart: boolean; ext: SmartApplyStatus | null | undefined; onClose: () => void }) {
@@ -391,17 +579,18 @@ function SmartApplyCard({ message, smart, ext, onClose }: { message: string; sma
       <div className="space-y-1">
         <p className={smart ? "text-xs text-muted-foreground" : undefined}>{message}</p>
         {smart && ready && (
-          <p><strong>Smart Apply is ready.</strong> Click <strong>Apply with Smart Apply</strong>: the form opens in a new tab and fills itself
+          <p><strong>Smart Apply is ready.</strong> The form opens in a new tab and fills itself
             from your profile, with your resume attached. Check every answer in the panel, then submit. Nothing is sent without your click.</p>
         )}
         {smart && ext === undefined && <p className="flex items-center gap-2"><Loader2 className="size-3.5 animate-spin" /> Checking for Smart Apply in this browser…</p>}
         {smart && ext && !ext.connected && (
           <p><strong>Smart Apply is installed but not connected.</strong> Connect it once and this form will fill itself.{" "}
-            <a href="#/settings?tab=extension" className="font-medium text-route underline underline-offset-2" onClick={onClose}>Connect it now</a></p>
+            <a href="#/settings?tab=extension" className="font-medium text-route underline underline-offset-2" onClick={onClose}>Connect it now</a>
+            {" "}Or continue on the employer's site and fill it by hand.</p>
         )}
         {smart && ext === null && (
           <>
-            <p><strong>Apply in one click with Smart Apply.</strong> This form can be filled for you. Install the free browser extension once (two minutes), then use <strong>Apply with Smart Apply</strong>.</p>
+            <p><strong>Apply in one click with Smart Apply.</strong> This form can be filled for you. Install the free browser extension once (two minutes), or continue on the employer's site and fill it by hand.</p>
             <div className="flex flex-wrap items-center gap-2 pt-1" data-testid="apply-extension-cta">
               <Button size="xs" variant="outline" render={<a href={EXT_ZIP} download />}><Download /> Get the Smart Apply extension</Button>
               <a href="#/settings?tab=extension" className="text-xs font-medium text-route underline underline-offset-2" onClick={onClose}>How to set it up</a>

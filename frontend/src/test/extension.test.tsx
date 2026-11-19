@@ -84,7 +84,7 @@ describe("getting the extension from where you apply", () => {
     api.post.mockResolvedValue({ data: app });
     wrap(<ApplyDialog item={ghItem} onClose={() => {}} />);
     const cta = await screen.findByTestId("apply-extension-cta");
-    expect(cta.querySelector("a[download]")?.getAttribute("href")).toMatch(/downloads\/jobpilot-smart-apply-2\.1\.0\.zip$/);
+    expect(cta.querySelector("a[download]")?.getAttribute("href")).toMatch(/downloads\/jobpilot-smart-apply-2\.2\.0\.zip$/);
     expect(screen.getByText("How to set it up").getAttribute("href")).toBe("#/settings?tab=extension");
   });
 });
@@ -119,18 +119,18 @@ describe("one-click Smart Apply from JobPilot", () => {
   };
 
   it("when Smart Apply is connected, one button hands the job to it (and never confirms anything)", async () => {
-    fakeExtension({ version: "2.1.0", connected: true });
+    fakeExtension({ version: "2.2.0", connected: true });
     setup();
     wrap(<ApplyDialog item={ghItem} onClose={() => {}} />);
     expect(await screen.findByText("Smart Apply is ready.")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("smart-apply-start"));
-    await waitFor(() => expect(sent).toContainEqual({ id: "ehpfmhhbnijflgagkpdbhiakldmgedgp", type: "apply", url: ghItem.job.job_url, userJobId: ghItem.user_job_id }));
+    await waitFor(() => expect(sent).toContainEqual({ id: "ehpfmhhbnijflgagkpdbhiakldmgedgp", type: "apply", url: ghItem.job.job_url, userJobId: ghItem.user_job_id, applicationId: app.id }));
     expect(screen.queryByTestId("apply-extension-cta")).toBeNull();
     expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/confirm"), expect.anything());
   });
 
   it("installed but not connected: points to connecting, no one-click button", async () => {
-    fakeExtension({ version: "2.1.0", connected: false });
+    fakeExtension({ version: "2.2.0", connected: false });
     setup();
     wrap(<ApplyDialog item={ghItem} onClose={() => {}} />);
     expect(await screen.findByText("Connect it now")).toBeInTheDocument();

@@ -178,7 +178,8 @@ def test_apply_flow_open_is_not_applied(client, resume_bytes):
     s = client.get("/api/v1/dashboard/summary", headers=h).json()
     assert s["total_applied"] == 1 and s["pending_applications"] == 0
     events = [e["event_type"] for e in client.get(f"/api/v1/applications/{app['id']}", headers=h).json()["events"]]
-    assert events[0] == "PREPARED" and "OPENED_EXTERNAL" in events and events[-1] == "SUBMISSION_CONFIRMED"
+    # The user's own confirmation is the last outcome event (then recorded as "applied, you told us").
+    assert events[0] == "PREPARED" and "OPENED_EXTERNAL" in events and [e for e in events if e != "APPLY_STATE"][-1] == "SUBMISSION_CONFIRMED"
 
     assert client.post(f"/api/v1/applications/{app['id']}/stage", headers=h, json={"stage": "interview"}).json()["stage"] == "interview"
     assert client.post(f"/api/v1/applications/{app['id']}/fail", headers=h, json={}).status_code == 409

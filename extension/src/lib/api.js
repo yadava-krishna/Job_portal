@@ -11,6 +11,68 @@ export class ApiError extends Error {
 }
 
 const TIMEOUT_MS = 20000;
+const UNVERIFIED = "JobPilot's published server address could not be verified, so nothing was sent. Reconnect from JobPilot Settings or set the server address manually.";
+const enc = (s) => new TextEncoder().encode(s);
+const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+// ---- server identity proof ------------------------------------------------------------------------
+// The backend address is published in config.json on GitHub Pages. A tampered file must not receive the device
+// credential (or resume downloads), so before the credential goes to an address it has not used before, the extension
+// asks that server to prove it issued the credential: HMAC-SHA256 keyed with SHA-256(credential) (which only the
+// issuing server stores) over a fresh random nonce. The credential itself is never sent for this.
+
+/** A fresh random nonce: 32 bytes as 64 lowercase hex characters. */
+export function newNonce() {
+  return toHex(crypto.getRandomValues(new Uint8Array(32)));
+}
+
+/** The proof the real server must give for this credential and nonce (lowercase hex). */
+export async function expectedProof(token, nonce) {
+  const keyBytes = await crypto.subtle.digest("SHA-256", enc(String(token)));
+  const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return toHex(await crypto.subtle.sign("HMAC", key, enc(`jobpilot-prove:${nonce}`)));
+}
+
+/** Constant-time string comparison (same length required). */
+export function sameString(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Does `proof` (from the server) match this credential and nonce? Pure: no network, no storage. */
+export async function verifyProof(token, nonce, proof) {
+  if (!token || typeof proof !== "string" || !/^[0-9a-f]{64}$/i.test(proof)) return false;
+  return sameString(await expectedProof(token, nonce), proof.toLowerCase());
+}
+
+/** Make sure `base` is the server that issued `token` before sending it there. Throws ApiError(0, UNVERIFIED) if not;
+ *  a network failure throws {network: true} so the caller can look the address up again. */
+async function ensureVerified(base, token) {
+  if ((await vault.get("apiBaseOverride")) === base) return;  // an address the user set themselves
+  if ((await vault.get("verifiedBase")) === base) return;
+  const info = await vault.get("tokenInfo");
+  if (!Number.isInteger(info?.id)) throw new ApiError(0, UNVERIFIED);
+  const nonce = newNonce();
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(base + API_PREFIX + "/extension/prove", {
+      method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },  // no Authorization
+      body: JSON.stringify({ token_id: info.id, nonce }), signal: ctl.signal, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer",
+    });
+  } catch {
+    throw Object.assign(new ApiError(0, "JobPilot is not reachable right now."), { network: true });
+  } finally {
+    clearTimeout(timer);
+  }
+  let proof = null;
+  if (res.ok) { try { proof = (await res.json())?.proof; } catch { proof = null; } }
+  if (!(await verifyProof(token, nonce, proof))) throw new ApiError(0, UNVERIFIED);
+  await vault.set("verifiedBase", base);
+}
 
 /** The backend address: a manual override if set, else the address the JobPilot web app publishes. */
 export async function apiBase({ refresh = false } = {}) {
@@ -26,13 +88,24 @@ export async function apiBase({ refresh = false } = {}) {
   return base;
 }
 
-async function request(path, { method = "GET", body, auth = true, raw = false, retried = false } = {}) {
+async function request(path, { method = "GET", body, auth = true, raw = false, retried = false, meta = null } = {}) {
   const base = await apiBase();
+  if (meta) meta.base = base;
   const headers = { "ngrok-skip-browser-warning": "true" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (auth) {
     const token = await vault.get("token");
     if (!token) throw new ApiError(401, "Not connected");
+    try {
+      await ensureVerified(base, token);
+    } catch (e) {
+      // The tunnel address may have changed since we cached it: look it up again once (and verify the new one).
+      if (e.network && !retried && !(await vault.get("apiBaseOverride"))) {
+        await apiBase({ refresh: true }).catch(() => null);
+        return request(path, { method, body, auth, raw, retried: true, meta });
+      }
+      throw e;
+    }
     headers.Authorization = `Bearer ${token}`;
   }
   const ctl = new AbortController();
@@ -47,7 +120,7 @@ async function request(path, { method = "GET", body, auth = true, raw = false, r
     // The tunnel address may have changed since we cached it: look it up again once.
     if (!retried && !(await vault.get("apiBaseOverride"))) {
       await apiBase({ refresh: true }).catch(() => null);
-      return request(path, { method, body, auth, raw, retried: true });
+      return request(path, { method, body, auth, raw, retried: true, meta });
     }
     throw new ApiError(0, "JobPilot is not reachable right now.");
   } finally {
@@ -74,12 +147,15 @@ async function remember(t) {
 export async function forget() {
   await vault.remove("token");
   await vault.remove("tokenInfo");
+  await vault.remove("verifiedBase");
 }
 
 export const jobpilot = {
   async pair(code, deviceName) {
-    const t = await request("/extension/pair", { method: "POST", body: { code, device_name: deviceName }, auth: false });
+    const meta = {};
+    const t = await request("/extension/pair", { method: "POST", body: { code, device_name: deviceName }, auth: false, meta });
     await remember(t);
+    await vault.set("verifiedBase", meta.base);  // the server that just issued this credential
     return t;
   },
   async connected() {
@@ -100,7 +176,14 @@ export const jobpilot = {
   status: () => request("/extension/status"),
   match: (url) => request("/extension/match", { method: "POST", body: { url } }),
   profile: () => request("/extension/autofill-profile"),
-  answers: (questions) => request("/extension/answers", { method: "POST", body: { questions } }),
+  /** Answers for the form's questions; with applicationId the server adds the employer context and this application's own answers. */
+  answers: (questions, applicationId) => request("/extension/answers", { method: "POST",
+    body: Number.isInteger(applicationId) ? { questions, application_id: applicationId } : { questions } }),
+  /** Save answers the user ticked "save for next time" in the review panel: {saved: [question], errors: [{question, error}]}. */
+  learn: (applicationId, items) => request("/extension/answers/learn", { method: "POST",
+    body: Number.isInteger(applicationId) ? { application_id: applicationId, items } : { items } }),
+  /** The application's package: {resume: {kind, id, format, name}|null, cover_letter, destination_url, action, overrides}. */
+  package: (applicationId) => request(`/extension/applications/${applicationId}/package`),
   start: (userJobId) => request("/extension/applications/start", { method: "POST", body: { user_job_id: userJobId } }),
   confirm: (applicationId, submitted, referenceId) =>
     request(`/extension/applications/${applicationId}/confirm`, { method: "POST", body: { submitted, reference_id: referenceId || null } }),

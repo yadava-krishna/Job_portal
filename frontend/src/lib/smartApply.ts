@@ -39,9 +39,13 @@ export async function smartApplyStatus(): Promise<SmartApplyStatus | null> {
   return r?.ok && r.data ? r.data : null;
 }
 
-/** Opens the form in a new tab; the extension fills it there. Throws with a plain message if it cannot. */
-export async function smartApplyStart(url: string, userJobId: number): Promise<void> {
-  const r = await send<{ tabId: number }>({ type: "apply", url, userJobId }, 5000);
+/**
+ * Opens the form in a new tab; the extension fills it there. Throws with a plain message if it cannot.
+ * applicationId lets the extension load this application's prepared package (chosen resume, answers you typed here).
+ */
+export async function smartApplyStart(url: string, userJobId: number, applicationId?: number | null): Promise<void> {
+  const msg = applicationId != null ? { type: "apply", url, userJobId, applicationId } : { type: "apply", url, userJobId };
+  const r = await send<{ tabId: number }>(msg, 5000);
   if (!r) throw new Error("Smart Apply didn't answer. Check it's installed and switched on in chrome://extensions.");
   if (!r.ok) throw new Error(r.error || "Smart Apply couldn't open this form.");
 }

@@ -58,7 +58,11 @@
   JP.checkOutcome = () => {
     const a = adapterHere() || Object.values(JP.adapters).find((x) => !x.generic && x.matchesHost(location.hostname)) || JP.adapters.generic;
     const c = a ? JP.submit.confirmation(a) : null;
-    return c ? { outcome: "confirmed", signal: c.signal } : { outcome: a?.isApplicationPage?.() ? "still_on_form" : "uncertain" };
+    if (c) return { outcome: "confirmed", signal: c.signal, signal_kind: c.kind };
+    if (!a?.isApplicationPage?.()) return { outcome: "uncertain" };
+    // Back on the form after submitting: the employer's validation messages, if it shows any.
+    const errors = JP.submit.submitErrors(a);
+    return errors.length ? { outcome: "errors", errors } : { outcome: "still_on_form" };
   };
 
   JP.useProposed = useProposed;

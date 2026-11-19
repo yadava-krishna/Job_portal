@@ -424,6 +424,168 @@ export interface ApplicationDetail extends Application {
   needs_candidate_input: string[];
   notes: string | null;
   events: AppEvent[];
+  resume_version_id?: number | null;
+  resume_export_id?: number | null;
+  resume_checksum?: string | null;
+  /** How the submission is known: the employer's own page (Smart Apply saw it) or the user's own statement. */
+  confirmation?: SubmissionEvidence | null;
+}
+
+// ---- Apply Workspace (backend/services/apply_prep_service.build) ------------------------------------
+
+export interface SubmissionEvidence {
+  source: "employer_page" | "user_reported";
+  confidence: "high" | "medium" | "self_reported";
+  kind?: string | null;
+  reference?: string | null;
+  at?: string | null;
+}
+
+export type AnswerStatus = "VERIFIED" | "SUGGESTED" | "NEEDS_INPUT";
+export type AnswerSensitivity = "public" | "personal" | "private" | "never";
+export type AnswerScope = "global" | "company" | "job";
+export type AnswerValueType = "text" | "number" | "boolean" | "money" | "days" | "date_text" | "url" | "email" | "phone" | "choice";
+
+export interface PackageAnswer {
+  question: string;
+  key: string | null;
+  label: string;
+  answer: string | null;
+  value?: unknown;
+  status: AnswerStatus;
+  /** memory | settings | profile | resume | this_application | answer_bank.* | verified_facts.* | saved_for_one_job.* */
+  source: string | null;
+  confidence: number;
+  sensitivity: AnswerSensitivity;
+  /** The user ticks it before an assisted submission (pay, notice period, start date). */
+  confirm: boolean;
+  stale: boolean;
+  reason: string | null;
+  value_type: AnswerValueType | string;
+  unit: string | null;
+  scope: AnswerScope;
+  notes: string[];
+  remember_default: boolean;
+  origin: "common" | "employer" | "listing";
+  required: boolean;
+  options: string[];
+  field_type: string;
+}
+
+export interface DestinationSuggestion {
+  url: string;
+  ats: string;
+  platform_name: string;
+  company: string;
+  title: string;
+  location: string | null;
+  posted_at: string | null;
+  evidence: string[];
+  strength: "strong" | "possible";
+  posting_id: number;
+}
+
+export interface PackageDestination {
+  original_url: string | null;
+  source_platform: string | null;
+  url: string | null;
+  kind: "ats" | "ats_permission" | "restricted" | "employer_site";
+  ats: string | null;
+  platform_name: string | null;
+  verified: boolean;
+  evidence: string[];
+  suggestions: DestinationSuggestion[];
+  confirmed_by_user: boolean;
+}
+
+export interface PackageCapabilities {
+  prepare: boolean;
+  autofill: boolean;
+  assisted_submit: boolean;
+  native_handoff: boolean;
+  verified_confirmation: boolean;
+  summary: string;
+}
+
+export interface PackageResume {
+  kind: "upload" | "studio" | null;
+  id: number | null;
+  name: string | null;
+  format: "pdf" | "docx" | null;
+  selected_by: "you" | "default" | null;
+  ready: boolean;
+}
+
+export interface PackageProfileRow { key: string; label: string; value: string | number | null; source: string }
+export interface PackageMissing { key: string; label: string; where?: string }
+export interface PackageConflict { key: string; label: string; detail: string }
+export interface PackageEligibility { label: string; status: "ok" | "warn" | "fail"; detail: string }
+
+export interface PackageReadiness {
+  profile: boolean;
+  resume: boolean;
+  known_questions: boolean;
+  form_inspected: boolean;
+  to_check: number;
+  /** Unanswered questions not known to be required (shown, not blocking). Absent from older servers. */
+  other_unanswered?: number;
+  needs_input: number;
+  level: "blocked" | "needs_input" | "ready" | "ready_known";
+  summary: string;
+}
+
+export type ApplyAction = "review_autofill" | "continue_employer" | "open_native" | "resume" | "resolve_uncertain" | "done";
+
+export interface ApplyPackage {
+  version: number;
+  prepared_at: string;
+  job: { title: string; company: string; source: string | null; location: string | null; match_score: number | null; job_url: string | null };
+  destination: PackageDestination;
+  capabilities: PackageCapabilities;
+  resume: PackageResume;
+  profile: { personal: PackageProfileRow[]; professional: PackageProfileRow[]; links: PackageProfileRow[] };
+  answers: PackageAnswer[];
+  questions_source: "employer_api" | "employer_form" | "not_inspected";
+  missing: PackageMissing[];
+  conflicts: PackageConflict[];
+  eligibility: PackageEligibility[];
+  readiness: PackageReadiness;
+  action: ApplyAction;
+  action_label: string;
+}
+
+export interface PackageOut {
+  application: ApplicationDetail;
+  package: ApplyPackage;
+  saved?: string[];
+  errors?: { question: string; error: string }[];
+}
+export interface HandoffOut { application: ApplicationDetail; package: ApplyPackage; url: string }
+
+export interface WorkspaceAnswerInput { question: string; answer: string | null; remember: boolean; key?: string }
+
+/** One remembered answer (Settings -> Verified answers -> Remembered answers). Private answers are masked unless revealed. */
+export interface MemoryAnswer {
+  key: string;
+  scope_ref: string;
+  label: string;
+  answer: string | null;
+  masked: boolean;
+  value_type: string;
+  unit: string | null;
+  sensitivity: AnswerSensitivity;
+  source: string | null;
+  status: string;
+  stale: boolean;
+  question: string | null;
+  last_confirmed_at: string | null;
+  revalidate_days: number | null;
+  group: "personal" | "professional" | "preferences" | "eligibility" | "links" | "other";
+  history: { at: string | null; source: string | null; question: string | null; answer: string | null }[];
+}
+
+export interface AnswerCatalogueEntry {
+  key: string; label: string; group: string; value_type: string; unit: string | null; sensitivity: string; time_dependent: boolean; scope: string;
 }
 export interface Report {
   id: number;

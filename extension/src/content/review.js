@@ -15,7 +15,8 @@
     const now = currentValue(q);
     if (!now) return { kind: "empty", text: "Empty" };
     if (ours && clean(ours.value) === clean(now)) {
-      const from = ours.source === "saved answer" ? "your saved answer" : ours.source === "answers" ? "your confirmed answers" : "your JobPilot profile";
+      const from = ours.source === "saved answer" ? "your saved answer" : ours.source === "answers" ? "your confirmed answers"
+        : ours.source === "cover letter" ? "the cover letter prepared for this application" : "your JobPilot profile";
       return { kind: ours.status === "VERIFIED" ? "jobpilot" : "suggested", text: ours.status === "VERIFIED" ? `JobPilot, from ${from}` : `JobPilot suggestion (from ${from}): please check`,
                confirm: Boolean(ours.confirm) };
     }
@@ -80,6 +81,46 @@
     };
   }
 
+  const COVER_LETTER = /\bcover (letter|note)\b/;
+
+  /**
+   * Answers the user gave on the page that JobPilot could offer to remember ("Save answers for next time"):
+   * questions JobPilot could not answer (report.needs) or whose value the user changed from what JobPilot proposed,
+   * now holding a value. Never offered: file, password, single tick-box (consent-like), sensitive/consent/secret
+   * questions (by label, options or the server's "never"), profile fields (name, email…: those live in the profile),
+   * cover letters and over-long values. Each: {ref, label, value, sensitive, checked} where checked is the default
+   * (only for answers the server says to remember by default, and never for sensitive ones). Read-only.
+   */
+  function learnable(adapter, report, answers = state.answers || {}) {
+    if (!adapter || !report) return [];
+    const proposed = new Map();  // ref -> what JobPilot proposed (null: nothing)
+    for (const i of report.needs || []) if (!i.never) proposed.set(i.ref, null);
+    for (const i of [...(report.filled || []), ...(report.review || [])]) proposed.set(i.ref, i.value ?? null);
+    for (const i of [...(report.kept || []), ...(report.unsure || [])]) proposed.set(i.ref, i.proposed ?? null);
+    const { norm, classify, classifyOptions } = JP.fieldmap;
+    const out = [];
+    for (const q of scan(adapter)) {
+      if (!proposed.has(q.ref) || !q.label || q.kind === "file" || q.single) continue;
+      const type = String(q.signals?.type || q.els[0]?.getAttribute?.("type") || "").toLowerCase();
+      if (type === "password" || type === "file" || type === "hidden") continue;
+      const cls = JP.filler.keyFor(adapter, q);
+      if (cls.never || classify(q.label) || classifyOptions(q.options)) continue;
+      if (cls.key && cls.confidence >= 0.4) continue;
+      if (COVER_LETTER.test(norm(q.label))) continue;
+      const a = answers[q.label];
+      if (a?.sensitivity === "never") continue;
+      const value = currentValue(q);
+      if (!value || value.length > 2000) continue;
+      const was = proposed.get(q.ref);
+      if (was != null && clean(was) === clean(value)) continue;  // unchanged: nothing new to learn
+      const ours = state.filled.get(q.els[0]);
+      if (ours && clean(ours.value) === clean(value)) continue;  // still what JobPilot wrote
+      const sensitive = a?.sensitivity === "private";
+      out.push({ ref: q.ref, label: q.label, value, sensitive, checked: Boolean(a?.remember_default) && !sensitive });
+    }
+    return out;
+  }
+
   /** The user ticked "I checked this answer" for a sensitive item. Stored only in this page's memory. */
   function setConfirmed(ref, yes) {
     state.confirmed ??= new Set();
@@ -104,5 +145,5 @@
     return () => { root.removeEventListener("input", check, true); root.removeEventListener("change", check, true); mo.disconnect(); clearTimeout(timer); };
   }
 
-  JP.review = { snapshot, fingerprint, setConfirmed, watch };
+  JP.review = { snapshot, fingerprint, setConfirmed, watch, learnable };
 })();

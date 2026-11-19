@@ -2,17 +2,22 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from backend.api import serializers
 from backend.api.deps import CurrentUser, DbSession, SettingsDep
-from backend.models import Application, UserJob
+from backend.models import Application, UserJob, utcnow
 from backend.schemas.applications import (
     ApplicationDetail,
     ApplicationOut,
     ApplyOptions,
     ConfirmRequest,
+    DestinationConfirm,
+    HandoffOut,
+    PackageOut,
+    ResumeChoice,
+    WorkspaceAnswers,
     EmailDraftRequest,
     EmailDraftResponse,
     OpenResponse,
@@ -22,6 +27,8 @@ from backend.schemas.applications import (
     TrackingUpdate,
 )
 from backend.services import application_service as svc
+from backend.services import apply_prep_service as prep
+from backend.services import apply_state_service, platform_service
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -52,6 +59,7 @@ def apply_options(application_id: int, user: CurrentUser, db: DbSession) -> Appl
 def confirm(application_id: int, body: ConfirmRequest, user: CurrentUser, db: DbSession) -> ApplicationDetail:
     app = svc.owned_application(db, user, application_id)
     svc.confirm(db, user, app, body.submitted, body.reference_id, body.confirmation_text, body.notes)
+    apply_state_service.after_user_confirm(db, app, body.submitted)
     return serializers.application_detail(db, user, app)
 
 
@@ -90,6 +98,81 @@ def tracking(application_id: int, body: TrackingUpdate, user: CurrentUser, db: D
     app = svc.owned_application(db, user, application_id)
     svc.update_tracking(db, user, app, body.model_dump(exclude_unset=True))
     return serializers.application_detail(db, user, app)
+
+
+# ---- Apply Workspace: the prepared package, resume choice, answers, destination, native hand-off ----------------
+
+def _pkg_out(db, user, app, package, **extra) -> PackageOut:
+    return PackageOut(application=serializers.application_detail(db, user, app), package=package, **extra)
+
+
+@router.get("/{application_id}/package", response_model=PackageOut)
+def package(application_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep, refresh: bool = False) -> PackageOut:
+    """Everything prepared for this application: destination, resume, answers, missing information, readiness, next step.
+
+    Rebuilt on every call from your current profile and remembered answers (the employer's published questions are
+    cached for a day; `refresh=true` re-reads them)."""
+    app = svc.owned_application(db, user, application_id)
+    return _pkg_out(db, user, app, prep.build(db, settings, user, app, refresh_questions=refresh))
+
+
+@router.put("/{application_id}/resume", response_model=PackageOut)
+def choose_resume(application_id: int, body: ResumeChoice, user: CurrentUser, db: DbSession, settings: SettingsDep) -> PackageOut:
+    """Use this resume (an upload or a Resume Studio version) for this application. Smart Apply attaches exactly this one."""
+    app = svc.owned_application(db, user, application_id)
+    prep.select_resume(db, settings, user, app, body.kind, body.id, body.format)
+    return _pkg_out(db, user, app, prep.build(db, settings, user, app))
+
+
+@router.post("/{application_id}/answers", response_model=PackageOut)
+def save_answers(application_id: int, body: WorkspaceAnswers, user: CurrentUser, db: DbSession, settings: SettingsDep) -> PackageOut:
+    """Answers for this application. Each one is remembered for later applications only if `remember` is true."""
+    app = svc.owned_application(db, user, application_id)
+    res = prep.save_answers(db, settings, user, app, [i.model_dump() for i in body.items])
+    db.commit()
+    return _pkg_out(db, user, app, res["package"], saved=res["saved"], errors=res["errors"])
+
+
+@router.post("/{application_id}/destination", response_model=PackageOut)
+def confirm_destination(application_id: int, body: DestinationConfirm, user: CurrentUser, db: DbSession, settings: SettingsDep) -> PackageOut:
+    """You confirmed that a suggested employer posting is the same job: apply there instead of the original listing."""
+    app = svc.owned_application(db, user, application_id)
+    pkg = prep.confirm_destination(db, settings, user, app, body.url)
+    db.commit()
+    return _pkg_out(db, user, app, pkg)
+
+
+@router.delete("/{application_id}/destination", response_model=PackageOut)
+def clear_destination(application_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep) -> PackageOut:
+    app = svc.owned_application(db, user, application_id)
+    pkg = prep.clear_destination(db, settings, user, app)
+    db.commit()
+    return _pkg_out(db, user, app, pkg)
+
+
+@router.post("/{application_id}/handoff", response_model=HandoffOut)
+def handoff(application_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep, smart: bool = False) -> HandoffOut:
+    """You are opening the employer's (or the platform's own) application page. Recorded as 'employer page opened',
+    never as applied. `smart=true` when Smart Apply opens and fills it."""
+    app = svc.owned_application(db, user, application_id)
+    if app.status == "SUBMITTED":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This application was already submitted. JobPilot will not submit it again.")
+    pkg = app.package or prep.build(db, settings, user, app, commit=False)
+    url = (pkg.get("destination") or {}).get("url") or app.job.job_url
+    if not url:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "This job has no application page to open.")
+    if not platform_service.has_consent(db, user.id, "apply_assist"):
+        platform_service.set_consent_nocommit(db, user, "apply_assist", True)
+    mode = "assisted_submit" if smart and (pkg.get("capabilities") or {}).get("assisted_submit") else ("autofill_review" if smart else "manual_handoff")
+    if app.apply_state not in ("filling", "needs_information", "ready_for_review", "reviewed", "submission_authorized", "submission_pending",
+                               "submission_uncertain", "user_reported", "submitted_confirmed"):
+        apply_state_service.record(db, user, app, "form_opened", mode=mode, session={"page": url})
+    else:
+        svc.mark_in_progress(db, user, app, "apply_workspace")
+    app.opened_at = app.opened_at or utcnow()
+    db.commit()
+    pkg = prep.build(db, settings, user, app)
+    return HandoffOut(application=serializers.application_detail(db, user, app), package=pkg, url=url)
 
 
 @router.get("", response_model=list[ApplicationOut])

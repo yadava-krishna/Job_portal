@@ -109,6 +109,8 @@ const CONSENT_TITLES: Record<string, string> = {
   extension: "Browser extension",
   email_notifications: "E-mail reminders",
   research_feedback: "Short feedback questions",
+  answer_memory: "Remember my confirmed answers",
+  apply_assist: "Prepare and autofill applications",
 };
 
 export function PrivacyConsents() {

@@ -59,14 +59,14 @@ export function ExtensionSettings() {
             {here === null && <span className="text-muted-foreground"><strong className="text-foreground">Not installed in this browser yet.</strong> Download it and follow the four steps below.</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" render={<a href={`${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.1.0.zip`} download />}>
+            <Button variant="outline" render={<a href={`${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.2.0.zip`} download />}>
               <Download /> Download the extension (.zip, 70 KB)
             </Button>
-            <span className="text-xs text-muted-foreground"><span className="readout">Version 2.1.0</span> · Chrome, Edge or Brave</span>
+            <span className="text-xs text-muted-foreground"><span className="readout">Version 2.2.0</span> · Chrome, Edge or Brave</span>
           </div>
           <ol className="list-decimal space-y-2 pl-5 leading-relaxed text-muted-foreground marker:font-semibold marker:text-route" data-testid="extension-install-steps">
-            <li>Unzip the download (right-click it → <strong className="text-foreground">Extract Here</strong>, or <strong className="text-foreground">Extract All</strong> on Windows). You get a folder called <strong className="text-foreground">jobpilot-smart-apply-2.1.0</strong> with a file named manifest.json inside. Keep it somewhere you won't delete, because Chrome loads the extension from it every time.</li>
-            <li>Open <span className="font-mono text-foreground">chrome://extensions</span>, switch on <strong className="text-foreground">Developer mode</strong> (top right), click <strong className="text-foreground">Load unpacked</strong> and select the <strong className="text-foreground">jobpilot-smart-apply-2.1.0</strong> folder (the one with manifest.json directly inside). Chrome says "Manifest file is missing"? You picked a folder one level too high or too low.</li>
+            <li>Unzip the download (right-click it → <strong className="text-foreground">Extract Here</strong>, or <strong className="text-foreground">Extract All</strong> on Windows). You get a folder called <strong className="text-foreground">jobpilot-smart-apply-2.2.0</strong> with a file named manifest.json inside. Keep it somewhere you won't delete, because Chrome loads the extension from it every time.</li>
+            <li>Open <span className="font-mono text-foreground">chrome://extensions</span>, switch on <strong className="text-foreground">Developer mode</strong> (top right), click <strong className="text-foreground">Load unpacked</strong> and select the <strong className="text-foreground">jobpilot-smart-apply-2.2.0</strong> folder (the one with manifest.json directly inside). Chrome says "Manifest file is missing"? You picked a folder one level too high or too low.</li>
             <li>Pin <strong className="text-foreground">JobPilot Smart Apply</strong> from the puzzle-piece menu.</li>
             <li>Create a connection code below and type it into the extension within 5 minutes (already installed an older version? Download this one, unzip it over the same folder, and click the reload arrow on the extension in chrome://extensions). The code works once; the browser stays connected for 90 days, or until you disconnect it here.</li>
           </ol>

@@ -135,6 +135,8 @@ class Boards:
         self.calls.append(str(request.url))
         host, parts = request.url.host, [p for p in request.url.path.split("/") if p]
         if host == "boards-api.greenhouse.io":
+            if len(parts) >= 5 and ("gh_questions", parts[2], parts[4]) in self.payloads:  # one job, ?questions=true
+                return httpx.Response(200, json=self.payloads[("gh_questions", parts[2], parts[4])])
             key = ("greenhouse", parts[2])
         elif host in ("api.lever.co", "api.eu.lever.co"):
             key = ("lever", parts[2])

@@ -1,7 +1,8 @@
 // Build dist/fill-with-jobpilot-<version>.zip: only what the browser needs (manifest, icons, src). No tests,
 // no node_modules, no keys. Unzipped, it is one folder with manifest.json inside: what chrome://extensions → Load unpacked loads.
+// The same zip is copied to the web app's downloads as jobpilot-smart-apply-<version>.zip (older versions are kept).
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,3 +17,9 @@ rmSync(out, { force: true });
 execFileSync("zip", ["-r", "-X", "-q", out, "manifest.json", "icons", "src", "-x", "*.DS_Store"], { cwd: root, stdio: "inherit" });
 console.log(out);
 console.log(execFileSync("unzip", ["-l", out], { encoding: "utf8" }).trim().split("\n").slice(-1)[0]);
+const downloads = join(root, "..", "frontend", "public", "downloads");
+if (existsSync(downloads)) {
+  const pub = join(downloads, `jobpilot-smart-apply-${version}.zip`);
+  copyFileSync(out, pub);
+  console.log(pub);
+}

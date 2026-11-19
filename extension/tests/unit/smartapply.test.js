@@ -283,7 +283,12 @@ describe("review panel flow (assisted submission on Greenhouse)", () => {
     JP.__testing = true;
     JP.__outcomeTimeout = 3000;
     const sent = [];
-    JP.bridge = { send: vi.fn(async (action, args) => { sent.push([action, args?.state || args?.outcome || null]); return { ok: true, data: {} }; }) };
+    let clicksWhenPending = null;
+    JP.bridge = { send: vi.fn(async (action, args) => {
+      sent.push([action, args?.state || args?.outcome || null]);
+      if (args?.state === "submission_pending") clicksWhenPending = submitted;  // eslint-disable-line no-use-before-define
+      return { ok: true, data: {} };
+    }) };
     JP.context = { applicationId: 7, job: { title: "AR Analyst", company: "Acme" } };
     JP.adapters.greenhouse.matchesHost = () => true;  // jsdom runs on localhost
     const loc = document.getElementById("candidate-location");
@@ -310,5 +315,7 @@ describe("review panel flow (assisted submission on Greenhouse)", () => {
     expect(submitted).toBe(1);
     expect(sent.filter(([a]) => a === "state").map(([, s]) => s)).toEqual(["reviewed", "submission_authorized", "submission_pending"]);
     expect(sent.find(([a]) => a === "outcome")).toEqual(["outcome", "confirmed"]);
+    // The attempt is recorded before the click: a form that posts and navigates at once can't lose it.
+    expect(clicksWhenPending).toBe(0);
   }, 30000);
 });

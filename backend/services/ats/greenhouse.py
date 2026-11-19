@@ -41,3 +41,33 @@ def parse_job(raw: dict[str, Any], token: str, company_name: str | None) -> Norm
         application_method="Apply on the employer's Greenhouse job page",
         posted_at=posted, posted_at_source="platform_api" if posted else None,
     )
+
+
+# Fields every Greenhouse form has: filled from the profile and resume, not screening questions.
+_STANDARD_FIELDS = {"first_name", "last_name", "preferred_name", "email", "phone", "resume", "resume_text", "cover_letter",
+                    "cover_letter_text", "location", "linkedin_profile", "website"}
+
+
+def fetch_questions(token: str, job_id: str, *, retry: bool = True) -> list[dict[str, Any]]:
+    """The application questions Greenhouse publishes for one posting (public Job Board API, `questions=true`).
+
+    [{label, required, type, options}] for the employer's own questions only (name, e-mail, resume... are left out).
+    Demographic/EEO questions are published separately by Greenhouse and are not returned here.
+    """
+    data = get_json(f"{API.format(token=token)}/{job_id}", {"questions": "true"}, retry=retry)
+    if not isinstance(data, dict) or not isinstance(data.get("questions"), list):
+        raise AtsError("invalid", "Unexpected Greenhouse response.")
+    out: list[dict[str, Any]] = []
+    for q in data["questions"]:
+        if not isinstance(q, dict) or not (q.get("label") or "").strip():
+            continue
+        fields = [f for f in q.get("fields") or [] if isinstance(f, dict)]
+        if fields and all(f.get("name") in _STANDARD_FIELDS for f in fields):
+            continue
+        ftype = fields[0].get("type") if fields else None
+        options = [v.get("label") for f in fields for v in (f.get("values") or []) if isinstance(v, dict) and v.get("label")]
+        out.append({"label": html_to_text(q["label"]).strip()[:300], "required": bool(q.get("required")),
+                    "type": {"input_text": "text", "textarea": "textarea", "multi_value_single_select": "select",
+                             "multi_value_multi_select": "multi_select", "input_file": "file"}.get(ftype or "", ftype or "text"),
+                    "options": options[:50]})
+    return out

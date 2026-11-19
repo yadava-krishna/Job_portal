@@ -39,7 +39,7 @@ export const SETTINGS_GROUPS: SettingsGroupDef[] = [
       { key: "extension", label: "Browser extension", icon: Puzzle,
         description: "Connect the Smart Apply extension so employer forms fill themselves from your profile." },
       { key: "answers", label: "Verified answers", icon: ListChecks,
-        description: "Answers to screening questions, written once by you and reused on applications." },
+        description: "Answers to screening questions, written once by you or remembered while applying, and reused on applications." },
     ],
   },
   {

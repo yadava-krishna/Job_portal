@@ -75,12 +75,14 @@ def put_profile(body: EditableProfile, user: CurrentUser, db: DbSession, setting
 
 
 @router.put("/profile/verified-facts", response_model=ProfileOut)
-def put_facts(body: VerifiedFacts, user: CurrentUser, db: DbSession) -> ProfileOut:
+def put_facts(body: VerifiedFacts, user: CurrentUser, db: DbSession, settings: SettingsDep) -> ProfileOut:
     prof = resume_service.get_or_create_profile(db, user)
     old = prof.verified_facts or {}
     source = old.get("profile_source")
     prof.verified_facts = {**resume_service.facts_with_provenance(old, body.model_dump(mode="json")),
                            **({"profile_source": source} if source else {})}
+    from backend.services import answer_memory
+    answer_memory.sync_from_facts(db, settings, user, old, prof.verified_facts)  # keep remembered answers in step
     db.commit()
     return _profile_out(db, user)
 

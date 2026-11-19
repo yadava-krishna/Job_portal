@@ -248,6 +248,11 @@ def _notification_sweep(db, settings):
     return notification_sweep.run(db)
 
 
+def _apply_sweep(db, settings):
+    from backend.services import apply_state_service
+    return apply_state_service.sweep_stale(db)
+
+
 def _alert_email_ingestion(db, settings):
     if not db.execute(select(EmailIntegration.id).where(EmailIntegration.enabled.is_(True))).first():
         raise Blocked("No user has connected a job-alert mailbox (Settings > Email). Nothing to ingest.")
@@ -342,6 +347,9 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
     JobSpec("notification_sweep", "hourly at :15", "notifications",
             "In-app alerts: follow-ups due, interviews in the next 24 hours, unfinished applications, closed or expired "
             "saved jobs, failed job searches. Each alert is sent once.", _notification_sweep),
+    JobSpec("apply_session_sweep", "every 15 minutes", "applications",
+            "Smart Apply sessions left mid-way become 'interrupted' (resumable); a submit click with no confirmation for 30 "
+            "minutes becomes 'submission uncertain' so the user is asked. Never marks anything as submitted.", _apply_sweep, retries=0),
     JobSpec("alert_email_ingestion", "with daily discovery", "discovery", "Read job-alert e-mails from connected mailboxes.", _alert_email_ingestion, retries=0),
     JobSpec("report_generation", "daily 21:00", "reports", "Daily Excel application reports per user.", _report_generation),
     JobSpec("visa_source_check", "daily 03:00", "international", "Fetch official visa pages and record a fingerprint.", _visa_check),
@@ -354,7 +362,7 @@ REGISTRY: dict[str, JobSpec] = {s.name: s for s in [
 SCHEDULES: dict[str, dict[str, Any]] = {
     "source_refresh": {"hour": 5, "minute": 0}, "job_link_check": {"hour": 4, "minute": 30}, "job_matching": {"hour": 6, "minute": 0}, "gap_generation": {"hour": 6, "minute": 30},
     "resume_feedback_generation": {"hour": 7, "minute": 0}, "resource_refresh": {"day_of_week": "sun", "hour": 4, "minute": 0},
-    "notification_dispatch": {"minute": "*/30"}, "catalogue_crawl": {"minute": "*/10"}, "fetchd_apply": {"minute": "*"}, "notification_sweep": {"minute": 15}, "report_generation": {"hour": 21, "minute": 0}, "visa_source_check": {"hour": 3, "minute": 0},
+    "notification_dispatch": {"minute": "*/30"}, "catalogue_crawl": {"minute": "*/10"}, "fetchd_apply": {"minute": "*"}, "notification_sweep": {"minute": 15}, "apply_session_sweep": {"minute": "*/15"}, "report_generation": {"hour": 21, "minute": 0}, "visa_source_check": {"hour": 3, "minute": 0},
     "analytics_rollup": {"hour": 0, "minute": 30}, "cleanup_and_retention": {"hour": 1, "minute": 30},
 }
 

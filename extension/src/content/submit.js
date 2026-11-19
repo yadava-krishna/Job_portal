@@ -25,15 +25,16 @@
     return cands.length === 1 ? cands[0] : null;
   }
 
-  /** A confirmation signal on the current page, or null. */
+  /** A confirmation signal on the current page, or null: {signal, kind} where kind says what matched:
+   *  "adapter" (the platform's own confirmation check), "url" (a confirmation address) or "text" (page text only). */
   function confirmation(adapter) {
     const own = adapter.confirmation?.();
-    if (own) return own;
-    if (SUCCESS_URL.test(location.pathname)) return { signal: `Confirmation page (${location.pathname})` };
+    if (own) return { ...own, kind: "adapter" };
+    if (SUCCESS_URL.test(location.pathname)) return { signal: `Confirmation page (${location.pathname})`, kind: "url" };
     const main = document.querySelector("main, [role=main], #content, body");
     const t = textOf(main).slice(0, 20000);
     const m = SUCCESS_TEXT.exec(t);
-    if (m && !(adapter.isApplicationPage?.() && submitButton(adapter))) return { signal: `Page says: "${m[0]}"` };
+    if (m && !(adapter.isApplicationPage?.() && submitButton(adapter))) return { signal: `Page says: "${m[0]}"`, kind: "text" };
     return null;
   }
 
@@ -47,13 +48,13 @@
       .filter(Boolean).slice(0, 8);
   }
 
-  /** Watch for the outcome after a submission: {outcome: confirmed|errors|uncertain, signal?, errors?}. */
+  /** Watch for the outcome after a submission: {outcome: confirmed|errors|uncertain, signal?, signal_kind?, errors?}. */
   async function outcome(adapter, { timeoutMs = 30000, step = 400 } = {}) {
     const started = Date.now();
     await sleep(Math.min(800, timeoutMs));
     while (Date.now() - started < timeoutMs) {
       const c = confirmation(adapter);
-      if (c) return { outcome: "confirmed", signal: c.signal };
+      if (c) return { outcome: "confirmed", signal: c.signal, signal_kind: c.kind };
       const errs = submitErrors(adapter);
       if (errs.length && Date.now() - started > 1500) return { outcome: "errors", errors: errs };
       await sleep(step);

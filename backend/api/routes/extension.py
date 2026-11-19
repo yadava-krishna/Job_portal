@@ -24,18 +24,22 @@ from backend.schemas.extension import (
     DeviceOut,
     ExtApplicationOut,
     ExtConfirmRequest,
+    ExtPackageOut,
     ExtResumeOut,
+    LearnOut,
+    LearnRequest,
     MatchOut,
     MatchRequest,
     PairingCodeOut,
     PairRequest,
+    ProveOut,
+    ProveRequest,
     StartRequest,
     StatusOut,
     TokenOut,
 )
 from backend.security import rate_limiter
-from backend.services import application_service, apply_state_service, extension_service as ext, resume_service
-from backend.services.answer_service import answer_questions
+from backend.services import answer_memory, application_service, apply_prep_service, apply_state_service, extension_service as ext, resume_service
 from backend.models import utcnow
 
 router = APIRouter(prefix="/extension", tags=["extension"])
@@ -132,7 +136,49 @@ def autofill_profile(p: Autofill, db: DbSession) -> AutofillOut:
 def answers(body: AnswersRequest, p: Autofill, db: DbSession, settings: SettingsDep, request: Request) -> list[AnswerOut]:
     """Answers for the form's question labels, only from your verified information. Labels are not stored."""
     _limit(request, settings, f"answers:{p[1].id}", 60, 600)
-    return [AnswerOut(**a) for a in answer_questions(db, settings, p[0], body.questions)]
+    user = p[0]
+    company = job_id = country = None
+    overrides: dict[str, str] = {}
+    if body.application_id:
+        app = application_service.owned_application(db, user, body.application_id)
+        company, job_id, country = app.job.company, app.job_id, app.job.country
+        overrides = (app.package or {}).get("overrides") or {}
+        apply_prep_service.record_form_questions(db, app, body.questions)  # labels only, so the workspace can show them
+        db.commit()
+    out = answer_memory.resolve(db, settings, user, body.questions, company=company, job_id=job_id, overrides=overrides,
+                                job_country=country)
+    return [AnswerOut(**{k: a.get(k) for k in AnswerOut.model_fields if k in a}) for a in out]
+
+
+@router.post("/answers/learn", response_model=LearnOut)
+def learn(body: LearnRequest, p: Autofill, db: DbSession, settings: SettingsDep, request: Request) -> LearnOut:
+    """Remember answers you typed on the employer's form, only the ones you ticked "save for next time" in the panel.
+    Sensitive questions are refused; values are validated (years, notice period, amounts, yes/no)."""
+    _limit(request, settings, f"learn:{p[1].id}", 30, 600)
+    user = p[0]
+    company = job_id = None
+    if body.application_id:
+        app = application_service.owned_application(db, user, body.application_id)
+        company, job_id = app.job.company, app.job_id
+    saved, errors = [], []
+    for it in body.items:
+        try:
+            answer_memory.save(db, settings, user, question=it.question, answer=it.answer, company=company, job_id=job_id,
+                               source="form_correction", commit=False)
+            saved.append(it.question)
+        except HTTPException as e:
+            errors.append({"question": it.question, "error": str(e.detail)})
+    db.commit()
+    return LearnOut(saved=saved, errors=errors)
+
+
+@router.post("/prove", response_model=ProveOut)
+def prove(body: ProveRequest, db: DbSession, settings: SettingsDep, request: Request) -> ProveOut:
+    """Proves this server is the JobPilot that issued the extension's credential, without the credential being sent:
+    HMAC-SHA256 keyed with the stored hash of the device credential over the extension's random nonce. The extension
+    checks it before sending its credential to a newly published server address."""
+    _limit(request, settings, "prove", 30, 600)
+    return ProveOut(proof=ext.prove(db, body.token_id, body.nonce))
 
 
 @router.get("/resumes", response_model=list[ExtResumeOut])
@@ -190,6 +236,16 @@ def confirm(application_id: int, body: ExtConfirmRequest, p: Track, db: DbSessio
 def application_state(application_id: int, p: Track, db: DbSession) -> ExtApplicationOut:
     """Where this application stands, so the extension can resume after a browser restart."""
     return _app_out(application_service.owned_application(db, p[0], application_id))
+
+
+@router.get("/applications/{application_id}/package", response_model=ExtPackageOut)
+def application_package(application_id: int, p: Track, db: DbSession, settings: SettingsDep) -> ExtPackageOut:
+    """The resume chosen for this application and the answers typed for it in the Apply Workspace."""
+    user = p[0]
+    app = application_service.owned_application(db, user, application_id)
+    if not app.package:
+        apply_prep_service.build(db, settings, user, app, probe_hosted=False)
+    return ExtPackageOut(**apply_prep_service.extension_view(app))
 
 
 @router.post("/applications/{application_id}/state", response_model=ExtApplicationOut)

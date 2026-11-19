@@ -81,6 +81,10 @@ CONSENT_TEXT = {
     "extension": "Let the browser extension read and fill forms on job sites when you click it.",
     "email_notifications": "Send reminders and digests by e-mail (when e-mail is set up).",
     "research_feedback": "Occasionally ask short questions about whether JobPilot is helping.",
+    "answer_memory": "Remember answers you confirm on application forms (for example your notice period) so JobPilot can "
+                     "reuse them on later applications. Salary and work-authorisation answers are stored encrypted.",
+    "apply_assist": "Let JobPilot prepare applications and, when you click Review and autofill, fill employer forms with "
+                    "your profile, chosen resume and remembered answers. You review everything and submit yourself.",
 }
 
 
@@ -105,6 +109,19 @@ def set_consent(db: Session, user: User, kind: str, granted: bool) -> list[dict[
         row.revoked_at = utcnow()
     db.commit()
     return consents(db, user)
+
+
+def set_consent_nocommit(db: Session, user: User, kind: str, granted: bool) -> None:
+    """Record a consent as part of the caller's transaction (the action the user just took is the consent)."""
+    row = db.execute(select(Consent).where(Consent.user_id == user.id, Consent.kind == kind)).scalar_one_or_none()
+    if row is None:
+        row = Consent(user_id=user.id, kind=kind)
+        db.add(row)
+    row.granted = granted
+    if granted:
+        row.granted_at, row.revoked_at = utcnow(), None
+    else:
+        row.revoked_at = utcnow()
 
 
 def has_consent(db: Session, user_id: int, kind: str) -> bool:

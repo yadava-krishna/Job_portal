@@ -181,16 +181,22 @@ function formView(d, missing) {
     : null;
 
   const opts = resumeOptions(resumes);
-  const chosen = session?.resume ? `${session.resume.kind}:${session.resume.id}:${session.resume.format}` : opts[0]?.value;
+  // Shown first: the resume picked here earlier for this page, else the one chosen for this application in JobPilot.
+  const pre = session?.resume || session?.packageResume || null;
+  const chosen = pre ? `${pre.kind}:${pre.id}:${pre.format}` : opts[0]?.value;
   const select = h("select", { "aria-label": "Resume to attach" }, opts.map((o) => h("option", { value: o.value, selected: o.value === chosen }, o.label)));
+  // Only a resume the user actually picked here overrides the application's own choice.
+  let picked = Boolean(session?.resume);
+  select.addEventListener("change", () => { picked = true; });
   const choice = () => parseChoice(select.value);
+  const pickedChoice = () => (picked ? choice() : null);
 
   const overwrite = h("input", { type: "checkbox" });
   const result = h("div");
   const resumeMsg = h("div");
   const fillBtn = h("button", { type: "button", class: "primary", disabled: submitted, onclick: async () => {
     const done = busy(fillBtn, "Filling…");
-    const r = await send("fill", { ...target, overwrite: overwrite.checked, resume: choice(), userJobId: match?.in_jobpilot && !submitted ? match.user_job_id : null });
+    const r = await send("fill", { ...target, overwrite: overwrite.checked, resume: pickedChoice(), userJobId: match?.in_jobpilot && !submitted ? match.user_job_id : null });
     done();
     if (!r.ok) return result.replaceChildren(note("bad", r.error));
     const rep = r.data.report || {};
@@ -203,7 +209,7 @@ function formView(d, missing) {
 
   const attach = (replace) => async (e) => {
     const done = busy(e.currentTarget, "Attaching…");
-    const r = await send("attachResume", { ...target, replace, resume: choice() });
+    const r = await send("attachResume", { ...target, replace, resume: pickedChoice() });
     done();
     if (!r.ok) return resumeMsg.replaceChildren(note("bad", r.error));
     const res = r.data || {};

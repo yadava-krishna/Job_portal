@@ -11,7 +11,12 @@ import type {
   SavedSearchInput,
   SourcesOverview,
   ApplicationDetail,
+  AnswerCatalogueEntry,
   ApplyOptions,
+  HandoffOut,
+  MemoryAnswer,
+  PackageOut,
+  WorkspaceAnswerInput,
   ExtensionDevice,
   PairingCode,
   DashboardSummary,
@@ -44,6 +49,8 @@ export const qk = {
   analysis: (id: number) => ["analysis", id] as const,
   applications: (status?: string[]) => ["applications", status ?? []] as const,
   application: (id: number) => ["application", id] as const,
+  applyPackage: (id: number) => ["apply-package", id] as const,
+  answerMemory: (reveal: boolean) => ["answer-memory", reveal] as const,
   reports: ["reports"] as const,
   summary: ["summary"] as const,
   activity: ["activity"] as const,
@@ -488,5 +495,89 @@ export function useSaveNotificationPrefs() {
       }
       return next;
     }),
+  });
+}
+
+// ---- Apply Workspace: the prepared package and answer memory -------------------------------------
+
+/** The prepared package for one application (destination, resume, answers, readiness, next step). */
+export const useApplyPackage = (applicationId: number | null | undefined) =>
+  useQuery({
+    queryKey: qk.applyPackage(applicationId ?? 0),
+    queryFn: async () => (await api.get<PackageOut>(`/applications/${applicationId}/package`)).data,
+    enabled: applicationId != null,
+    // Smart Apply changes the application from another tab (filled, interrupted, confirmed): never trust a cached copy.
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: (n, err) => n < 1 && (err as { response?: { status?: number } })?.response?.status !== 404,
+  });
+
+export type WorkspaceChange =
+  | { kind: "resume"; id: number; choice: { kind: "upload" | "studio"; id: number; format?: "pdf" | "docx" } }
+  | { kind: "answers"; id: number; items: WorkspaceAnswerInput[] }
+  | { kind: "destination"; id: number; url: string }
+  | { kind: "clear-destination"; id: number }
+  | { kind: "refresh"; id: number }
+  | { kind: "handoff"; id: number; smart: boolean };
+
+/** Changes made in the Apply Workspace. Each returns the rebuilt package, which replaces the cached one. */
+export function useApplyWorkspace() {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateWork();
+  return useMutation({
+    mutationFn: async (c: WorkspaceChange): Promise<PackageOut | HandoffOut> => {
+      const base = `/applications/${c.id}`;
+      switch (c.kind) {
+        case "resume": return (await api.put<PackageOut>(`${base}/resume`, c.choice)).data;
+        case "answers": return (await api.post<PackageOut>(`${base}/answers`, { items: c.items })).data;
+        case "destination": return (await api.post<PackageOut>(`${base}/destination`, { url: c.url })).data;
+        case "clear-destination": return (await api.delete<PackageOut>(`${base}/destination`)).data;
+        case "refresh": return (await api.get<PackageOut>(`${base}/package?refresh=true`)).data;
+        case "handoff": return (await api.post<HandoffOut>(`${base}/handoff?smart=${c.smart}`)).data;
+      }
+    },
+    onSuccess: (out, c) => {
+      if (!out?.application || !out.package) return;
+      qc.setQueryData(qk.applyPackage(c.id), { application: out.application, package: out.package });
+      qc.setQueryData(qk.application(c.id), out.application);
+      if (c.kind === "handoff") void invalidate();
+      else void qc.invalidateQueries({ queryKey: ["applications"] });
+      if (c.kind === "answers" && (out as PackageOut).saved?.length) void qc.invalidateQueries({ queryKey: ["answer-memory"] });
+    },
+  });
+}
+
+/** Remembered answers. `reveal` decrypts private ones (pay, work authorisation): fetched only on request, not kept around. */
+export const useAnswerMemory = (reveal = false, enabled = true) =>
+  useQuery({
+    queryKey: qk.answerMemory(reveal),
+    queryFn: async () => (await api.get<MemoryAnswer[]>("/answers/memory", { params: reveal ? { reveal: true } : undefined })).data,
+    enabled,
+    ...(reveal ? { staleTime: 0, gcTime: 30_000 } : {}),
+  });
+
+export const useAnswerCatalogue = () =>
+  useQuery({ queryKey: ["answer-catalogue"], queryFn: async () => (await api.get<AnswerCatalogueEntry[]>("/answers/catalogue")).data, staleTime: 3_600_000 });
+
+function useInvalidateMemory() {
+  const qc = useQueryClient();
+  return () => Promise.all([["answer-memory"], qk.profile, ["apply-package"]].map((k) => qc.invalidateQueries({ queryKey: k })));
+}
+
+export function useSaveMemoryAnswer() {
+  const invalidate = useInvalidateMemory();
+  return useMutation({
+    mutationFn: async (body: { question?: string; answer: string; key?: string }) => (await api.put<MemoryAnswer>("/answers/memory", body)).data,
+    onSuccess: () => void invalidate(),
+  });
+}
+
+export function useDeleteMemoryAnswer() {
+  const invalidate = useInvalidateMemory();
+  return useMutation({
+    mutationFn: async ({ key, scopeRef }: { key: string; scopeRef?: string }) => {
+      await api.delete(`/answers/memory/${encodeURIComponent(key)}`, { params: scopeRef ? { scope_ref: scopeRef } : undefined });
+    },
+    onSuccess: () => void invalidate(),
   });
 }

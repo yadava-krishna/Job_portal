@@ -330,6 +330,9 @@ class Application(Base, TimestampMixin):
     apply_state_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     apply_mode: Mapped[str | None] = mapped_column(String(20))  # autofill_review | assisted_submit | manual_handoff
     apply_session: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    # The prepared application package (apply_prep_service): destination, resume choice, answers, readiness. Rebuilt on
+    # request; kept so the Apply Workspace and the extension can resume after a refresh, a closed tab or a restart.
+    package: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
 
     job: Mapped[Job] = relationship(lazy="joined")
 
@@ -850,11 +853,39 @@ class TaskQueueItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class AnswerMemory(Base, TimestampMixin):
+    """One answer the user confirmed for a canonical application question (answer_memory.CATALOGUE), reused on later
+    forms. `scope_ref` narrows reuse ("" = any application, "company:<name>" = that employer only, "job:<id>" = one
+    job). Private answers (compensation, work authorisation) are stored encrypted in `value_encrypted`."""
+
+    __tablename__ = "answer_memory"
+    __table_args__ = (UniqueConstraint("user_id", "key", "scope_ref", name="uq_answer_memory_user_key_scope"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    scope_ref: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    value_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    unit: Mapped[str | None] = mapped_column(String(20))
+    value_json: Mapped[Any] = mapped_column(JSONType, nullable=True)
+    value_text: Mapped[str | None] = mapped_column(Text)
+    value_encrypted: Mapped[str | None] = mapped_column(Text)
+    sensitivity: Mapped[str] = mapped_column(String(10), default="personal", nullable=False)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="verified", nullable=False)
+    question_text: Mapped[str | None] = mapped_column(String(500))
+    question_norm: Mapped[str | None] = mapped_column(String(500))
+    last_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revalidate_days: Mapped[int | None] = mapped_column(Integer)
+    history: Mapped[list[dict[str, Any]]] = mapped_column(JSONType, default=list, nullable=False)
+
+
 USER_OWNED_MODELS = (Resume, CandidateProfile, JobPreference, PlatformPreference, EmailIntegration, DiscoveryRun,
                      UserJob, Application, ApplicationEvent, Report, RunError, RefreshToken, Notification, NotificationPref,
                      UserActivitySession, JobView, ExtensionToken, Interview, Offer, ApplicationContact, SavedSearch,
                      UserAchievement, UserCompany, UserCareerUrl, CandidateProfileV2, JobMatchReport, TailoredResume,
-                     ATSDiagnosticReport, StageTransition, UserSavedScheme)
+                     ATSDiagnosticReport, StageTransition, UserSavedScheme, AnswerMemory)
 
 
 from backend.models.career import *  # noqa: E402,F401,F403  (career graph tables, migration 0007)

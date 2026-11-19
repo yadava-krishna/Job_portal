@@ -1,5 +1,6 @@
 import { stageLabels, statusLabels } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { APPLY_STATE_LABELS } from "./events";
 import type { Application, Stage } from "@/types/api";
 
 /** Token colours per pipeline stage. Green is kept for the one confirmed good outcome (offer). */
@@ -40,12 +41,22 @@ export function WherePill({ app }: { app: Application }) {
   return <StatusPill status={app.status} />;
 }
 
-/** Smart Apply progress, precise: the extension's state label, coloured by whether it needs you. */
+/** States that are not Smart Apply's own observations: the user opened the page, or told us the outcome. */
+const USER_SIDE_STATES = new Set(["form_opened", "user_reported"]);
+
+/** Apply progress, precise: the backend's state label (or ours for a known state), coloured by whether it needs you. */
 export function ApplyStatePill({ state, label, className }: { state: string | null | undefined; label: string | null | undefined; className?: string }) {
-  if (!label) return null;
+  const text = label || (state ? APPLY_STATE_LABELS[state] : null);
+  if (!text) return null;
   const tone = state === "submitted_confirmed" ? "bg-success-tint text-success ring-success/20"
-    : state === "submission_uncertain" || state === "needs_information" ? "bg-caution-tint text-caution ring-caution/25"
+    : state === "submission_uncertain" || state === "needs_information" || state === "interrupted" ? "bg-caution-tint text-caution ring-caution/25"
       : state === "failed" ? "bg-destructive/10 text-destructive ring-destructive/20"
-        : "bg-route-tint text-route ring-route/20";
-  return <span className={cn(pill, tone, className)} title="Smart Apply progress from the browser extension">Smart Apply · {label}</span>;
+        : state === "user_reported" ? "bg-paper-sunk text-heading ring-border"
+          : "bg-route-tint text-route ring-route/20";
+  const userSide = !!state && USER_SIDE_STATES.has(state);
+  return (
+    <span className={cn(pill, tone, className)} title={userSide ? "Where this application stands" : "Smart Apply progress from the browser extension"}>
+      {userSide ? text : <>Smart Apply · {text}</>}
+    </span>
+  );
 }

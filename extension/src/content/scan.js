@@ -59,7 +59,7 @@
 
   /**
    * The fillable questions of the application form, each:
-   * {ref, kind: text|select|radio|checkbox|combobox|listbutton|buttons|file, label, required, els, options?, signals}
+   * {ref, kind: text|date|select|radio|checkbox|combobox|listbutton|buttons|file, label, required, els, options?, signals}
    */
   function scan(adapter) {
     const root = adapter.root() || document.body;
@@ -91,6 +91,9 @@
       } else if (el.getAttribute("role") === "combobox") {
         out.push({ kind: "combobox", els: [el], label, required, signals: signals(el, label),
                    adapterValue: adapter.comboValue ? () => adapter.comboValue(el) : undefined });
+      } else if (tag === "input" && type === "date") {
+        // A native date picker takes only an ISO date (YYYY-MM-DD); anything else is left to the user.
+        out.push({ kind: "date", els: [el], label, required, signals: signals(el, label) });
       } else if (tag === "textarea" || TEXT_TYPES.has(type)) {
         out.push({ kind: "text", els: [el], label, required, signals: signals(el, label) });
       }

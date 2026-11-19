@@ -22,7 +22,7 @@ function journeyOf(d: ApplicationDetail): Waypoint[] {
   pts.push({
     key: "opened", label: "Employer form opened", at: d.opened_at ?? lastAt((e) => e.event_type === "OPENED_EXTERNAL"), tone: opened ? "done" : "upcoming",
     sub: smart.map((e, i) => ({ label: APPLY_STATE_LABELS[e.to_status!] ?? e.to_status!, at: e.created_at,
-      current: !submitted && i === smart.length - 1, warn: e.to_status === "submission_uncertain" || e.to_status === "needs_information" || e.to_status === "failed" })),
+      current: !submitted && i === smart.length - 1, warn: e.to_status === "submission_uncertain" || e.to_status === "needs_information" || e.to_status === "failed" || e.to_status === "interrupted" })),
   });
 
   if (d.status === "FAILED") pts.push({ key: "failed", label: "Marked as failed", at: lastAt((e) => e.to_status === "FAILED"), tone: "stop" });

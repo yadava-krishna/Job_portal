@@ -4,12 +4,15 @@
 // It shows the application as the form holds it right now: job, personal and professional details, documents,
 // screening answers (with where each answer came from), and what still needs the user. It can be collapsed to a
 // small tab, moved to the other side of the window so it never hides a field, and closed.
+// After a Fill it can offer to save answers the user typed on the form for next time: nothing is saved unless the user
+// ticks it and clicks "Save selected"; sensitive, consent, password and file fields are never offered.
 (() => {
   const JP = (globalThis.__jobpilot ??= { adapters: {} });
   if (JP.panel) return;
   let host = null; let shadow = null; let adapter = null; let lastReport = null;
   const ui = { side: "right", collapsed: false, tab: "review", reviewed: null, stale: false, stopWatch: null, stopSubmitWatch: null,
-               phase: null, message: null, resume: null, busy: false };
+               phase: null, message: null, resume: null, busy: false,
+               learnPicks: new Map(), learned: new Set(), learnResult: null };
 
   JP.bridge ??= {
     send: (action, args = {}) => new Promise((resolve) => {
@@ -117,6 +120,50 @@
     return b;
   }
 
+  // ---- "Save answers for next time" --------------------------------------------------------------
+
+  const learnKey = (c) => `${c.label}\u0000${c.value}`;
+  const learnCandidates = () => (adapter && lastReport ? JP.review.learnable(adapter, lastReport) : []).filter((c) => !ui.learned.has(learnKey(c)));
+  const learnChecked = (c) => (ui.learnPicks.has(c.ref) ? ui.learnPicks.get(c.ref) : c.checked);
+
+  function learnSection() {
+    const cands = learnCandidates();
+    const res = ui.learnResult;
+    if (!cands.length && !res) return null;
+    const box = el("div", { class: "box", "data-section": "learn" }, el("strong", {}, "Save answers for next time"));
+    if (cands.length) {
+      box.append(el("div", { class: "r" }, "Answers you gave on this form. Tick the ones JobPilot may reuse; nothing is saved until you click Save selected."));
+      for (const c of cands) {
+        const tick = el("input", { type: "checkbox", "aria-label": `Save: ${c.label}`, "data-ref": c.ref });
+        tick.checked = learnChecked(c);
+        tick.addEventListener("change", (e) => { if (!e.isTrusted && !JP.__testing) { tick.checked = !tick.checked; return; } ui.learnPicks.set(c.ref, tick.checked); });
+        box.append(el("label", { class: "tick" }, tick, el("span", {}, el("span", { class: "l" }, c.label), " ", el("span", { class: "v" }, `"${c.value.slice(0, 120)}"`),
+          c.sensitive ? el("span", { class: "src" }, " (private: kept encrypted)") : null)));
+      }
+      box.append(el("div", { class: "actions" }, el("button", { type: "button", disabled: ui.busy, onclick: saveAnswers }, "Save selected")));
+    }
+    if (res?.error) box.append(el("div", { class: "prob", role: "status" }, res.error));
+    if (res?.saved?.length) box.append(el("div", { class: "src", role: "status" }, `Saved for next time: ${res.saved.join(", ")}.`));
+    for (const e of res?.errors || []) box.append(el("div", { class: "prob" }, `Not saved: ${e.question}: ${e.error}`));
+    return box;
+  }
+
+  async function saveAnswers() {
+    // Re-read the form now: send exactly what the page holds for each ticked question.
+    const items = learnCandidates().filter(learnChecked).map((c) => ({ question: c.label, answer: c.value, key: learnKey(c) }));
+    if (!items.length) { ui.learnResult = { error: "Tick at least one answer to save." }; render(); return; }
+    ui.busy = true; render();
+    const r = await JP.bridge.send("learn", { items: items.map(({ question, answer }) => ({ question, answer })) });
+    ui.busy = false;
+    if (!r.ok) ui.learnResult = { error: r.error || "Could not save." };
+    else {
+      const saved = new Set(r.data?.saved || []);
+      for (const i of items) if (saved.has(i.question)) ui.learned.add(i.key);
+      ui.learnResult = { saved: r.data?.saved || [], errors: r.data?.errors || [] };
+    }
+    render();
+  }
+
   function fillTab() {
     const r = lastReport;
     if (!r) return [el("p", { class: "muted" }, "Click Fill to start.")];
@@ -127,6 +174,7 @@
       listSection("Filled", "ok", r.filled),
       listSection("Kept your existing value", "rv", r.kept, (i, li) => { if (i.replaceable) li.append(useButton(i)); }),
       listSection("Skipped", "", r.skipped),
+      learnSection(),
     ].filter(Boolean);
     return parts.length ? parts : [el("p", {}, "No fillable questions were found on this part of the form.")];
   }
@@ -169,7 +217,7 @@
         ui.resume ? el("span", { class: "muted" }, `Chosen: ${ui.resume}`) : null) : null));
     out.push(group("Personal", s.personal), group("Professional", s.professional),
       docs.length ? el("div", {}, el("h4", {}, "Documents"), el("ul", {}, ...docs)) : null,
-      group("Questions", s.screening));
+      group("Questions", s.screening), learnSection());
     return out.filter(Boolean);
   }
 
@@ -203,6 +251,14 @@
     return nodes;
   }
 
+  // The application's tracked state (from JobPilot). While filling, the live check of the form below says more and is
+  // newer, so the fill-progress states are not repeated next to it; later states (reviewed, pending...) are shown.
+  const FILL_PROGRESS = ["Filling", "Needs information", "Ready for review"];
+  function trackedChip(label, s) {
+    if (!label || (s && FILL_PROGRESS.includes(label))) return null;
+    return el("span", { class: "chip", title: "This application's status in JobPilot" }, `JobPilot: ${label}`);
+  }
+
   function render() {
     if (!adapter) return;
     mount();
@@ -224,7 +280,7 @@
       el("div", { class: "ttl" }, s?.job.title || c.job?.title || "Application form"),
       el("div", { class: "muted" }, [s?.job.company || c.job?.company, s?.job.location || c.job?.location, s?.platform].filter(Boolean).join(" · ")),
       el("div", { class: "chips" },
-        c.stateLabel ? el("span", { class: "chip" }, c.stateLabel) : null,
+        trackedChip(c.stateLabel, s),
         s ? el("span", { class: `chip ${s.ready ? "ok" : "warn"}` }, s.ready ? "Required answers complete" : "Needs information") : null,
         adapter.assistedSubmit ? el("span", { class: "chip" }, "Assisted submit available") : el("span", { class: "chip" }, "You submit on the page")));
     const tabBtn = (id, text) => el("button", { type: "button", role: "tab", "aria-selected": String(ui.tab === id), onclick: () => { ui.tab = id; render(); } }, text);
@@ -288,25 +344,31 @@
     const auth = await JP.bridge.send("state", { state: "submission_authorized", mode: "assisted_submit", session: { fingerprint: s.fingerprint } });
     if (!auth.ok) { ui.busy = false; ui.message = auth.error; ui.messageKind = "bad"; render(); return; }
     ui.stopSubmitWatch?.(); ui.stopSubmitWatch = null;  // our own click must not be reported as a second (user) submission
+    // Record the attempt BEFORE clicking: many forms post and navigate at once, which ends this script, and the service
+    // worker can only check the next page for a confirmation if it already knows a submission was attempted.
+    const pend = await JP.bridge.send("state", { state: "submission_pending", mode: "assisted_submit",
+                                                 session: { message: "Submitted by Smart Apply after your authorisation." } });
+    if (!pend.ok) { ui.busy = false; ui.message = pend.error; ui.messageKind = "bad"; render(); return; }
     ui.phase = "pending";
+    ui.reported = true;
     const res = JP.submit.clickSubmit(adapter);
     ui.busy = false;
     if (!res.ok) {
       if (res.stale) ui.stale = true;
-      ui.phase = null;
+      ui.phase = null; ui.reported = false;
       ui.message = res.reason; ui.messageKind = "bad";
       await JP.bridge.send("state", { state: "ready_for_review", session: { message: res.reason } });
       render();
       return;
     }
-    await afterSubmit("assisted_submit");
+    await afterSubmit("assisted_submit", { recorded: true });
   }
 
-  async function afterSubmit(mode) {
-    if (ui.reported) return;  // one outcome per submission
+  async function afterSubmit(mode, { recorded = false } = {}) {
+    if (ui.reported && !recorded) return;  // one outcome per submission
     ui.reported = true;
     ui.phase = "pending"; render();
-    await JP.bridge.send("state", { state: "submission_pending", mode, session: { message: mode === "assisted_submit" ? "Submitted by Smart Apply after your authorisation." : "You submitted on the page." } });
+    if (!recorded) await JP.bridge.send("state", { state: "submission_pending", mode, session: { message: "You submitted on the page." } });
     const o = await JP.submit.outcome(adapter, { timeoutMs: JP.__outcomeTimeout ?? 30000 });
     if (o.outcome === "confirmed") { ui.phase = "confirmed"; ui.message = o.signal; }
     else if (o.outcome === "errors") { ui.phase = null; ui.reported = false; ui.message = `The site did not accept the submission: ${o.errors.join("; ")}`; ui.messageKind = "bad"; ui.reviewed = null; }
@@ -328,6 +390,7 @@
   function show(report, a) {
     adapter = a || adapter;
     lastReport = report;
+    ui.learnPicks.clear(); ui.learnResult = null;
     ui.tab = report && (report.needs.length || report.unsure?.length) ? "fill" : "review";
     ui.notice = null;
     if (!ui.stopSubmitWatch && adapter && ctx().applicationId) {

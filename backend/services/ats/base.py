@@ -108,9 +108,11 @@ class CrawlContext:
                 pass
 
 
-def get_json(url: str, params: dict[str, Any] | None = None) -> Any:
-    """GET a job-board JSON document; transient failures are retried (RETRY_DELAYS) before giving up."""
-    for delay in (*RETRY_DELAYS, None):
+def get_json(url: str, params: dict[str, Any] | None = None, *, retry: bool = True) -> Any:
+    """GET a job-board JSON document; transient failures are retried (RETRY_DELAYS) before giving up.
+
+    retry=False makes one attempt only (for requests a person is waiting on, which fall back to something else)."""
+    for delay in (*(RETRY_DELAYS if retry else ()), None):
         try:
             return _get_json_once(url, params)
         except AtsError as exc:

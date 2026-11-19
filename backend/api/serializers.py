@@ -113,7 +113,7 @@ def application(app: Application, uj: UserJob | None = None) -> ApplicationOut:
         resume_version_id=app.resume_version_id, resume_export_id=app.resume_export_id, resume_checksum=app.resume_checksum,
         rejection_reason=app.rejection_reason, rejection_detail=app.rejection_detail, rejection_reason_known=app.rejection_reason_known,
         apply_state=app.apply_state, apply_state_label=apply_state_service.LABELS.get(app.apply_state or ""), apply_mode=app.apply_mode,
-        apply_state_at=app.apply_state_at,
+        apply_state_at=app.apply_state_at, confirmation=(app.apply_session or {}).get("confirmation"),
     )
 
 

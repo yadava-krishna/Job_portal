@@ -12,6 +12,11 @@
 //    confirmed, and are flagged so the user ticks each one before an assisted submission;
 //  * nothing is ever submitted: no submit buttons are clicked, no form submit()/requestSubmit() is called, and the
 //    only elements clicked are radio/checkbox inputs, listbox options and type="button" choice buttons.
+//  * answers the server marks sensitivity "never" are never filled ("Answer this yourself"); stale answers are only
+//    suggestions for review, never silently verified;
+//  * a date picker (<input type=date>) is filled only with an ISO date (YYYY-MM-DD), otherwise left to the user;
+//  * the prepared cover letter goes only into a text box labelled "cover letter", as a suggestion to review (cover
+//    letter file uploads are never touched).
 // Every value JobPilot writes is remembered with its source, so the review shows where each answer came from.
 (() => {
   const JP = (globalThis.__jobpilot ??= { adapters: {} });
@@ -34,6 +39,8 @@
   // Answers that commit the candidate to something: always flagged for an explicit tick before assisted submission.
   const CONFIRM_SOURCES = /^verified_facts\.(current_ctc|expected_ctc|notice_period|work_authorization|requires_sponsorship|willing_to_relocate|earliest_start_date)/;
   const CONFIRM_LABEL = /\b(salary|ctc|compensation|notice period|authori[sz]|sponsor|visa|relocat|start date|joining)\b/;
+  const COVER_LETTER = /^(your )?cover (letter|note)\b|\bcover letter$/;
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
   /** Which profile value a question wants: {key, confidence, via, never?}. Shared by detect() and fill(). */
   function keyFor(adapter, q) {
@@ -158,7 +165,7 @@
   // ---- filling ------------------------------------------------------------------------------
 
   /**
-   * Fill the form. payload = {fields, answers: {label: {answer, status, source}}, overwrite}
+   * Fill the form. payload = {fields, answers: {label: {answer, status, source, confirm, stale, sensitivity, ...}}, coverLetter?, overwrite}
    * Returns a report: {filled, review, unsure, kept, skipped, needs, files}.
    */
   async function fill(adapter, payload) {
@@ -169,6 +176,7 @@
     const fields = payload.fields || {};
     const derived = new Set(fields._derived || []);
     state.pending ??= new Map();
+    state.answers = answers;  // what JobPilot proposed for each question (the review panel's "save for next time" reads it)
 
     for (const q of questions) {
       const label = q.label || "(unlabelled field)";
@@ -203,13 +211,21 @@
         }
       } else {
         const a = answers[label];
-        if (!a || a.status === "NEEDS_INPUT" || a.answer == null) {
+        const cover = payload.coverLetter && q.kind === "text" && q.els[0].tagName === "TEXTAREA" && COVER_LETTER.test(norm(label));
+        if (a?.sensitivity === "never") { report.needs.push({ ...item, reason: "Answer this yourself.", never: true }); continue; }
+        if (cover && (!a || a.status === "NEEDS_INPUT" || a.answer == null)) {
+          // The cover letter prepared for this application: a suggestion the user reviews, never "verified".
+          value = String(payload.coverLetter); status = "SUGGESTED"; source = "cover letter";
+        } else if (!a || a.status === "NEEDS_INPUT" || a.answer == null) {
           report.needs.push({ ...item, reason: a?.reason ? `Needs your answer (${a.reason}).` : "Needs your answer.", where: "settings/answers" });
           continue;
+        } else {
+          value = String(a.answer); status = a.stale ? "SUGGESTED" : a.status === "VERIFIED" ? "VERIFIED" : "SUGGESTED";
+          source = String(a.source || "").startsWith("answer_bank") ? "saved answer" : "answers";
+          confirm = CONFIRM_SOURCES.test(a.source || "") || CONFIRM_LABEL.test(norm(label)) || Boolean(a.confirm);
         }
-        value = String(a.answer); status = a.status; source = String(a.source || "").startsWith("answer_bank") ? "saved answer" : "answers";
-        confirm = CONFIRM_SOURCES.test(a.source || "") || CONFIRM_LABEL.test(norm(label)) || Boolean(a.confirm);
       }
+      if (q.kind === "date" && !ISO_DATE.test(value.trim())) { report.needs.push({ ...item, reason: "Pick the date yourself." }); continue; }
 
       // Respect what is already there.
       const current = currentValue(q);
@@ -229,6 +245,8 @@
       try {
         if (q.kind === "text") {
           ok = await setText(q, value);
+        } else if (q.kind === "date") {
+          ok = await setText(q, value.trim());
         } else if (q.kind === "combobox" || q.kind === "listbutton") {
           const candidates = key === "degree" ? [value, ...degreeLike(value)] : [value];
           const res = q.kind === "combobox"
@@ -254,7 +272,8 @@
       state.filled.set(q.els[0], { value: currentValue(q) || shown, source, status, key, confirm });
       if (key) used.add(key);
       (status === "VERIFIED" ? report.filled : report.review).push({ ...item, value: shown, source, confirm: confirm || undefined,
-        note: status === "SUGGESTED" ? "Suggested from your profile. Please check it." : undefined });
+        note: status !== "SUGGESTED" ? undefined : source === "cover letter" ? "Your prepared cover letter. Please read and adjust it."
+          : source === "profile" ? "Suggested from your profile. Please check it." : "Suggested from your saved answers. Please check it's still right." });
     }
     watchForNewFields(adapter);
     return report;

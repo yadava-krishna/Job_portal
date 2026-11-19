@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "JobPilot Smart Apply",
   "short_name": "JobPilot",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Apply from JobPilot in one click: opens the application form, fills it from your JobPilot profile, shows a full review, and submits only when you authorise that application.",
   "minimum_chrome_version": "116",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyCA/gMwSOF/dhjhHJdHJ6XsFd3JGrmTw8nVacbyHUpTTrLnSx2x9CozY7V9V3nYcX95u/6hB17kqbJ/1Pj1eXP1NE//t1nFFj/lMFFdGjLaHWz2gDf22uu99lIDZR1uQ+/lo/gISVMTmimnQ3bAyOBTB9abpug/o1DL4Suw3RYZp64rk8CzpoywdWxgvn3DEV2uHKaEH5joEdxwkYJ/tTVMZl9KeIqHhNliNEhg6Q0foJ6zRtqjY9LJGbYFR9ckamG8G1iy5PmqxavCb0tTGDEHC5gIIalaerPgKH97UzMGxhYRIFZBTQHpENa+MjGi1/lLZAu2b3F7eDrO/6cYL3wIDAQAB",

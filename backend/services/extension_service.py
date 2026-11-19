@@ -56,6 +56,22 @@ def audit(db: Session, user: User, action: str, ip: str | None, token: Extension
                     target_id=str(token.id) if token and token.id else None, ip=ip, details=details))
 
 
+def prove(db: Session, token_id: int, nonce: str) -> str:
+    """HMAC-SHA256(key = stored hash of the device credential, msg = "jobpilot-prove:" + nonce).
+
+    Only the server that issued the credential holds its hash; the extension can compute the same hash from the
+    credential it holds. So a server address published by someone else cannot answer, and the credential is never sent
+    to it. Unknown, revoked, expired or non-device tokens answer 404."""
+    import hashlib
+    import hmac
+
+    row = db.get(ExtensionToken, token_id)
+    now = utcnow()
+    if row is None or row.revoked_at is not None or SCOPE_PAIR in (row.scopes or []) or (row.expires_at and _aware(row.expires_at) <= now):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown connection.")
+    return hmac.new(bytes.fromhex(row.token_hash), f"jobpilot-prove:{nonce}".encode(), hashlib.sha256).hexdigest()
+
+
 # ---- pairing --------------------------------------------------------------------------------
 
 def normalize_code(code: str) -> str:

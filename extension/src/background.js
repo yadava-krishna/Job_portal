@@ -13,6 +13,7 @@
 
 import { ApiError, apiBase, forget, jobpilot } from "./lib/api.js";
 import { APP_ORIGINS, CONTENT_FILES, formUrl, platformForUrl, validApiBase } from "./lib/config.js";
+import { afterTabClosed, handoffApplicationId, learnItems, resumeChoice, signalKind, validResume } from "./lib/session.js";
 import { vault } from "./lib/vault.js";
 
 const WEB_APP = "https://yadava-krishna.github.io/Job_portal/";
@@ -139,19 +140,23 @@ async function inspect({ tabId } = {}) {
   return { supported: true, tabId: tab.id, form, match, resumes, session };
 }
 
-async function fill({ tabId, frameId, overwrite, userJobId, resume }) {
+async function fill({ tabId, frameId, overwrite, userJobId, applicationId, resume }) {
   const [profile, detect] = await Promise.all([jobpilot.profile(), run(tabId, frameId, () => globalThis.__jobpilot?.detect())]);
   if (!detect?.platform) throw new ApiError(0, "The application form is no longer on this page. Reload it and try again.");
   const questions = [...new Set(detect.questions || [])].slice(0, 60);
-  const answers = {};
-  if (questions.length) for (const a of await jobpilot.answers(questions)) answers[a.question] = a;
   let session = (await getSession(tabId)) || { tabId };
   if (session.frameId !== frameId || session.url?.split("?")[0] !== detect.url.split("?")[0]) {
     session = { tabId, frameId, url: detect.url.split("?")[0], platform: detect.platform, applicationId: null, state: null, startedAt: Date.now() };
   }
   session.frameId = frameId;
-  if (resume) session.resume = resume;
+  const picked = validResume(resume);
+  if (picked) session.resume = picked;  // the user picked this resume in the popup for this session
   let tracking = null;
+  const handed = handoffApplicationId(applicationId);
+  if (handed && !session.applicationId) {  // the web app handed over the application itself
+    session.applicationId = handed;
+    session.userJobId = userJobId || session.userJobId || null;
+  }
   if (userJobId && !session.applicationId) {
     try {
       tracking = await jobpilot.start(userJobId);
@@ -160,12 +165,24 @@ async function fill({ tabId, frameId, overwrite, userJobId, resume }) {
     } catch (e) { tracking = { error: e.message }; }
   }
   if (detect.title || detect.company) session.job = { ...(session.job || {}), title: session.job?.title || detect.title, company: session.job?.company || detect.company };
+  // This application's package: the resume chosen for it in JobPilot, and its prepared cover letter.
+  let coverLetter = null;
+  if (session.applicationId) {
+    try {
+      const pkg = await jobpilot.package(session.applicationId);
+      session.packageResume = validResume(pkg?.resume);
+      coverLetter = typeof pkg?.cover_letter === "string" && pkg.cover_letter.trim() ? pkg.cover_letter.trim() : null;
+    } catch { /* no package: the default resume, no cover letter */ }
+  }
+  // Answers in context: with the application, the server adds employer-specific answers and this application's own.
+  const answers = {};
+  if (questions.length) for (const a of await jobpilot.answers(questions, session.applicationId || null)) answers[a.question] = a;
   await putSession(session);
   if (session.applicationId) await recordState(session, "filling", { mode: session.mode || (detect.assistedSubmit ? "assisted_submit" : "autofill_review"),
                                                                      info: { step: detect.step?.title || null } }).catch(() => null);
   const context = { job: session.job || null, applicationId: session.applicationId, stateLabel: session.stateLabel || null };
   const report = await run(tabId, frameId, (payload) => globalThis.__jobpilot.fill(payload),
-                           [{ fields: profile.fields, answers, overwrite: Boolean(overwrite), context }]);
+                           [{ fields: profile.fields, answers, coverLetter, overwrite: Boolean(overwrite), context }]);
   if (report && !report.error && session.applicationId) {
     const counts = { filled: report.filled.length, review: report.review.length + (report.unsure?.length || 0), needs: report.needs.length, skipped: report.skipped.length };
     await recordState(session, report.needs.length ? "needs_information" : "ready_for_review", { info: { counts } }).catch(() => null);
@@ -182,7 +199,10 @@ async function fetchResume(choice) {
 
 async function attachResume({ tabId, frameId, replace, resume }) {
   const session = await getSession(tabId);
-  const choice = resume || session?.resume || null;
+  const picked = validResume(resume);
+  if (picked && session) { session.resume = picked; await putSession(session); }  // picked in the popup for this session
+  // The popup's pick, else the resume chosen for this application in JobPilot, else the default (active upload).
+  const { choice } = resumeChoice(picked, session);
   const file = await fetchResume(choice);
   const payload = { name: file.name, type: file.type, b64: toBase64(file.buf) };
   const res = await run(tabId, frameId, (f, opts) => globalThis.__jobpilot.attachResume(f, opts), [payload, { replace: Boolean(replace) }]);
@@ -248,12 +268,18 @@ const PANEL = {
     if (r.conflict) throw new ApiError(409, r.error);
     return r;
   },
-  outcome: async (s, { outcome, signal, errors }) => {
-    if (outcome === "confirmed") return recordState(s, "submitted_confirmed", { info: { signal: String(signal || "Confirmation seen").slice(0, 200) } });
+  outcome: async (s, { outcome, signal, signal_kind: kind, errors }) => {
+    if (outcome === "confirmed") return recordState(s, "submitted_confirmed", { info: { signal: String(signal || "Confirmation seen").slice(0, 200), signal_kind: signalKind(kind) } });
     if (outcome === "errors") return recordState(s, "needs_information", { info: { message: `Site refused the submission: ${(errors || []).join("; ").slice(0, 400)}` } });
     return recordState(s, "submission_uncertain", { info: { message: "No confirmation seen on the page." } });
   },
   confirm: (s, { submitted }) => (s.applicationId ? ACTIONS.confirm({ applicationId: s.applicationId, submitted, tabId: s.tabId }) : { tracked: false }),
+  /** Save the answers the user ticked "save for next time" (only after their click on "Save selected"). */
+  learn: async (s, { items }) => {
+    const clean = learnItems(items);
+    if (!clean.length) throw new ApiError(0, "Nothing selected to save.");
+    return jobpilot.learn(s.applicationId || null, clean);
+  },
   openApp: () => chrome.tabs.create({ url: `${WEB_APP}#/applied` }).then(() => ({ ok: true })),
 };
 
@@ -283,7 +309,23 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status !== "complete") return;
   const s = await getSession(tabId).catch(() => null);
-  if (!s || s.state !== "submission_pending") return;
+  // A page the user submitted themselves can navigate before the panel reports it ("You submitted on the page"): if
+  // the new page carries a real confirmation, the attempt is recorded first, then the confirmation. Uncertain pages
+  // are only judged after a recorded attempt.
+  const userSubmitted = s && ["filling", "needs_information", "ready_for_review", "reviewed"].includes(s.state);
+  if (!s || (s.state !== "submission_pending" && !userSubmitted)) return;
+  if (userSubmitted) {
+    if (!(await allowedPlatform(tab.url))) return;
+    try {
+      await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: CONTENT_FILES });
+      const r = await run(tabId, 0, () => globalThis.__jobpilot.checkOutcome());
+      if (r?.outcome === "confirmed" && ["adapter", "url"].includes(r.signal_kind)) {
+        await recordState(s, "submission_pending", { info: { message: "You submitted on the page." } });
+        await recordState(s, "submitted_confirmed", { info: { signal: r.signal, signal_kind: signalKind(r.signal_kind) } });
+      }
+    } catch { /* not readable: nothing recorded */ }
+    return;
+  }
   if (!(await allowedPlatform(tab.url))) {
     await recordState(s, "submission_uncertain", { info: { message: "The page moved to another site after submitting." } }).catch(() => null);
     return;
@@ -291,12 +333,27 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   try {
     await chrome.scripting.executeScript({ target: { tabId, frameIds: [0] }, files: CONTENT_FILES });
     const r = await run(tabId, 0, () => globalThis.__jobpilot.checkOutcome());
-    if (r?.outcome === "confirmed") await recordState(s, "submitted_confirmed", { info: { signal: r.signal } });
-    else if (r?.outcome !== "still_on_form") await recordState(s, "submission_uncertain", { info: { message: "No confirmation seen after the page changed." } });
+    if (r?.outcome === "confirmed") await recordState(s, "submitted_confirmed", { info: { signal: r.signal, signal_kind: signalKind(r.signal_kind) } });
+    else if (r?.outcome === "errors") {
+      await recordState(s, "needs_information", { info: { message: `The site did not accept the submission: ${(r.errors || []).join("; ").slice(0, 400)}` } });
+    } else if (r?.outcome !== "still_on_form") await recordState(s, "submission_uncertain", { info: { message: "No confirmation seen after the page changed." } });
   } catch { /* the page could not be read: the panel or the user resolves it */ }
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => { dropSession(tabId).catch(() => null); vault.remove(`handoff:${tabId}`).catch(() => null); });
+// A closed tab ends its session. A tracked application left half-done is recorded as "interrupted" (a pause: it
+// resumes later with a fresh fill and review, never an automatic submission); one closed right after a submission
+// click, before any confirmation, as "submission_uncertain".
+async function tabClosed(tabId) {
+  try {
+    const s = await getSession(tabId).catch(() => null);
+    const next = s?.applicationId ? afterTabClosed(s.state) : null;
+    if (next) await recordState(s, next.state, { info: { message: next.message } }).catch(() => null);
+  } finally {
+    await dropSession(tabId).catch(() => null);
+    await vault.remove(`handoff:${tabId}`).catch(() => null);
+  }
+}
+chrome.tabs.onRemoved.addListener((tabId) => { tabClosed(tabId).catch(() => null); });
 
 // ---- Apply from JobPilot: the web app hands over one job; the extension opens its form and fills it ------------
 
@@ -318,8 +375,9 @@ async function external(msg) {
   const url = formUrl(msg.url);
   if (!url) throw new ApiError(0, "Smart Apply fills Greenhouse, Lever and Ashby forms. Open this listing and apply there.");
   // Record the hand-over before the form loads (a fast page could finish loading first and be missed).
+  const applicationId = handoffApplicationId(msg.applicationId);  // optional: the application to track directly
   const tab = await chrome.tabs.create({ url: "about:blank", active: true });
-  const h = { userJobId, url, at: Date.now(), running: false };
+  const h = { userJobId, applicationId, url, at: Date.now(), running: false };
   await vault.set(handoffKey(tab.id), h);
   await chrome.tabs.update(tab.id, { url });
   return { tabId: tab.id, url };
@@ -348,7 +406,8 @@ async function autoFill(tabId, h) {
       if (!form) await sleep(750);
     }
     if (!form) { badge(tabId, "!", "No application form found yet. Click Apply on the page, then click here and Fill."); return; }
-    const r = await fill({ tabId, frameId: form.frameId, overwrite: false, userJobId: h.userJobId });
+    const r = await fill({ tabId, frameId: form.frameId, overwrite: false, userJobId: h.userJobId, applicationId: h.applicationId });
+    // The resume chosen for this application in JobPilot (its package), else the default. Never replaces a file.
     await attachResume({ tabId, frameId: form.frameId, replace: false }).catch(() => null);  // a form without a file field
     badge(tabId, r?.report?.needs?.length ? "!" : "✓", r?.report?.needs?.length ? "Filled: some questions need you" : "Filled: review and submit in the panel");
   } catch (e) {

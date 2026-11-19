@@ -81,6 +81,7 @@ class AutofillOut(BaseModel):
 
 class AnswersRequest(BaseModel):
     questions: list[str] = Field(max_length=60)
+    application_id: int | None = None  # gives the employer context (company-only answers, this application's answers)
 
     @field_validator("questions")
     @classmethod
@@ -94,6 +95,48 @@ class AnswerOut(BaseModel):
     source: str | None
     status: str  # VERIFIED | SUGGESTED | NEEDS_INPUT
     reason: str | None = None
+    key: str | None = None
+    label: str | None = None
+    confidence: float | None = None
+    sensitivity: str | None = None  # public | personal | private | never
+    confirm: bool = False  # a commitment (salary, notice, authorisation...): ticked by the user before assisted submission
+    stale: bool = False
+    value_type: str | None = None
+    remember_default: bool = False
+
+
+class LearnItem(BaseModel):
+    question: str = Field(min_length=2, max_length=500)
+    answer: str = Field(min_length=1, max_length=2000)
+
+
+class LearnRequest(BaseModel):
+    """Answers the user typed on an employer form and chose, item by item, to save for next time."""
+    application_id: int | None = None
+    items: list[LearnItem] = Field(min_length=1, max_length=30)
+
+
+class LearnOut(BaseModel):
+    saved: list[str]
+    errors: list[dict[str, str]]
+
+
+class ProveRequest(BaseModel):
+    token_id: int
+    nonce: str = Field(min_length=32, max_length=128, pattern=r"^[0-9a-f]+$")
+
+
+class ProveOut(BaseModel):
+    proof: str
+
+
+class ExtPackageOut(BaseModel):
+    application_id: int
+    resume: dict[str, Any] | None = None
+    destination_url: str | None = None
+    action: str | None = None
+    overrides: dict[str, str] = Field(default_factory=dict)
+    cover_letter: str | None = None  # prepared text, offered for a "cover letter" text box as a suggestion to review
 
 
 class StartRequest(BaseModel):
@@ -117,6 +160,7 @@ class ExtApplicationOut(BaseModel):
     apply_step: str | None = None
     apply_counts: dict[str, int] = Field(default_factory=dict)
     apply_resume: dict[str, Any] | None = None
+    confirmation: dict[str, Any] | None = None
 
 
 class ApplyStateRequest(BaseModel):

@@ -19,7 +19,8 @@ from backend.models import JSONType, TimestampMixin, utcnow
 # Skill progression. Order matters: later states are stronger evidence. Courses/projects never become employment.
 SKILL_STATES = ("aware", "learning", "practising", "project_evidence", "professional_experience", "interview_ready")
 EVIDENCE_TYPES = ("course", "certificate", "project", "employment", "publication", "assessment", "practice", "other")
-CONSENT_KINDS = ("ai_processing", "learning_tracking", "mentor_sharing", "extension", "email_notifications", "research_feedback")
+CONSENT_KINDS = ("ai_processing", "learning_tracking", "mentor_sharing", "extension", "email_notifications", "research_feedback",
+                 "answer_memory", "apply_assist")
 
 
 # ---------- Consent & analytics ----------

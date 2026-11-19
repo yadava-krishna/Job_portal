@@ -24,6 +24,7 @@ export const APPLY_STATE_LABELS: Record<string, string> = {
   ready_for_review: "Ready for review", reviewed: "Reviewed", submission_authorized: "Submission authorised",
   submission_pending: "Submission pending", submitted_confirmed: "Submitted (confirmed)",
   submission_uncertain: "Submission uncertain: please check", failed: "Failed", cancelled: "Cancelled",
+  form_opened: "Employer page opened", interrupted: "Interrupted", user_reported: "Applied (you told us)",
 };
 
 /** A history line in plain words: "Moved to Interview" rather than "stage changed". */
