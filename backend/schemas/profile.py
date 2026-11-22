@@ -125,6 +125,28 @@ class ProfileOut(BaseModel):
     experience: ExperienceSummary | None = None
     parse_warnings: list[str] = Field(default_factory=list)
     verified_facts: dict[str, Any] = Field(default_factory=dict)
+    # Field-by-field review of what the resume says vs what the user confirmed (resume_service.profile_review).
+    review: "ProfileReview | None" = None
+
+
+class ProfileFieldReview(BaseModel):
+    key: str
+    label: str
+    group: str
+    # extracted: read from the resume, not confirmed yet | confirmed | missing | conflict: a newer resume says something
+    # else | stale: confirmed a long time ago and can change (location, current role)
+    state: str
+    detail: str | None = None
+    extracted: Any = None  # the resume's value (scalar fields) or the items it adds (list fields)
+    confirmed: Any = None
+
+
+class ProfileReview(BaseModel):
+    status: str  # unconfirmed | needs_review | confirmed
+    parsed_at: datetime | None = None
+    confirmed_at: datetime | None = None
+    pending: int = 0  # fields to look at (extracted, missing, conflict, stale)
+    fields: list[ProfileFieldReview] = Field(default_factory=list)
 
 
 class CustomAnswer(BaseModel):
@@ -346,3 +368,6 @@ class JobMatchIntelligenceOut(BaseModel):
     explanation: str | None
     learning_roadmap: list[dict[str, Any]] = Field(default_factory=list)
 
+
+
+ProfileOut.model_rebuild()

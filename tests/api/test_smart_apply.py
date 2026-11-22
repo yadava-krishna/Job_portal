@@ -55,6 +55,8 @@ def test_states_move_in_order_and_a_click_is_never_a_submission(client, resume_b
         assert app.apply_session["page"] == "https://job-boards.greenhouse.io/x/jobs/1"  # query string never stored
         steps = [e.to_status for e in db.query(ApplicationEvent).filter_by(application_id=app_id, event_type="APPLY_STATE").order_by(ApplicationEvent.id)]
     assert steps == ["filling", "ready_for_review", "reviewed", "submission_authorized", "submission_pending", "submitted_confirmed"]
+    listed = next(a for a in client.get(f"{API}/applications", headers=h).json() if a["id"] == app_id)
+    assert listed["confirmation_type"] == "employer_confirmed" and listed["stage"] == "applied"
 
 
 def test_uncertain_outcome_waits_for_the_user_and_survives_a_restart(client, resume_bytes, boards):

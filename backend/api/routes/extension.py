@@ -143,7 +143,8 @@ def answers(body: AnswersRequest, p: Autofill, db: DbSession, settings: Settings
         app = application_service.owned_application(db, user, body.application_id)
         company, job_id, country = app.job.company, app.job_id, app.job.country
         overrides = (app.package or {}).get("overrides") or {}
-        apply_prep_service.record_form_questions(db, app, body.questions)  # labels only, so the workspace can show them
+        # Labels (and what the form marks required/optional) only, so the workspace can show them.
+        apply_prep_service.record_form_questions(db, app, body.questions, requirements=body.requirements)
         db.commit()
     out = answer_memory.resolve(db, settings, user, body.questions, company=company, job_id=job_id, overrides=overrides,
                                 job_country=country)
@@ -178,7 +179,11 @@ def prove(body: ProveRequest, db: DbSession, settings: SettingsDep, request: Req
     HMAC-SHA256 keyed with the stored hash of the device credential over the extension's random nonce. The extension
     checks it before sending its credential to a newly published server address."""
     _limit(request, settings, "prove", 30, 600)
-    return ProveOut(proof=ext.prove(db, body.token_id, body.nonce))
+    if body.v < 2:
+        if not settings.extension_prove_legacy:
+            raise HTTPException(status.HTTP_410_GONE, "Update the JobPilot extension: this server needs its newer identity check.")
+        return ProveOut(proof=ext.prove(db, body.token_id, body.nonce))
+    return ProveOut(proof=ext.prove(db, body.token_id, body.nonce, host=ext.prove_host(settings, body.host, request.headers.get("host"))))
 
 
 @router.get("/resumes", response_model=list[ExtResumeOut])
@@ -243,7 +248,8 @@ def application_package(application_id: int, p: Track, db: DbSession, settings: 
     """The resume chosen for this application and the answers typed for it in the Apply Workspace."""
     user = p[0]
     app = application_service.owned_application(db, user, application_id)
-    if not app.package:
+    if not app.package or (app.status != "SUBMITTED" and apply_prep_service.is_stale(db, user, app)):
+        # Built before the latest profile or saved-answer change: never fill from outdated answers.
         apply_prep_service.build(db, settings, user, app, probe_hosted=False)
     return ExtPackageOut(**apply_prep_service.extension_view(app))
 

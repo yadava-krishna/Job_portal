@@ -241,9 +241,14 @@ describe("Remembered answers in Settings", () => {
       group: "professional", history: [] },
   ];
 
+  let all: MemoryAnswer[] = rows;
+  let conflicts: unknown[] = [];
   beforeEach(() => {
-    api.get.mockImplementation(async (_url: string, cfg?: { params?: { reveal?: boolean } }) =>
-      ({ data: cfg?.params?.reveal ? rows.map((r) => (r.masked ? { ...r, answer: "14 LPA", masked: false } : r)) : rows }));
+    all = rows;
+    conflicts = [];
+    api.get.mockImplementation(async (url: string, cfg?: { params?: { reveal?: boolean } }) =>
+      url === "/answers/conflicts" ? { data: conflicts }
+        : ({ data: cfg?.params?.reveal ? all.map((r) => (r.masked ? { ...r, answer: "14 LPA", masked: false } : r)) : all }));
   });
 
   it("masks private answers until Show, which fetches them revealed", async () => {
@@ -273,5 +278,39 @@ describe("Remembered answers in Settings", () => {
     fireEvent.click(within(screen.getByTestId("memory-notice_period")).getByRole("button", { name: "Forget Notice period" }));
     fireEvent.click(await screen.findByRole("button", { name: /Forget it/ }));
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith("/answers/memory/notice_period", { params: undefined }));
+  });
+
+  it("edits an employer-specific answer for that employer only, and says where each answer is reused", async () => {
+    const scoped: MemoryAnswer = { key: "previously_employed", scope_ref: "company:acme health", scope_kind: "company", scope_name: "Acme Health",
+      reusable: false, label: "Worked for this employer before", answer: "No", masked: false, value_type: "boolean", unit: null, sensitivity: "personal",
+      source: "apply_workspace", status: "verified", stale: false, question: "Have you previously worked for this company?",
+      last_confirmed_at: "2026-11-01T00:00:00Z", revalidate_days: null, group: "other", history: [] };
+    all = [...rows, scoped];
+    api.put.mockResolvedValue({ data: { ...scoped, answer: "Yes" } });
+    wrap(<RememberedAnswers />);
+    const row = await screen.findByTestId("memory-previously_employed");
+    expect(within(row).getByText("Only for Acme Health")).toBeInTheDocument();
+    expect(within(await screen.findByTestId("memory-notice_period")).getByText("Any application")).toBeInTheDocument();
+    fireEvent.click(within(row).getByRole("button", { name: "Edit Worked for this employer before" }));
+    fireEvent.change(within(row).getByRole("textbox"), { target: { value: "Yes" } });
+    fireEvent.click(within(row).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith("/answers/memory", {
+      key: "previously_employed", question: "Have you previously worked for this company?", answer: "Yes", scope_ref: "company:acme health" }));
+  });
+
+  it("flags a saved answer that differs from the profile, and reconfirms a stale one without retyping", async () => {
+    const title: MemoryAnswer = { ...rows[1], key: "current_company", label: "Current employer", answer: "Old Co", value_type: "text", unit: null,
+      question: "Current employer", revalidate_days: null, stale: false };
+    const stale: MemoryAnswer = { ...rows[1], stale: true };
+    all = [stale, title];
+    conflicts = [{ key: "current_company", label: "Current employer", saved: "Old Co", profile: "New Co", used: "ask" }];
+    api.put.mockResolvedValue({ data: { ...stale, stale: false } });
+    wrap(<RememberedAnswers />);
+    expect(await screen.findByTestId("answer-conflicts")).toHaveTextContent("1 saved answer differs");
+    const row = await screen.findByTestId("memory-current_company");
+    expect(within(row).getByText("Profile is newer")).toBeInTheDocument();
+    expect(within(row).getByText(/Your profile says “New Co”/)).toBeInTheDocument();
+    fireEvent.click(within(screen.getByTestId("memory-notice_period")).getByRole("button", { name: "Notice period is still right" }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledWith("/answers/memory", { key: "notice_period", question: "Notice period", answer: "30 days" }));
   });
 });

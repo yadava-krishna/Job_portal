@@ -13,13 +13,21 @@ vi.mock("../../src/lib/vault.js", () => ({
   },
 }));
 
-const { expectedProof, jobpilot, newNonce, sameString, verifyProof } = await import("../../src/lib/api.js");
+const { expectedProof, jobpilot, newNonce, proofHost, sameString, verifyProof } = await import("../../src/lib/api.js");
 
 const TOKEN = "jpx_secret-device-credential-0123456789";
 const GOOD = "https://good.example";
 const EVIL = "https://evil.example";
-const nodeProof = (token, nonce) =>
+const nodeProof = (token, nonce, host = "good.example") =>
+  createHmac("sha256", createHash("sha256").update(token).digest()).update(`jobpilot-prove:v2:${host}:${nonce}`).digest("hex");
+const legacyProof = (token, nonce) =>
   createHmac("sha256", createHash("sha256").update(token).digest()).update(`jobpilot-prove:${nonce}`).digest("hex");
+/** The genuine server's /prove: signs only its own host (what backend extension_service.prove_host does). */
+const genuineProve = (body) => {
+  const { token_id: id, nonce, v, host } = JSON.parse(body);
+  if (id !== 41 || v !== 2 || host !== "good.example") return json(404, { detail: "Unknown connection." });
+  return json(200, { proof: nodeProof(TOKEN, nonce, host) });
+};
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 /** A fake network: `server(url, init)` answers; every call is recorded so we can check what left the extension. */
@@ -38,21 +46,27 @@ beforeEach(() => {
 });
 
 describe("proof computation (pure)", () => {
-  it("matches the server's HMAC-SHA256 keyed with SHA-256(credential) over 'jobpilot-prove:' + nonce", async () => {
+  it("matches the server's HMAC-SHA256 keyed with SHA-256(credential) over 'jobpilot-prove:v2:<host>:' + nonce", async () => {
     const nonce = newNonce();
     expect(nonce).toMatch(/^[0-9a-f]{64}$/);
     expect(newNonce()).not.toBe(nonce);
-    expect(await expectedProof(TOKEN, nonce)).toBe(nodeProof(TOKEN, nonce));
-    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, nonce))).toBe(true);
-    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, nonce).toUpperCase())).toBe(true);
+    expect(await expectedProof(TOKEN, nonce, "good.example")).toBe(nodeProof(TOKEN, nonce));
+    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, nonce), "good.example")).toBe(true);
+    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, nonce).toUpperCase(), "good.example")).toBe(true);
+    expect(proofHost("https://Good.Example/")).toBe("good.example");
+    expect(proofHost("https://good.example:8443")).toBe("good.example:8443");
+    expect(proofHost("not a url")).toBe("");
   });
 
-  it("rejects a wrong, missing or malformed proof, and a proof for another nonce or credential", async () => {
+  it("rejects a wrong, missing or malformed proof, and a proof for another nonce, credential or host", async () => {
     const nonce = newNonce();
-    expect(await verifyProof(TOKEN, nonce, nodeProof("another-credential", nonce))).toBe(false);
-    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, newNonce()))).toBe(false);
-    expect(await verifyProof(TOKEN, nonce, "0".repeat(64))).toBe(false);
-    for (const bad of [null, undefined, "", "xyz", 42, {}]) expect(await verifyProof(TOKEN, nonce, bad)).toBe(false);
+    expect(await verifyProof(TOKEN, nonce, nodeProof("another-credential", nonce), "good.example")).toBe(false);
+    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, newNonce()), "good.example")).toBe(false);
+    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, nonce, "good.example"), "evil.example")).toBe(false);
+    expect(await verifyProof(TOKEN, nonce, legacyProof(TOKEN, nonce), "good.example")).toBe(false);  // no downgrade
+    expect(await verifyProof(TOKEN, nonce, nodeProof(TOKEN, nonce), "")).toBe(false);
+    expect(await verifyProof(TOKEN, nonce, "0".repeat(64), "good.example")).toBe(false);
+    for (const bad of [null, undefined, "", "xyz", 42, {}]) expect(await verifyProof(TOKEN, nonce, bad, "good.example")).toBe(false);
     expect(sameString("abc", "abc")).toBe(true);
     expect(sameString("abc", "abd")).toBe(false);
     expect(sameString("abc", "abcd")).toBe(false);
@@ -64,10 +78,11 @@ describe("authenticated requests", () => {
     store.set("apiBase", GOOD);
     const calls = network((url, init) => {
       if (url === `${GOOD}/api/v1/extension/prove`) {
-        const { token_id: id, nonce } = JSON.parse(init.body);
+        const { token_id: id, nonce, v, host } = JSON.parse(init.body);
         expect(id).toBe(41);
         expect(nonce).toMatch(/^[0-9a-f]{64}$/);
-        return json(200, { proof: nodeProof(TOKEN, nonce) });
+        expect({ v, host }).toEqual({ v: 2, host: "good.example" });
+        return genuineProve(init.body);
       }
       if (url === `${GOOD}/api/v1/extension/status`) return json(200, { connected: true });
       return json(404, {});
@@ -94,6 +109,35 @@ describe("authenticated requests", () => {
     expect(leaked(calls)).toBe(false);
     expect(store.get("verifiedBase")).toBe(GOOD);
     expect(store.get("token")).toBe(TOKEN);  // not disconnected: the user can fix the address
+  });
+
+  it("a tampered address that relays the challenge to the real server still gets nothing", async () => {
+    store.set("apiBase", EVIL);
+    const relayed = [];
+    const calls = network((url, init) => {
+      if (url === `${EVIL}/api/v1/extension/prove`) {
+        // The attacker forwards the extension's challenge unchanged, then again claiming to be the real host.
+        const asIs = genuineProve(init.body);
+        relayed.push(asIs.status);
+        const body = JSON.parse(init.body);
+        const swapped = genuineProve(JSON.stringify({ ...body, host: "good.example" }));
+        relayed.push(swapped.status);
+        return swapped;  // a valid proof... for good.example, not for evil.example
+      }
+      return json(200, { connected: true });
+    });
+    await expect(jobpilot.status()).rejects.toThrow(/could not be verified, so nothing was sent/);
+    expect(relayed).toEqual([404, 200]);  // the real server refused evil's host; the swapped proof names the wrong host
+    expect(calls.map((c) => c.url)).toEqual([`${EVIL}/api/v1/extension/prove`]);
+    expect(leaked(calls)).toBe(false);
+    expect(store.get("verifiedBase")).toBeUndefined();
+  });
+
+  it("a server answering only the old host-less proof is not trusted", async () => {
+    store.set("apiBase", EVIL);
+    const calls = network((url, init) => json(200, { proof: legacyProof(TOKEN, JSON.parse(init.body).nonce) }));
+    await expect(jobpilot.status()).rejects.toThrow(/could not be verified/);
+    expect(leaked(calls)).toBe(false);
   });
 
   it("treat an unknown credential (404) as unverified", async () => {

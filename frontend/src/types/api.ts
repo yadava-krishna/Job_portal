@@ -90,6 +90,25 @@ export interface ProfileResponse {
   experience: ExperienceSummary | null;
   parse_warnings: string[];
   verified_facts: VerifiedFacts;
+  /** What the resume says vs what you confirmed, field by field. */
+  review?: ProfileReview | null;
+}
+export interface ProfileFieldReview {
+  key: string;
+  label: string;
+  group: string;
+  state: "extracted" | "confirmed" | "missing" | "conflict" | "stale" | "empty";
+  detail?: string | null;
+  /** Scalar fields: the resume's value. List fields: the items a newer resume adds (conflict) or a count. */
+  extracted?: unknown;
+  confirmed?: unknown;
+}
+export interface ProfileReview {
+  status: "unconfirmed" | "needs_review" | "confirmed";
+  parsed_at: string | null;
+  confirmed_at: string | null;
+  pending: number;
+  fields: ProfileFieldReview[];
 }
 export interface VerifiedFacts {
   current_ctc?: string | null;
@@ -390,6 +409,9 @@ export interface Application {
   opened_at: string | null;
   submitted_at: string | null;
   submission_method?: string | null;
+  /** Evidence it reached the employer, separate from the stage: the user's own "I applied" is never independent proof. */
+  confirmation_type?: "employer_confirmed" | "receipt_confirmed" | "user_reported" | null;
+  confirmation_type_label?: string | null;
   follow_up_at?: string | null;
   /** Smart Apply (browser extension) progress, when the extension was used. */
   apply_state?: string | null;
@@ -468,6 +490,8 @@ export interface PackageAnswer {
   remember_default: boolean;
   origin: "common" | "employer" | "listing";
   required: boolean;
+  /** What the employer's form says: required | optional | unknown (never treated as optional). */
+  requirement?: "required" | "optional" | "unknown";
   options: string[];
   field_type: string;
 }
@@ -568,6 +592,10 @@ export interface WorkspaceAnswerInput { question: string; answer: string | null;
 export interface MemoryAnswer {
   key: string;
   scope_ref: string;
+  /** Where it is reused: any application, one employer, or one job. */
+  scope_kind?: "global" | "company" | "job";
+  scope_name?: string | null;
+  reusable?: boolean;
   label: string;
   answer: string | null;
   masked: boolean;
@@ -582,6 +610,12 @@ export interface MemoryAnswer {
   revalidate_days: number | null;
   group: "personal" | "professional" | "preferences" | "eligibility" | "links" | "other";
   history: { at: string | null; source: string | null; question: string | null; answer: string | null }[];
+}
+
+export interface AnswerConflict {
+  key: string; label: string; saved: string; profile: string;
+  /** "saved": the saved answer is newer and is used; "ask": the profile is newer, so the saved answer is only offered. */
+  used: "saved" | "ask";
 }
 
 export interface AnswerCatalogueEntry {

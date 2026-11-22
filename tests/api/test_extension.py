@@ -374,7 +374,8 @@ def test_tracking_fields_stages_and_submission_method(client, boards, resume_byt
     for stage in ("assessment", "interview", "archived"):
         assert client.post(f"{API}/applications/{app_id}/stage", headers=h, json={"stage": stage}).json()["stage"] == stage
     a = client.get(f"{API}/applications", headers=h).json()[0]
-    assert a["submission_method"] == "Employer website, confirmed in JobPilot"
+    assert a["submission_method"] == "Employer website, reported by you in JobPilot (not verified by the employer)"
+    assert a["confirmation_type"] == "user_reported" and a["confirmation_type_label"] == "You told JobPilot (not verified)"
     # Another user cannot change it.
     hb = onboard(client, "track-b@example.com", resume_bytes)
     assert client.put(f"{API}/applications/{app_id}/tracking", headers=hb, json={"notes": "x"}).status_code == 404

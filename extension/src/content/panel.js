@@ -234,6 +234,13 @@
           el("button", { type: "button", onclick: () => userConfirm(false) }, "No, it was not")))];
     }
     if (ui.message) nodes.push(el("div", { class: `box ${ui.messageKind || "warn"}`, role: "status" }, ui.message));
+    if (ui.fix?.length) {
+      // The site refused the submission: everything filled is still there. Go to each flagged field, fix it, review again.
+      nodes.push(el("div", { class: "box warn", "data-testid": "fix-list" },
+        el("strong", {}, "Fix these, then review and submit again"),
+        ...ui.fix.map((f) => el("div", { class: "row" }, el("span", { class: "l" }, `${f.label}: ${f.message}`),
+          el("button", { type: "button", onclick: () => JP.submit.focusField(f.ref) }, "Show field")))));
+    }
     if (!s) return nodes;
     if (s.step && !s.step.final) return nodes;
     const reviewedNow = ui.reviewed && ui.reviewed === s.fingerprint && !ui.stale;
@@ -322,7 +329,7 @@
   async function markReviewed() {
     const s = snapshot();
     if (!s?.ready) return;
-    ui.reviewed = s.fingerprint; ui.stale = false; ui.message = null;
+    ui.reviewed = s.fingerprint; ui.stale = false; ui.message = null; ui.fix = null;
     ui.stopWatch?.();
     ui.stopWatch = JP.review.watch(adapter, s.fingerprint, () => {
       if (ui.stale) return;
@@ -371,7 +378,11 @@
     if (!recorded) await JP.bridge.send("state", { state: "submission_pending", mode, session: { message: "You submitted on the page." } });
     const o = await JP.submit.outcome(adapter, { timeoutMs: JP.__outcomeTimeout ?? 30000 });
     if (o.outcome === "confirmed") { ui.phase = "confirmed"; ui.message = o.signal; }
-    else if (o.outcome === "errors") { ui.phase = null; ui.reported = false; ui.message = `The site did not accept the submission: ${o.errors.join("; ")}`; ui.messageKind = "bad"; ui.reviewed = null; }
+    else if (o.outcome === "errors") {
+      ui.phase = null; ui.reported = false; ui.reviewed = null; ui.messageKind = "bad";
+      ui.message = `The site did not accept the submission: ${o.errors.join("; ")}. Nothing you filled was lost.`;
+      ui.fix = o.fields || [];
+    }
     else ui.phase = "uncertain";
     await JP.bridge.send("outcome", o);
     render();

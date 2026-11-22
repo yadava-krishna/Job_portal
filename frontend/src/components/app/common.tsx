@@ -170,7 +170,7 @@ export function TagInput({ value, onChange, placeholder, suggestions = [], id }:
   );
 }
 
-export function Field({ label, htmlFor, hint, children, className }: { label: string; htmlFor?: string; hint?: ReactNode; children: ReactNode; className?: string }) {
+export function Field({ label, htmlFor, hint, children, className }: { label: ReactNode; htmlFor?: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <div className={cn("space-y-1.5", className)}>
       <label htmlFor={htmlFor} className="text-sm font-medium">{label}</label>

@@ -12,6 +12,7 @@ import { ClipperCard, PlatformsForm, PreferencesForm, ProfileForm, ResumeUpload 
 import { AccountSection } from "@/components/settings/AccountSection";
 import { AnswersSection } from "@/components/settings/AnswersSection";
 import { EmailSection } from "@/components/settings/EmailSection";
+import { PortalConnections } from "@/components/settings/PortalConnections";
 import { SectionStatus } from "@/components/settings/SectionStatus";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { sectionFor } from "@/components/settings/config";
@@ -42,7 +43,7 @@ export function SettingsPage() {
   };
 
   const attention: Record<string, string | undefined> = {
-    profile: profile.data && !profile.data.confirmed_at ? "needs review" : undefined,
+    profile: profile.data && (!profile.data.confirmed_at || profile.data.review?.status === "needs_review") ? "needs review" : undefined,
     preferences: prefs.data && !prefs.data.is_configured ? "not set up" : undefined,
   };
 
@@ -93,6 +94,10 @@ function SectionBody({ tab, profile, prefs }: { tab: string; profile: ReturnType
             <ResumeUpload profile={profile.data} />
           </Panel>
           <ResumeVersions />
+          <p className="rounded-xl bg-paper-sunk/70 px-4 py-3 text-[13px] text-muted-foreground ring-1 ring-border/70">
+            Also on LinkedIn or Naukri? <a href="#/settings?tab=portals" className="font-medium text-route hover:underline">Portal Connections</a> has
+            a checklist for your profile there, built from the profile below.
+          </p>
           <div id="candidate-profile" className="scroll-mt-20" />
           <Panel title="Candidate profile" description="Used for matching and for answering screening questions. Saving re-scores your open jobs.">
             {profile.data ? <ProfileForm profile={profile.data} /> : <LoadingState />}
@@ -116,6 +121,8 @@ function SectionBody({ tab, profile, prefs }: { tab: string; profile: ReturnType
           <ClipperCard />
         </div>
       );
+    case "portals":
+      return <PortalConnections />;
     case "extension":
       return <ExtensionSettings />;
     case "answers":

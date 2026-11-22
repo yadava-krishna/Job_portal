@@ -51,6 +51,19 @@ class BackendSettings(BaseModel):
     smtp_from: str = "JobPilot <no-reply@jobpilot.local>"
     # Where people open JobPilot (used for links in e-mails), e.g. https://<user>.github.io/Job_portal
     public_app_url: str | None = None
+    # Extension server-identity proof (POST /extension/prove). The proof names the host it is for, so a server address
+    # published by someone else cannot relay the challenge here and pass it on. When set, only these public API hosts
+    # (e.g. "your-name.ngrok-free.dev") are ever signed; otherwise the Host the request arrived on is signed.
+    extension_api_hosts: list[str] = Field(default_factory=list)
+    # Answer the old host-less proof (extension 2.2.0 and earlier). Off: that proof can be relayed (see SECURITY.md).
+    extension_prove_legacy: bool = False
+
+    @field_validator("extension_api_hosts", mode="before")
+    @classmethod
+    def _split_hosts(cls, v):
+        if isinstance(v, str):
+            return [h.strip().lower() for h in v.split(",") if h.strip()]
+        return [str(h).strip().lower() for h in (v or [])]
 
     @field_validator("trusted_proxy_cidrs", mode="before")
     @classmethod
@@ -132,5 +145,7 @@ def get_settings() -> BackendSettings:
         "adzuna_country": _env("ADZUNA_COUNTRY", "in"),
         "scheduler_enabled": _env("SCHEDULER_ENABLED", "true").lower() == "true",
         "scheduler_run_time": _env("SCHEDULER_RUN_TIME", "09:00"),
+        "extension_api_hosts": _env("EXTENSION_API_HOSTS", ""),
+        "extension_prove_legacy": _env("EXTENSION_PROVE_LEGACY", "false").lower() == "true",
     }
     return BackendSettings.model_validate(data)

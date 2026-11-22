@@ -50,6 +50,21 @@
              placeholder: el.getAttribute("placeholder") || "", type: (el.getAttribute("type") || "").toLowerCase() };
   }
 
+  // Whether the form says a question must be answered. Only what the page itself says counts:
+  //  * required: the required attribute, aria-required="true", or a "*" / "(required)" marker in its label;
+  //  * optional: the label says "(optional)" (or "optional" on its own);
+  //  * unknown: none of these. An unknown question is never treated as optional by JobPilot.
+  const REQUIRED_MARK = /[*✱]\s*$|\(required\)|^\s*required\b|\brequired\s*$/i;
+  const OPTIONAL_MARK = /\(optional\)|\boptional\s*$|^\s*optional\b/i;
+
+  function requirementOf(attrRequired, rawLabel) {
+    if (attrRequired) return "required";
+    const t = String(rawLabel || "");
+    if (OPTIONAL_MARK.test(t)) return "optional";
+    if (REQUIRED_MARK.test(t)) return "required";
+    return "unknown";
+  }
+
   function refFor(el) {
     for (const [ref, e] of state.refs) if (e === el) return ref;
     const ref = `f${state.nextRef++}`;
@@ -115,7 +130,9 @@
     out.sort((a, b) => (a.els[0].compareDocumentPosition(b.els[0]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
     for (const q of out) {
       q.ref = refFor(q.els[0]);
-      q.label = clean(q.label).replace(/\s*[*✱]+\s*$/, "").trim();  // drop the "required" marker
+      q.requirement = q.requirement || requirementOf(Boolean(q.required), clean(q.label));
+      q.required = q.requirement === "required";
+      q.label = clean(q.label).replace(/\s*[*✱]+\s*$/, "").replace(/\s*\((optional|required)\)\s*$/i, "").trim();  // drop the markers
       if (q.signals) q.signals.label = q.label;
     }
     return out;
@@ -136,5 +153,5 @@
     return clean(q.els[0].value);
   }
 
-  JP.scan = { scan, labelFor, groupLabel, choiceText, currentValue, refFor, state };
+  JP.scan = { scan, labelFor, groupLabel, choiceText, currentValue, refFor, requirementOf, state };
 })();

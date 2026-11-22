@@ -80,7 +80,9 @@ def _employer_questions(db: Session, pkg: dict[str, Any], dest: dict[str, Any], 
                 pkg["employer_questions_failed"] = {"url": dest["url"], "at": utcnow().isoformat()}
     seen = pkg.get("form_questions") or {}
     if seen.get("items"):
-        return [{"label": q, "required": False, "type": "text", "options": []} for q in seen["items"]], "employer_form"
+        req = seen.get("requirements") or {}
+        return [{"label": q, "required": req.get(q) == "required", "requirement": req.get(q, "unknown"), "type": "text", "options": []}
+                for q in seen["items"]], "employer_form"
     return [], "not_inspected"
 
 
@@ -157,8 +159,10 @@ def build(db: Session, settings, user: User, app: Application, *, refresh_questi
     by_key: dict[str, int] = {}
     answers: list[dict[str, Any]] = []
     for (origin, label, it), a in zip(ordered, resolved):
-        a = {**a, "origin": origin, "required": bool(it.get("required")) or origin == "common", "options": it.get("options") or [],
-             "field_type": it.get("type") or "text"}
+        required = bool(it.get("required")) or origin == "common"
+        a = {**a, "origin": origin, "required": required, "options": it.get("options") or [], "field_type": it.get("type") or "text",
+             # What the employer says: required | optional | unknown (JobPilot's own common questions count as required).
+             "requirement": it.get("requirement") or ("required" if required else "optional" if origin == "employer" else "unknown")}
         if a["key"] and a["key"] in by_key:
             prev = by_key[a["key"]]
             if origin == "employer" and answers[prev]["origin"] == "common":
@@ -326,8 +330,10 @@ def save_answers(db: Session, settings, user: User, app: Application, items: lis
     return {"package": out, "saved": saved, "errors": errors}
 
 
-def record_form_questions(db: Session, app: Application, labels: list[str]) -> None:
-    """Questions Smart Apply saw on the employer's form (labels only), so the workspace can show them on return."""
+def record_form_questions(db: Session, app: Application, labels: list[str], *, requirements: dict[str, str] | None = None) -> None:
+    """Questions Smart Apply saw on the employer's form (labels, and whether the form marks each required or optional),
+    so the workspace can show them on return. Unmarked questions are "unknown", which is never treated as optional."""
+    req = {" ".join(str(k).split())[:300]: v for k, v in (requirements or {}).items() if v in ("required", "optional")}
     clean = []
     for label in labels:
         t = " ".join(str(label or "").split())[:300]
@@ -336,7 +342,8 @@ def record_form_questions(db: Session, app: Application, labels: list[str]) -> N
     if not clean:
         return
     pkg = dict(app.package or {})
-    pkg["form_questions"] = {"items": clean[:60], "seen_at": utcnow().isoformat()}
+    pkg["form_questions"] = {"items": clean[:60], "requirements": {t: req[t] for t in clean[:60] if t in req},
+                             "seen_at": utcnow().isoformat()}
     app.package = pkg
 
 
@@ -359,6 +366,30 @@ def clear_destination(db: Session, settings, user: User, app: Application) -> di
     app.package = pkg
     db.flush()
     return build(db, settings, user, app)
+
+
+def is_stale(db: Session, user: User, app: Application) -> bool:
+    """The stored package predates the user's latest profile or remembered-answer change (so it must be rebuilt before
+    the extension fills from it). A submitted application's package is history and is never rebuilt for filling."""
+    from sqlalchemy import func, select
+
+    from backend.models import AnswerMemory, CandidateProfile
+
+    pkg = app.package or {}
+    if not pkg:
+        return True
+    try:
+        prepared = datetime.fromisoformat(pkg.get("prepared_at") or "")
+    except ValueError:
+        return True
+    if prepared.tzinfo is None:
+        prepared = prepared.replace(tzinfo=utcnow().tzinfo)
+    changes = [db.execute(select(CandidateProfile.updated_at).where(CandidateProfile.user_id == user.id)).scalar_one_or_none(),
+               db.execute(select(func.max(AnswerMemory.updated_at)).where(AnswerMemory.user_id == user.id)).scalar_one_or_none()]
+    for t in changes:
+        if t is not None and (t if t.tzinfo else t.replace(tzinfo=prepared.tzinfo)) > prepared:
+            return True
+    return False
 
 
 def extension_view(app: Application) -> dict[str, Any]:

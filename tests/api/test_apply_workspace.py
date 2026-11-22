@@ -332,22 +332,73 @@ def test_extension_answers_use_memory_and_learn_only_what_the_user_ticked(client
     client.post(f"{API}/extension/answers", headers=xh(tok), json={"questions": ["Preferred pronunciation of your name"], "application_id": app_id})
     pkg = client.get(f"{API}/applications/{app_id}/package", headers=h).json()["package"]
     row = next(a for a in pkg["answers"] if a["question"] == "Preferred pronunciation of your name")
-    assert row["status"] == "NEEDS_INPUT" and not row["required"]
+    assert row["status"] == "NEEDS_INPUT" and not row["required"] and row["requirement"] == "unknown"
     needs = sum(1 for a in pkg["answers"] if a["status"] == "NEEDS_INPUT" and a["sensitivity"] != "never")
     assert pkg["readiness"]["other_unanswered"] >= 1 and pkg["readiness"]["needs_input"] + pkg["readiness"]["other_unanswered"] == needs
+    # When the form marks a question required (or optional), the workspace knows it, and a required one blocks readiness.
+    before = pkg["readiness"]["needs_input"]
+    client.post(f"{API}/extension/answers", headers=xh(tok), json={
+        "questions": ["Why do you want to join us?", "Preferred pronunciation of your name"], "application_id": app_id,
+        "requirements": {"Why do you want to join us?": "required", "Preferred pronunciation of your name": "optional"}})
+    pkg = client.get(f"{API}/applications/{app_id}/package", headers=h).json()["package"]
+    rows = {a["question"]: a for a in pkg["answers"]}
+    assert rows["Why do you want to join us?"]["required"] and rows["Why do you want to join us?"]["requirement"] == "required"
+    assert rows["Preferred pronunciation of your name"]["requirement"] == "optional"
+    assert pkg["readiness"]["needs_input"] == before + 1 and pkg["readiness"]["level"] == "needs_input"
+    bad = client.post(f"{API}/extension/answers", headers=xh(tok), json={"questions": ["Q"], "requirements": {"Q": "maybe"}})
+    assert bad.status_code == 422
 
 
 def test_prove_answers_only_with_the_issuing_servers_secret(client, resume_bytes):
     h = onboard(client, "aw9@example.com", resume_bytes)
     tok = pair(client, h)
     nonce = "ab" * 16
-    r = client.post(f"{API}/extension/prove", json={"token_id": tok["token_id"], "nonce": nonce})
     key = bytes.fromhex(hashlib.sha256(tok["token"].encode()).hexdigest())
-    assert r.status_code == 200 and r.json()["proof"] == hmac.new(key, f"jobpilot-prove:{nonce}".encode(), hashlib.sha256).hexdigest()
-    assert client.post(f"{API}/extension/prove", json={"token_id": 99999, "nonce": nonce}).status_code == 404
-    assert client.post(f"{API}/extension/prove", json={"token_id": tok["token_id"], "nonce": "short"}).status_code == 422
+    body = {"token_id": tok["token_id"], "nonce": nonce, "v": 2, "host": "testserver"}  # TestClient's Host header
+    r = client.post(f"{API}/extension/prove", json=body)
+    assert r.status_code == 200
+    assert r.json()["proof"] == hmac.new(key, f"jobpilot-prove:v2:testserver:{nonce}".encode(), hashlib.sha256).hexdigest()
+    assert client.post(f"{API}/extension/prove", json={**body, "token_id": 99999}).status_code == 404
+    assert client.post(f"{API}/extension/prove", json={**body, "nonce": "short"}).status_code == 422
     assert client.post(f"{API}/extension/disconnect", headers=xh(tok)).status_code == 204
-    assert client.post(f"{API}/extension/prove", json={"token_id": tok["token_id"], "nonce": nonce}).status_code == 404
+    assert client.post(f"{API}/extension/prove", json=body).status_code == 404
+
+
+def test_prove_cannot_be_relayed_for_another_host(client, resume_bytes):
+    """A tampered config.json points the extension at evil.example, which forwards the challenge here. This server
+    signs only its own host, so evil.example never obtains a proof the extension would accept for evil.example."""
+    h = onboard(client, "aw9r@example.com", resume_bytes)
+    tok = pair(client, h)
+    nonce = "cd" * 16
+    relayed = {"token_id": tok["token_id"], "nonce": nonce, "v": 2, "host": "evil.example"}
+    assert client.post(f"{API}/extension/prove", json=relayed).status_code == 404
+    # Claiming our host gets a proof that names our host, which the extension checks against evil.example and rejects.
+    ours = client.post(f"{API}/extension/prove", json={**relayed, "host": "testserver"}).json()["proof"]
+    key = bytes.fromhex(hashlib.sha256(tok["token"].encode()).hexdigest())
+    assert ours != hmac.new(key, f"jobpilot-prove:v2:evil.example:{nonce}".encode(), hashlib.sha256).hexdigest()
+    # The old host-less proof is what a relay could pass on: refused unless explicitly re-enabled.
+    legacy = client.post(f"{API}/extension/prove", json={"token_id": tok["token_id"], "nonce": nonce})
+    assert legacy.status_code == 410 and "Update the JobPilot extension" in legacy.json()["detail"]
+    # Malformed host values are rejected before any lookup.
+    for bad in ("evil.example/x", "EVIL example", "a" * 300):
+        assert client.post(f"{API}/extension/prove", json={**relayed, "host": bad}).status_code == 422
+
+
+def test_prove_signs_only_configured_hosts_when_set(app_env, monkeypatch, resume_bytes):
+    from fastapi.testclient import TestClient
+
+    from backend.config import get_settings
+    from backend.main import create_app
+
+    monkeypatch.setenv("EXTENSION_API_HOSTS", "api.example.dev, Other.Example")
+    get_settings.cache_clear()
+    with TestClient(create_app(start_scheduler=False)) as c:
+        h = onboard(c, "aw9h@example.com", resume_bytes)
+        tok = pair(c, h)
+        body = {"token_id": tok["token_id"], "nonce": "ef" * 16, "v": 2}
+        assert c.post(f"{API}/extension/prove", json={**body, "host": "testserver"}).status_code == 404  # Host header ignored
+        assert c.post(f"{API}/extension/prove", json={**body, "host": "api.example.dev"}).status_code == 200
+        assert c.post(f"{API}/extension/prove", json={**body, "host": "other.example"}).status_code == 200
 
 
 def test_settings_facts_feed_answer_memory(client, resume_bytes):
@@ -359,3 +410,95 @@ def test_settings_facts_feed_answer_memory(client, resume_bytes):
     assert mem["notice_period"]["answer"] == "60 days" and mem["notice_period"]["source"] == "settings"
     assert mem["willing_to_relocate"]["answer"] == "Yes"
     assert "expected_ctc" not in mem  # "negotiable" isn't an amount: Settings keeps it as typed, nothing invented
+
+
+def test_employer_specific_answers_can_be_edited_in_settings_without_leaking_to_other_employers(client, resume_bytes):
+    h = onboard(client, "aw11@example.com", resume_bytes)
+    a1 = import_job(client, h, company="Acme Health", url="https://www.linkedin.com/jobs/view/4000000021/")
+    app1 = _prepare(client, h, a1["user_job_ids"][0])
+    q = "Have you previously worked for this company?"
+    client.post(f"{API}/applications/{app1}/answers", headers=h, json={"items": [{"question": q, "answer": "No", "remember": True}]})
+    row = next(m for m in client.get(f"{API}/answers/memory", headers=h).json() if m["key"] == "previously_employed")
+    assert row["scope_kind"] == "company" and row["scope_name"] == "Acme Health" and row["reusable"] is False
+    # Edit it in Settings: same employer, new answer, history kept.
+    r = client.put(f"{API}/answers/memory", headers=h, json={"key": "previously_employed", "question": q, "answer": "Yes",
+                                                            "scope_ref": row["scope_ref"]})
+    assert r.status_code == 200 and r.json()["answer"] == "Yes" and r.json()["scope_ref"] == row["scope_ref"]
+    assert len(r.json()["history"]) == 2 and r.json()["history"][0]["source"] == "settings"
+    # Without the scope it is refused (it belongs to one employer), and a scope that doesn't exist can't be invented.
+    assert client.put(f"{API}/answers/memory", headers=h, json={"key": "previously_employed", "question": q, "answer": "Yes"}).status_code == 422
+    assert client.put(f"{API}/answers/memory", headers=h, json={"key": "previously_employed", "question": q, "answer": "Yes",
+                                                               "scope_ref": "company:other corp"}).status_code == 404
+    assert client.put(f"{API}/answers/memory", headers=h, json={"key": "previously_employed", "question": q, "answer": "Yes",
+                                                               "scope_ref": "global"}).status_code == 422
+    # Another user cannot edit or see it.
+    hb = onboard(client, "aw11b@example.com", resume_bytes)
+    assert client.put(f"{API}/answers/memory", headers=hb, json={"key": "previously_employed", "question": q, "answer": "No",
+                                                                "scope_ref": row["scope_ref"]}).status_code == 404
+    assert client.get(f"{API}/answers/memory", headers=hb).json() == []
+
+
+def test_a_saved_answer_older_than_the_profile_is_offered_not_filled(client, resume_bytes):
+    """Two of the user's own confirmations disagree (saved 'current employer' vs a newer profile): never silently pick."""
+    h = onboard(client, "aw12@example.com", resume_bytes)
+    q = "Current employer"
+    assert client.put(f"{API}/answers/memory", headers=h, json={"key": "current_company", "question": q, "answer": "Old Co"}).status_code == 200
+    from backend.config import get_settings
+    from backend.db import session_factory
+    from backend.models import User
+    from backend.services import answer_memory
+
+    with session_factory()() as db:
+        user = db.query(User).filter_by(email="aw12@example.com").one()
+        a = answer_memory.resolve(db, get_settings(), user, [q])[0]
+    current = client.get(f"{API}/profile", headers=h).json()["confirmed"]
+    profile_company = (current["experience"][0]["company"] if current["experience"] else None)
+    if not profile_company or answer_memory.same_value(profile_company, "Old Co"):
+        pytest.skip("synthetic resume has no current employer")
+    # Saved after the profile was confirmed: the newer answer is used, and the difference is said out loud.
+    assert a["status"] == "VERIFIED" and a["answer"] == "Old Co" and a["conflict"]["used"] == "saved"
+    assert any("your saved answer is newer" in n for n in a["notes"])
+    # The profile is confirmed again later: now the saved answer is older, so it is only offered.
+    import time
+    time.sleep(0.01)
+    assert client.put(f"{API}/profile", headers=h, json=current).status_code == 200
+    with session_factory()() as db:
+        user = db.query(User).filter_by(email="aw12@example.com").one()
+        a = answer_memory.resolve(db, get_settings(), user, [q])[0]
+    assert a["status"] == "SUGGESTED" and a["conflict"] == {"saved": "Old Co", "profile": profile_company, "used": "ask"}
+    listed = client.get(f"{API}/answers/conflicts", headers=h).json()
+    assert [c["key"] for c in listed] == ["current_company"] and listed[0]["used"] == "ask"
+
+
+def test_experience_questions_keep_their_meaning():
+    from backend.services.answer_memory import classify
+
+    keys = {q: classify(q).key for q in ("Total years of experience", "Years of Python experience", "Relevant industry experience (years)",
+                                         "Total experience including internships", "Years of post-qualification experience",
+                                         "How many years of experience after graduation?")}
+    assert keys == {"Total years of experience": "experience_years.total", "Years of Python experience": "experience_years.python",
+                    "Relevant industry experience (years)": "experience_years.relevant",
+                    "Total experience including internships": "experience_years.total.incl_internships",
+                    "Years of post-qualification experience": "experience_years.total.post_qualification",
+                    "How many years of experience after graduation?": "experience_years.total.post_qualification"}
+
+
+def test_extension_package_is_rebuilt_after_a_profile_change(client, resume_bytes, boards):
+    h = onboard(client, "aw13@example.com", resume_bytes)
+    tok = pair(client, h)
+    item = with_board_job(client, h)
+    app_id = _prepare(client, h, item["user_job_id"])
+    client.get(f"{API}/applications/{app_id}/package", headers=h)
+    before = client.get(f"{API}/extension/applications/{app_id}/package", headers=xh(tok))
+    assert before.status_code == 200
+    from backend.db import session_factory
+    from backend.models import Application
+
+    with session_factory()() as db:
+        prepared = db.get(Application, app_id).package["prepared_at"]
+    import time
+    time.sleep(0.01)
+    client.put(f"{API}/answers/memory", headers=h, json={"key": "notice_period", "question": "Notice period", "answer": "15 days"})
+    assert client.get(f"{API}/extension/applications/{app_id}/package", headers=xh(tok)).status_code == 200
+    with session_factory()() as db:
+        assert db.get(Application, app_id).package["prepared_at"] > prepared

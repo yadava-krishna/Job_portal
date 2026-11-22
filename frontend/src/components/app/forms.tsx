@@ -9,10 +9,12 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, NativeSelect, TagInput } from "@/components/app/common";
 import { FieldGroup } from "@/components/settings/primitives";
+import { Labelled, ListSuggestion, ReviewBanner, ScalarSuggestion, reviewField } from "@/components/app/ProfileReview";
 import { errorMessage } from "@/lib/api";
 import { bookmarkletHref } from "@/lib/clipper";
 import { bytes, formatDate, lines } from "@/lib/format";
-import { usePlatforms, useSavePlatforms, useSavePreferences, useSaveProfile, useUploadResume } from "@/services/queries";
+import { usePlatforms, useRescoreStatus, useRetryRescore, useSavePlatforms, useSavePreferences, useSaveProfile, useUploadResume } from "@/services/queries";
+import { useQueryClient } from "@tanstack/react-query";
 import type { EditableProfile, PlatformInfo, Preferences, ProfileResponse } from "@/types/api";
 
 // ---- Resume upload -------------------------------------------------------------------
@@ -66,9 +68,22 @@ export function ProfileForm({ profile, onSaved, submitLabel = "Save profile", ma
   }, [profile.confirmed, profile.parsed, manual]);
   if (!p) return <p className="text-sm text-muted-foreground">Upload a resume first.</p>;
   const set = <K extends keyof EditableProfile>(k: K, v: EditableProfile[K]) => setP({ ...p, [k]: v });
+  const rv = (k: string) => reviewField(profile.review, k);
+  // A suggestion stops showing once the form already holds that value.
+  const pending = (k: keyof EditableProfile) => { const f = rv(k); return f && f.state === "conflict" && typeof f.extracted === "string" && f.extracted === p[k] ? undefined : f; };
+  const addNew = <K extends "skills" | "experience" | "education" | "certifications" | "projects">(k: K, items: EditableProfile[K]) =>
+    set(k, [...(p[k] as unknown[]), ...(items as unknown[])] as EditableProfile[K]);
+  const listPending = (k: "skills" | "experience" | "education" | "certifications" | "projects") => {
+    const f = rv(k);
+    if (!f || f.state !== "conflict" || !Array.isArray(f.extracted)) return f;
+    const have = new Set((p[k] as unknown[]).map((x) => JSON.stringify(x)));
+    const left = (f.extracted as unknown[]).filter((x) => !have.has(JSON.stringify(x)));
+    return left.length ? { ...f, extracted: left } : undefined;
+  };
 
   return (
     <div className="space-y-6">
+      <ReviewBanner review={profile.review} />
       {profile.parse_warnings.length > 0 && (
         <div className="rounded-xl bg-caution-tint p-3 text-sm text-foreground ring-1 ring-caution/25">
           <strong className="text-caution">Please check:</strong>
@@ -76,12 +91,20 @@ export function ProfileForm({ profile, onSaved, submitLabel = "Save profile", ma
         </div>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Full name" htmlFor="pf-name"><Input id="pf-name" value={p.full_name ?? ""} onChange={(e) => set("full_name", e.target.value)} /></Field>
-        <Field label="Email" htmlFor="pf-email"><Input id="pf-email" value={p.email ?? ""} onChange={(e) => set("email", e.target.value)} /></Field>
-        <Field label="Phone" htmlFor="pf-phone"><Input id="pf-phone" value={p.phone ?? ""} onChange={(e) => set("phone", e.target.value)} /></Field>
-        <Field label="Location" htmlFor="pf-loc"><Input id="pf-loc" value={p.location ?? ""} onChange={(e) => set("location", e.target.value)} /></Field>
-        <Field label="Headline" htmlFor="pf-head" className="sm:col-span-2"><Input id="pf-head" value={p.headline ?? ""} onChange={(e) => set("headline", e.target.value)} /></Field>
-        <Field label="Professional summary" htmlFor="pf-sum" className="sm:col-span-2"><Textarea id="pf-sum" rows={4} value={p.summary ?? ""} onChange={(e) => set("summary", e.target.value)} /></Field>
+        {([["full_name", "Full name", "pf-name"], ["email", "Email", "pf-email"], ["phone", "Phone", "pf-phone"], ["location", "Location", "pf-loc"]] as const).map(([k, label, id]) => (
+          <Field key={k} label={<Labelled text={label} field={pending(k)} />} htmlFor={id} hint={rv(k)?.state === "missing" || rv(k)?.state === "stale" ? rv(k)?.detail : undefined}>
+            <Input id={id} value={p[k] ?? ""} onChange={(e) => set(k, e.target.value)} />
+            <ScalarSuggestion field={pending(k)} onUse={(v) => set(k, v)} />
+          </Field>
+        ))}
+        <Field label={<Labelled text="Headline" field={pending("headline")} />} htmlFor="pf-head" className="sm:col-span-2">
+          <Input id="pf-head" value={p.headline ?? ""} onChange={(e) => set("headline", e.target.value)} />
+          <ScalarSuggestion field={pending("headline")} onUse={(v) => set("headline", v)} />
+        </Field>
+        <Field label={<Labelled text="Professional summary" field={pending("summary")} />} htmlFor="pf-sum" className="sm:col-span-2">
+          <Textarea id="pf-sum" rows={4} value={p.summary ?? ""} onChange={(e) => set("summary", e.target.value)} />
+          <ScalarSuggestion field={pending("summary")} onUse={(v) => set("summary", v)} />
+        </Field>
       </div>
 
       <div>
@@ -95,16 +118,19 @@ export function ProfileForm({ profile, onSaved, submitLabel = "Save profile", ma
         </div>
       </div>
 
-      <Field label="Skills" hint="Only skills you actually have. These drive the match score.">
+      <Field label={<Labelled text="Skills" field={listPending("skills")} />} hint="Only skills you actually have. These drive the match score.">
         <TagInput value={p.skills} onChange={(v) => set("skills", v)} placeholder="Add a skill and press Enter" />
+        <ListSuggestion field={listPending("skills")} listKey="skills" onAdd={(items) => addNew("skills", items)} />
       </Field>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-[13px] font-semibold text-heading">Experience</h3>
+          <h3 className="text-[13px] font-semibold text-heading"><Labelled text="Experience" field={listPending("experience")} /></h3>
           <Button size="sm" variant="outline" onClick={() => set("experience", [...p.experience, { title: "", company: "", start: null, end: null, is_current: false, bullets: [] }])}><Plus /> Add role</Button>
         </div>
         {profile.experience && <p className="text-sm text-muted-foreground">Total experience from dates: <strong>{profile.experience.years_months}</strong> (overlapping roles counted once).</p>}
+        {rv("experience")?.detail && rv("experience")?.state !== "conflict" && <p className="text-xs text-caution">{rv("experience")?.detail}</p>}
+        <ListSuggestion field={listPending("experience")} listKey="experience" onAdd={(items) => addNew("experience", items)} />
         {p.experience.map((r, i) => (
           <div key={i} className="space-y-3 rounded-xl bg-paper-sunk/70 p-4 ring-1 ring-border/70">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -128,9 +154,10 @@ export function ProfileForm({ profile, onSaved, submitLabel = "Save profile", ma
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-[13px] font-semibold text-heading">Education</h3>
+          <h3 className="text-[13px] font-semibold text-heading"><Labelled text="Education" field={listPending("education")} /></h3>
           <Button size="sm" variant="outline" onClick={() => set("education", [...p.education, { degree: "", institution: "", university: "", year: null }])}><Plus /> Add</Button>
         </div>
+        <ListSuggestion field={listPending("education")} listKey="education" onAdd={(items) => addNew("education", items)} />
         {p.education.map((e, i) => (
           <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-xl bg-paper-sunk/70 p-2 ring-1 ring-border/70 sm:grid-cols-[2fr_2fr_2fr_1fr_auto] sm:bg-transparent sm:p-0 sm:ring-0 [&>input]:col-start-1 sm:[&>input]:col-start-auto [&>button]:col-start-2 [&>button]:row-start-1 sm:[&>button]:col-start-auto">
             <Input aria-label="Degree" placeholder="Degree" value={e.degree ?? ""} onChange={(ev) => set("education", p.education.map((x, j) => j === i ? { ...x, degree: ev.target.value } : x))} />
@@ -143,15 +170,19 @@ export function ProfileForm({ profile, onSaved, submitLabel = "Save profile", ma
       </section>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Certifications / training"><TagInput value={p.certifications} onChange={(v) => set("certifications", v)} /></Field>
+        <Field label={<Labelled text="Certifications / training" field={listPending("certifications")} />}>
+          <TagInput value={p.certifications} onChange={(v) => set("certifications", v)} />
+          <ListSuggestion field={listPending("certifications")} listKey="certifications" onAdd={(items) => addNew("certifications", items)} />
+        </Field>
         <Field label="Languages"><TagInput value={p.languages} onChange={(v) => set("languages", v)} /></Field>
       </div>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-[13px] font-semibold text-heading">Projects</h3>
+          <h3 className="text-[13px] font-semibold text-heading"><Labelled text="Projects" field={listPending("projects")} /></h3>
           <Button size="sm" variant="outline" onClick={() => set("projects", [...p.projects, { name: "", bullets: [] }])}><Plus /> Add</Button>
         </div>
+        <ListSuggestion field={listPending("projects")} listKey="projects" onAdd={(items) => addNew("projects", items)} />
         {p.projects.map((pr, i) => (
           <div key={i} className="space-y-2 rounded-xl bg-paper-sunk/70 p-4 ring-1 ring-border/70">
             <Input aria-label="Project name" placeholder="Project name" value={pr.name} onChange={(e) => set("projects", p.projects.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
@@ -194,10 +225,39 @@ export const defaultPreferences: Preferences = {
 const DOMAINS = ["Finance", "Accounting", "Healthcare Operations", "Revenue Cycle Management", "Banking", "Insurance", "Operations", "Analytics"];
 const LOCATIONS = ["Bengaluru", "Remote - India", "Hyderabad", "Chennai", "Pune", "Mumbai", "Delhi NCR"];
 
+/** After a save: "Updating your match scores…", then "Match scores updated" (and the job list refreshes), or a retry if
+ *  the refresh doesn't finish. Scores shown before it finishes are the old ones, and it says so. */
+export function RescoreNotice({ since }: { since: number | null }) {
+  const status = useRescoreStatus(since != null);
+  const retry = useRetryRescore();
+  const qc = useQueryClient();
+  const [slow, setSlow] = useState(false);
+  const done = !!status.data && !status.data.pending && !!status.data.rescored_at && since != null && Date.parse(status.data.rescored_at) >= since - 5000;
+  useEffect(() => { if (done) void qc.invalidateQueries({ queryKey: ["jobs"] }); }, [done, qc]);
+  useEffect(() => {
+    setSlow(false);
+    if (since == null) return;
+    const t = setTimeout(() => setSlow(true), 45000);
+    return () => clearTimeout(t);
+  }, [since, retry.isSuccess]);
+  if (since == null) return null;
+  if (status.isError) return <p role="status" className="text-xs text-caution">Couldn't check your match scores. They'll refresh on their own; reload in a minute.</p>;
+  if (done) return <p role="status" data-testid="rescore-done" className="text-xs text-success">Match scores updated for your open jobs.</p>;
+  return (
+    <p role="status" data-testid="rescore-pending" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+      {slow ? <>Still updating your match scores. Jobs show their old scores until it's done.
+        <Button size="xs" variant="ghost" onClick={() => retry.mutate()} disabled={retry.isPending}>Try again</Button></>
+        : "Updating your match scores. Jobs show their old scores until it's done."}
+    </p>
+  );
+}
+
 export function PreferencesForm({ initial, suggestedTitles = [], onSaved, submitLabel = "Save preferences" }: {
   initial?: Preferences; suggestedTitles?: string[]; onSaved?: () => void; submitLabel?: string;
 }) {
   const save = useSavePreferences();
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [p, setP] = useState<Preferences>(defaultPreferences);
   useEffect(() => { if (initial) setP({ ...defaultPreferences, ...initial, weights: { ...defaultPreferences.weights, ...initial.weights }, application_settings: { ...defaultPreferences.application_settings, ...initial.application_settings } }); }, [initial]);
   const set = <K extends keyof Preferences>(k: K, v: Preferences[K]) => setP((x) => ({ ...x, [k]: v }));
@@ -218,15 +278,15 @@ export function PreferencesForm({ initial, suggestedTitles = [], onSaved, submit
 
       <FieldGroup title="Where and how">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Preferred locations" className="md:col-span-2"><TagInput value={p.locations} onChange={(v) => set("locations", v)} suggestions={LOCATIONS} /></Field>
-          <Field label="Work mode">
+          <Field label="Preferred locations" className="md:col-span-2" hint="On-site and hybrid jobs elsewhere are marked not eligible and shown last. Remote jobs always count."><TagInput value={p.locations} onChange={(v) => set("locations", v)} suggestions={LOCATIONS} /></Field>
+          <Field label="Work mode" hint="Jobs in a mode you didn't tick are marked not eligible and shown last, not hidden.">
             <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
               {(["Remote", "Hybrid", "On-site"] as const).map((m) => (
                 <label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={p.work_modes.includes(m)} onCheckedChange={() => set("work_modes", toggle(p.work_modes, m))} /> {m}</label>
               ))}
             </div>
           </Field>
-          <Field label="Employment type">
+          <Field label="Employment type" hint="Same rule: other types are marked not eligible and shown last.">
             <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1">
               {(["Full-time", "Contract", "Part-time", "Internship"] as const).map((m) => (
                 <label key={m} className="flex items-center gap-2 text-sm"><Checkbox checked={p.employment_types.includes(m)} onCheckedChange={() => set("employment_types", toggle(p.employment_types, m))} /> {m}</label>
@@ -238,14 +298,14 @@ export function PreferencesForm({ initial, suggestedTitles = [], onSaved, submit
 
       <FieldGroup title="Pay and experience">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Expected salary (annual)" className="md:col-span-2">
-            <div className="flex max-w-xl gap-2">
+          <Field label="Expected salary (annual)" className="md:col-span-2" hint="With a minimum set, jobs that publish lower pay are marked not eligible and shown last. It's never sent to employers by itself.">
+            <div className="flex max-w-xl flex-wrap gap-2 sm:flex-nowrap">
               <NativeSelect ariaLabel="Currency" value={p.currency} onChange={(v) => set("currency", v)} options={["INR", "USD", "EUR", "GBP", "AED", "SGD"].map((c) => ({ value: c, label: c }))} className="shrink-0" />
-              <Input type="number" min={0} placeholder="Minimum" className="readout" value={p.salary_min ?? ""} onChange={(e) => set("salary_min", num(e.target.value))} aria-label="Minimum salary" />
-              <Input type="number" min={0} placeholder="Maximum" className="readout" value={p.salary_max ?? ""} onChange={(e) => set("salary_max", num(e.target.value))} aria-label="Maximum salary" />
+              <Input type="number" min={0} placeholder="Minimum" className="readout min-w-0 flex-1 basis-28" value={p.salary_min ?? ""} onChange={(e) => set("salary_min", num(e.target.value))} aria-label="Minimum salary" />
+              <Input type="number" min={0} placeholder="Maximum" className="readout min-w-0 flex-1 basis-28" value={p.salary_max ?? ""} onChange={(e) => set("salary_max", num(e.target.value))} aria-label="Maximum salary" />
             </div>
           </Field>
-          <Field label="Experience range (years)">
+          <Field label="Experience range (years)" hint="Your experience range helps JobPilot prioritize roles that match your career level. It changes ranking, not eligibility.">
             <div className="flex max-w-xs items-center gap-2">
               <Input type="number" min={0} step={0.5} placeholder="Min" className="readout" value={p.experience_min ?? ""} onChange={(e) => set("experience_min", num(e.target.value))} aria-label="Minimum experience" />
               <span aria-hidden className="text-muted-foreground">–</span>
@@ -270,14 +330,18 @@ export function PreferencesForm({ initial, suggestedTitles = [], onSaved, submit
 
         <details className="group rounded-xl bg-paper-sunk/60 p-4 ring-1 ring-border/70">
           <summary className="cursor-pointer rounded text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">Scoring weights & application settings</summary>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <p className="mt-3 max-w-2xl text-xs text-muted-foreground">
+            These weights control how much each factor contributes to your match score. Changing them doesn't change which jobs you're eligible for.
+            After you save, JobPilot re-scores your open jobs in the background; the new scores show up in a few seconds.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {(Object.keys(p.weights) as (keyof Preferences["weights"])[]).map((k) => (
-              <Field key={k} label={k.replace("_", " ")} className="[&>label]:capitalize"><Input type="number" min={0} max={100} className="readout" value={p.weights[k]} onChange={(e) => set("weights", { ...p.weights, [k]: Number(e.target.value) })} /></Field>
+              <Field key={k} label={k.replace("_", " ")} className="min-w-0 [&>label]:block [&>label]:truncate [&>label]:capitalize"><Input type="number" min={0} max={100} className="readout" value={p.weights[k]} onChange={(e) => set("weights", { ...p.weights, [k]: Number(e.target.value) })} /></Field>
             ))}
           </div>
           <p className={`mt-2 text-xs ${weightTotal === 100 ? "text-muted-foreground" : "text-caution"}`}>Total {weightTotal}%. Weights are normalised, but 100 keeps them easy to read.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <Field label="Cover letters">
+            <Field label="Cover letters" hint="Decides when the Apply Workspace prepares a cover letter. You always review it before it goes into a form.">
               <NativeSelect value={p.application_settings.cover_letter} onChange={(v) => set("application_settings", { ...p.application_settings, cover_letter: v as Preferences["application_settings"]["cover_letter"] })}
                             options={[{ value: "when_required", label: "Only when the job asks for one" }, { value: "always", label: "Always prepare one" }, { value: "never", label: "Never" }]} className="w-full" />
             </Field>
@@ -286,8 +350,9 @@ export function PreferencesForm({ initial, suggestedTitles = [], onSaved, submit
       </FieldGroup>
 
       <div data-save-bar className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+        <div className="mr-auto min-w-0"><RescoreNotice since={savedAt} /></div>
         {!p.job_titles.length && <p className="text-xs text-muted-foreground">Add at least one job title.</p>}
-        <Button onClick={() => save.mutate(p, { onSuccess: () => { toast.success("Preferences saved. Your feed just got a vibe check."); onSaved?.(); }, onError: (e) => toast.error(errorMessage(e)) })}
+        <Button onClick={() => save.mutate(p, { onSuccess: () => { setSavedAt(Date.now()); toast.success("Preferences saved. Your feed just got a vibe check."); onSaved?.(); }, onError: (e) => toast.error(errorMessage(e)) })}
                 disabled={save.isPending || !p.job_titles.length}>
           {save.isPending && <Loader2 className="animate-spin" />} {submitLabel}
         </Button>

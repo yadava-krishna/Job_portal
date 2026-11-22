@@ -15,6 +15,7 @@ import type {
   ApplyOptions,
   HandoffOut,
   MemoryAnswer,
+  AnswerConflict,
   PackageOut,
   WorkspaceAnswerInput,
   ExtensionDevice,
@@ -237,6 +238,9 @@ export function useSaveProfile() {
     onSuccess: (data) => {
       qc.setQueryData(qk.profile, data);
       void qc.invalidateQueries({ queryKey: qk.onboarding });
+      // A profile change can make saved answers and prepared applications out of date.
+      void qc.invalidateQueries({ queryKey: ["answer-conflicts"] });
+      void qc.invalidateQueries({ queryKey: ["apply-package"] });
       setTimeout(() => void qc.invalidateQueries({ queryKey: ["jobs"] }), 1500);
     },
   });
@@ -265,6 +269,26 @@ export function useSaveFacts() {
   });
 }
 
+export interface RescoreStatus { requested_at: string | null; rescored_at: string | null; pending: boolean }
+
+/** Match-score refresh after a preference or profile change. Polls only while a refresh is pending. */
+export const useRescoreStatus = (watch: boolean) =>
+  useQuery({
+    queryKey: ["rescore-status"],
+    queryFn: async () => (await api.get<RescoreStatus>("/preferences/rescore")).data,
+    enabled: watch,
+    staleTime: 0,
+    refetchInterval: (q) => (q.state.data?.pending ? 1500 : false),
+  });
+
+export function useRetryRescore() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<RescoreStatus>("/preferences/rescore")).data,
+    onSuccess: (data) => qc.setQueryData(["rescore-status"], data),
+  });
+}
+
 export function useSavePreferences() {
   const qc = useQueryClient();
   return useMutation({
@@ -273,6 +297,7 @@ export function useSavePreferences() {
       qc.setQueryData(qk.preferences, data);
       void qc.invalidateQueries({ queryKey: qk.onboarding });
       void qc.invalidateQueries({ queryKey: qk.links });
+      void qc.invalidateQueries({ queryKey: ["rescore-status"] });
       setTimeout(() => void qc.invalidateQueries({ queryKey: ["jobs"] }), 1500);
     },
   });
@@ -556,18 +581,22 @@ export const useAnswerMemory = (reveal = false, enabled = true) =>
     ...(reveal ? { staleTime: 0, gcTime: 30_000 } : {}),
   });
 
+/** Saved answers that disagree with the confirmed profile (refreshed whenever answers or the profile change). */
+export const useAnswerConflicts = (enabled = true) =>
+  useQuery({ queryKey: ["answer-conflicts"], queryFn: async () => (await api.get<AnswerConflict[]>("/answers/conflicts")).data, enabled });
+
 export const useAnswerCatalogue = () =>
   useQuery({ queryKey: ["answer-catalogue"], queryFn: async () => (await api.get<AnswerCatalogueEntry[]>("/answers/catalogue")).data, staleTime: 3_600_000 });
 
 function useInvalidateMemory() {
   const qc = useQueryClient();
-  return () => Promise.all([["answer-memory"], qk.profile, ["apply-package"]].map((k) => qc.invalidateQueries({ queryKey: k })));
+  return () => Promise.all([["answer-memory"], ["answer-conflicts"], qk.profile, ["apply-package"]].map((k) => qc.invalidateQueries({ queryKey: k })));
 }
 
 export function useSaveMemoryAnswer() {
   const invalidate = useInvalidateMemory();
   return useMutation({
-    mutationFn: async (body: { question?: string; answer: string; key?: string }) => (await api.put<MemoryAnswer>("/answers/memory", body)).data,
+    mutationFn: async (body: { question?: string; answer: string; key?: string; scope_ref?: string }) => (await api.put<MemoryAnswer>("/answers/memory", body)).data,
     onSuccess: () => void invalidate(),
   });
 }

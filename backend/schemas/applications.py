@@ -61,6 +61,9 @@ class ApplicationOut(BaseModel):
     opened_at: datetime | None
     submitted_at: datetime | None
     submission_method: str | None = None
+    # Evidence the application reached the employer: employer_confirmed | receipt_confirmed | user_reported | None.
+    confirmation_type: str | None = None
+    confirmation_type_label: str | None = None
     follow_up_at: datetime | None = None
     application_route: str = "ROUTE_D_EXTERNAL_MANUAL"
     tailored_resume_id: int | None = None
@@ -164,6 +167,8 @@ class MemoryAnswerIn(BaseModel):
     question: str = Field(default="", max_length=500)
     answer: str = Field(min_length=1, max_length=2000)
     key: str | None = Field(default=None, max_length=120)
+    # Edit an existing employer- or job-specific answer ("company:<name>" / "job:<id>"). Never creates a new scope.
+    scope_ref: str | None = Field(default=None, max_length=200, pattern=r"^(company:.+|job:[0-9]+)$")
 
 
 class ClassifyIn(BaseModel):

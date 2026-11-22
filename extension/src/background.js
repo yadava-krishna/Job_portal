@@ -176,7 +176,7 @@ async function fill({ tabId, frameId, overwrite, userJobId, applicationId, resum
   }
   // Answers in context: with the application, the server adds employer-specific answers and this application's own.
   const answers = {};
-  if (questions.length) for (const a of await jobpilot.answers(questions, session.applicationId || null)) answers[a.question] = a;
+  if (questions.length) for (const a of await jobpilot.answers(questions, session.applicationId || null, detect.requirements || {})) answers[a.question] = a;
   await putSession(session);
   if (session.applicationId) await recordState(session, "filling", { mode: session.mode || (detect.assistedSubmit ? "assisted_submit" : "autofill_review"),
                                                                      info: { step: detect.step?.title || null } }).catch(() => null);

@@ -29,6 +29,14 @@ permission for the server or for `*.ngrok-free.app` is needed.
 - **Revocation:** *Disconnect* in JobPilot Settings or in the extension revokes it immediately. The server checks
   every request (hash lookup, not revoked, not expired, user active, scope).
 - **Audit:** pair, rotate, revoke and resume-download events are written to the audit log, without any secrets.
+- **Server identity check (anti-relay):** the server address is published in `config.json`. Before the credential
+  goes to an address the extension has not used, that server must answer `POST /extension/prove` with
+  HMAC-SHA256(key = SHA-256(credential), `jobpilot-prove:v2:<host>:<nonce>`), where `<host>` is the address the
+  extension is about to call. Only the issuing server holds SHA-256(credential), and it signs only its own host
+  (`EXTENSION_API_HOSTS` if set, otherwise the Host the request arrived on). A tampered address that relays the
+  challenge to the real server gets either a refusal or a proof naming the real host, which the extension rejects.
+  The old host-less proof (extension 2.2.0 and earlier) could be relayed, so the server refuses it with 410 unless
+  `EXTENSION_PROVE_LEGACY=true`. Extensions already connected keep working with the address they verified.
 - **Where it is kept:** the extension's own IndexedDB (origin `chrome-extension://…`), used only by the service
   worker. Content scripts run in employer pages and cannot open that database. The credential is never put into a
   page, a URL, a DOM attribute or `chrome.storage`. The end-to-end test checks that the page's HTML, globals and

@@ -23,13 +23,20 @@ def list_memory(user: CurrentUser, db: DbSession, settings: SettingsDep, reveal:
 @router.put("/memory")
 def put_memory(body: MemoryAnswerIn, user: CurrentUser, db: DbSession, settings: SettingsDep) -> dict[str, Any]:
     """Save or correct one answer (by canonical key, or by the question's wording). Validated; sensitive questions refused."""
-    row = answer_memory.save(db, settings, user, question=body.question or "", answer=body.answer, key=body.key or None, source="settings")
+    row = answer_memory.save(db, settings, user, question=body.question or "", answer=body.answer, key=body.key or None, source="settings",
+                             scope_ref=body.scope_ref or None)
     return next(r for r in answer_memory.listing(db, settings, user, reveal=True) if r["key"] == row.key and r["scope_ref"] == row.scope_ref)
 
 
 @router.delete("/memory/{key}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_memory(key: str, user: CurrentUser, db: DbSession, scope_ref: str = "") -> None:
     answer_memory.forget(db, user, key, scope_ref)
+
+
+@router.get("/conflicts")
+def conflicts(user: CurrentUser, db: DbSession, settings: SettingsDep) -> list[dict[str, Any]]:
+    """Remembered answers that disagree with your confirmed profile (e.g. after you changed jobs or moved)."""
+    return answer_memory.profile_conflicts(db, settings, user)
 
 
 @router.get("/catalogue")

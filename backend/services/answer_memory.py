@@ -184,7 +184,7 @@ _EXP_FILLER = {
     "as", "a", "an", "the", "your", "what", "is", "are", "number", "please", "enter", "specify", "state", "mention", "industry",
     "practical", "commercial", "combined", "approximately", "approx", "including", "excluding", "internship", "internships",
     "relevant", "related", "development", "developing", "field", "domain", "area", "and", "or", "at", "least", "minimum", "full-time",
-    "full", "time", "paid", "post", "qualification", "do", "does", "s", "'s", "worth", "level", "role", "roles", "position", "positions",
+    "full", "time", "paid", "post", "qualification", "graduation", "graduating", "after", "since", "degree", "qualifying", "post-qualification", "post-graduation", "do", "does", "s", "'s", "worth", "level", "role", "roles", "position", "positions",
 }
 
 
@@ -239,7 +239,9 @@ def classify(question: str, *, page_country: str | None = None) -> Match:
     exp_q = re.search(r"\bexperience\b|\byoe\b|\byears? (of )?(working|work)\b|\byears? working\b", q)
     if exp_q and not re.search(r"\b(describe|tell us|explain|share|why|example|summar)\w*\b", q):
         asks_years = bool(re.search(r"\b(how many|number of|years?|yrs|yoe|total|overall)\b|\binclud\w* internships?\b", q))
-        incl = "incl_internships" if re.search(r"\binclud\w* internships?\b|\binternships? included\b", q) else None
+        incl = ("incl_internships" if re.search(r"\binclud\w* internships?\b|\binternships? included\b", q) else
+                "post_qualification" if re.search(r"\bpost[ -]?(qualification|graduation|degree)\b|\bafter (your )?(graduation|graduating|degree|qualifying|qualification)\b|\bsince (graduation|graduating)\b", q)
+                else None)
         relevant = bool(re.search(r"\b(relevant|related)\b", q))
         subj, n = _subject(q)
         if relevant:
@@ -249,8 +251,10 @@ def classify(question: str, *, page_country: str | None = None) -> Match:
             subject = subj or "total"
             conf = 0.9 if n <= 3 else 0.55
             key = f"experience_years.{_slug(subject)}" + (f".{incl}" if incl else "")
+            if incl == "post_qualification" and subject in ("after graduation", "graduation", "after graduating", "since graduation"):
+                subject, key = "total", "experience_years.total.post_qualification"
             label = ("Total experience (years)" if subject == "total" else f"{subject.title()} experience (years)") + \
-                    (", including internships" if incl else "")
+                    {"incl_internships": ", including internships", "post_qualification": ", after your qualification"}.get(incl or "", "")
             return Match(key, EXPERIENCE, conf, subject=subject, qualifier=incl, label=label)
         if subj and n <= 3 and re.search(r"\b(do you have|have you|any)\b", q):
             return Match(f"has_experience.{_slug(subj)}", HAS_EXPERIENCE, 0.85, subject=subj, label=f"Experience with {subj}")
@@ -448,8 +452,11 @@ def _is_stale(row: AnswerMemory) -> bool:
 
 
 def save(db: Session, settings, user: User, *, question: str, answer: Any, key: str | None = None, company: str | None = None,
-         job_id: int | None = None, source: str = "user_confirmed", commit: bool = True, mirror: bool = True) -> AnswerMemory:
-    """Remember an answer the user explicitly confirmed. Validates type and unit; refuses sensitive questions."""
+         job_id: int | None = None, source: str = "user_confirmed", commit: bool = True, mirror: bool = True,
+         scope_ref: str | None = None) -> AnswerMemory:
+    """Remember an answer the user explicitly confirmed. Validates type and unit; refuses sensitive questions.
+
+    `scope_ref` edits an employer- or job-specific answer that already exists (Settings): it never creates a new scope."""
     m = classify(question) if key is None else _match_for_key(key, question)
     if m.never:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, m.reason or "JobPilot never stores answers to sensitive questions.")
@@ -461,7 +468,12 @@ def save(db: Session, settings, user: User, *, question: str, answer: Any, key: 
         value, shown = parse(canon.value_type, answer)
     except InvalidAnswer as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from None
-    scope_ref = _scope_ref(m.scope, company, job_id)
+    if scope_ref:
+        if not db.execute(select(AnswerMemory.id).where(AnswerMemory.user_id == user.id, AnswerMemory.key == m.key,
+                                                         AnswerMemory.scope_ref == scope_ref)).first():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No remembered answer for that employer.")
+    else:
+        scope_ref = _scope_ref(m.scope, company, job_id)
     if m.scope != "global" and not scope_ref:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "This answer belongs to one employer or job; open it from that job.")
     sensitivity = "private" if (canon.sensitivity == "private" or m.key.startswith(("work_authorization", "requires_sponsorship"))) else canon.sensitivity
@@ -488,7 +500,7 @@ def save(db: Session, settings, user: User, *, question: str, answer: Any, key: 
     entry = {"at": now.isoformat(), "source": source, "question": (question or "")[:200],
              ("value_encrypted" if sensitivity == "private" else "value"): stored_display}
     row.history = ([entry] + list(row.history or []))[:20]
-    if mirror:
+    if mirror and not scope_ref:  # an answer for one employer never changes the general one in Settings
         _mirror_fact(db, user, m.key, value, shown)
     from backend.services import platform_service
 
@@ -581,7 +593,9 @@ def listing(db: Session, settings, user: User, *, reveal: bool = False) -> list[
             except (ValueError, AttributeError):
                 shown = None
         canon = BY_KEY.get(r.key.split(".")[0])
-        out.append({"key": r.key, "scope_ref": r.scope_ref, "label": r.label, "answer": shown, "masked": private and not reveal,
+        scope_kind, scope_name = scope_of(db, user, r.scope_ref)
+        out.append({"key": r.key, "scope_ref": r.scope_ref, "scope_kind": scope_kind, "scope_name": scope_name,
+                    "reusable": scope_kind == "global", "label": r.label, "answer": shown, "masked": private and not reveal,
                     "value_type": r.value_type, "unit": r.unit, "sensitivity": r.sensitivity, "source": r.source, "status": r.status,
                     "stale": _is_stale(r), "question": r.question_text, "last_confirmed_at": r.last_confirmed_at,
                     "revalidate_days": r.revalidate_days, "group": canon.group if canon else ("professional" if r.key.startswith(("experience_years", "has_experience")) else "other"),
@@ -589,6 +603,51 @@ def listing(db: Session, settings, user: User, *, reveal: bool = False) -> list[
                                  "answer": h.get("value") if "value" in h else ("(hidden)" if not reveal else _decrypt_history(h, settings))}
                                 for h in (r.history or [])]})
     return out
+
+
+def scope_of(db: Session, user: User, scope_ref: str) -> tuple[str, str | None]:
+    """("global", None) | ("company", "<employer>") | ("job", "<title at company>") for a stored scope_ref."""
+    if not scope_ref:
+        return "global", None
+    kind, _, ref = scope_ref.partition(":")
+    if kind == "company":
+        return "company", ref.title() if ref else None
+    if kind == "job" and ref.isdigit():
+        from backend.models import Job, UserJob
+
+        job = db.get(Job, int(ref))
+        owned = job is not None and db.execute(select(UserJob.id).where(UserJob.user_id == user.id, UserJob.job_id == job.id)).first()
+        return "job", (f"{job.title} at {job.company}" if owned else None)
+    return kind or "global", None
+
+
+def same_value(a: Any, b: Any) -> bool:
+    """Loose equality for profile-vs-answer checks: case, spacing, punctuation and URL scheme don't matter."""
+    def n(v: Any) -> str:
+        t = re.sub(r"^https?://(www\.)?", "", str(v or "").strip().lower()).rstrip("/")
+        return re.sub(r"[^a-z0-9@+]+", " ", t).strip()
+    return n(a) == n(b)
+
+
+def profile_conflicts(db: Session, settings, user: User) -> list[dict[str, Any]]:
+    """Remembered general answers that now disagree with the confirmed profile (e.g. a new current employer)."""
+    profile = _profile_values(db, user)
+    prof = db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id)).scalar_one_or_none()
+    out = []
+    for r in rows_for(db, user).values():
+        c = BY_KEY.get(r.key)
+        if c is None or not c.profile_key or r.scope_ref or r.sensitivity == "private":
+            continue
+        pv, mv = profile.get(c.profile_key), display_of(r, settings)
+        if pv in (None, "") or mv in (None, "") or same_value(pv, mv):
+            continue
+        newer_profile = bool(prof and prof.confirmed_at and r.last_confirmed_at and _aware(prof.confirmed_at) > _aware(r.last_confirmed_at))
+        out.append({"key": r.key, "label": r.label, "saved": mv, "profile": str(pv), "used": "ask" if newer_profile else "saved"})
+    return out
+
+
+def _aware(t):
+    return t if t.tzinfo else t.replace(tzinfo=utcnow().tzinfo)
 
 
 def _decrypt_history(h: dict[str, Any], settings) -> str | None:
@@ -625,6 +684,8 @@ def resolve(db: Session, settings, user: User, questions: list[str], *, company:
     pc = page_country(questions) or (cc if cc in COUNTRY_NAMES else None)
     profile = _profile_values(db, user)
     facts = _facts(db, user)
+    _prof = db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id)).scalar_one_or_none()
+    profile_confirmed_at = _prof.confirmed_at if _prof else None
     legacy_needed: list[str] = []
     out: list[dict[str, Any]] = []
     for q in questions:
@@ -662,6 +723,19 @@ def resolve(db: Session, settings, user: User, questions: list[str], *, company:
                             status="VERIFIED" if trusted and not stale else "SUGGESTED",
                             reason=(f"You confirmed this on {scoped.last_confirmed_at:%d %b %Y}. Check it's still right." if stale else
                                     None if trusted else "The question is worded differently from the one you answered. Check it fits."))
+                pk = m.canon.profile_key if m.canon else None
+                pv = profile.get(pk) if pk and not scoped.scope_ref else None
+                if pv not in (None, "") and not same_value(pv, shown):
+                    # Two of the user's own confirmations disagree. The newer one is used; an older saved answer is only
+                    # offered, so nothing outdated is filled without a look.
+                    newer_profile = bool(profile_confirmed_at and scoped.last_confirmed_at
+                                         and _aware(profile_confirmed_at) > _aware(scoped.last_confirmed_at))
+                    item["conflict"] = {"saved": shown, "profile": str(pv), "used": "ask" if newer_profile else "saved"}
+                    if newer_profile:
+                        item.update(status="SUGGESTED", reason=f"Your saved answer is older than your profile, which now says "
+                                                               f"\u201c{pv}\u201d. Pick the one that's right.")
+                    else:
+                        item["notes"] = [*item["notes"], f"Your profile says \u201c{pv}\u201d; your saved answer is newer, so it is used."]
                 out.append(item)
                 continue
         if m.key is None or m.scope != "global":

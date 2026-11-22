@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -82,6 +82,8 @@ class AutofillOut(BaseModel):
 class AnswersRequest(BaseModel):
     questions: list[str] = Field(max_length=60)
     application_id: int | None = None  # gives the employer context (company-only answers, this application's answers)
+    # What the employer's form marks: {label: "required" | "optional"}. Labels not listed are unknown (never optional).
+    requirements: dict[str, Literal["required", "optional"]] = Field(default_factory=dict, max_length=120)
 
     @field_validator("questions")
     @classmethod
@@ -124,6 +126,9 @@ class LearnOut(BaseModel):
 class ProveRequest(BaseModel):
     token_id: int
     nonce: str = Field(min_length=32, max_length=128, pattern=r"^[0-9a-f]+$")
+    # v2: the proof also names the host the extension is about to send its credential to (anti-relay).
+    v: int = Field(default=1, ge=1, le=2)
+    host: str | None = Field(default=None, max_length=255, pattern=r"^[a-z0-9.-]+(:[0-9]{1,5})?$")
 
 
 class ProveOut(BaseModel):

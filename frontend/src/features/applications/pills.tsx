@@ -60,3 +60,17 @@ export function ApplyStatePill({ state, label, className }: { state: string | nu
     </span>
   );
 }
+
+/** How we know a submitted application reached the employer. Only employer/receipt evidence gets the confirmed tone. */
+export function EvidencePill({ app, className }: { app: Pick<Application, "confirmation_type" | "confirmation_type_label">; className?: string }) {
+  const t = app.confirmation_type;
+  if (!t) return null;
+  const text = app.confirmation_type_label || (t === "employer_confirmed" ? "Confirmed by the employer's page" : t === "receipt_confirmed" ? "Receipt e-mail found" : "You told JobPilot (not verified)");
+  const tone = t === "user_reported" ? "bg-paper-sunk text-muted-foreground ring-border" : "bg-success-tint text-success ring-success/20";
+  return (
+    <span data-testid="evidence-pill" className={cn(pill, tone, className)}
+          title={t === "user_reported" ? "You marked this as applied. JobPilot has not seen a confirmation from the employer." : "JobPilot saw independent evidence that the employer received it."}>
+      {text}
+    </span>
+  );
+}

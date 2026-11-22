@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Bell, KeyRound, ListChecks, Mail, Plug, Puzzle, Shield, SlidersHorizontal, Target, UserRound } from "lucide-react";
+import { Bell, Cable, KeyRound, ListChecks, Mail, Plug, Puzzle, Shield, SlidersHorizontal, Target, UserRound } from "lucide-react";
 
 export interface SettingsSectionDef {
   /** The `?tab=` value. Deep links (the extension, in-app links, ⌘K) rely on these keys: don't rename them. */
@@ -31,6 +31,8 @@ export const SETTINGS_GROUPS: SettingsGroupDef[] = [
         description: "The roles, places and pay you're after, and how strict matching should be." },
       { key: "platforms", label: "Platforms", icon: Plug,
         description: "Which job sites JobPilot looks at, and how jobs from each one reach you." },
+      { key: "portals", label: "Portal Connections", icon: Cable,
+        description: "What JobPilot can and can't do with LinkedIn, Naukri and Indeed, and a checklist to sharpen your profile there." },
     ],
   },
   {

@@ -567,7 +567,7 @@ function SmartApplyProgress({ state, label, platform }: { state: string | null |
   );
 }
 
-const EXT_ZIP = `${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.2.0.zip`;
+const EXT_ZIP = `${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.3.0.zip`;
 
 /** Where Smart Apply stands in this browser, and the one next step to make one-click applying work. */
 function SmartApplyCard({ message, smart, ext, onClose }: { message: string; smart: boolean; ext: SmartApplyStatus | null | undefined; onClose: () => void }) {

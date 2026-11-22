@@ -56,12 +56,29 @@ def audit(db: Session, user: User, action: str, ip: str | None, token: Extension
                     target_id=str(token.id) if token and token.id else None, ip=ip, details=details))
 
 
-def prove(db: Session, token_id: int, nonce: str) -> str:
-    """HMAC-SHA256(key = stored hash of the device credential, msg = "jobpilot-prove:" + nonce).
+def prove_host(settings, claimed: str | None, request_host: str | None) -> str:
+    """The host this server agrees to sign for: the one the extension names, only if it is this server.
+
+    A relay attack: a tampered config.json points the extension at evil.example, which forwards the challenge here.
+    The extension names evil.example, and this server refuses to sign a host that is not its own. If the relay names
+    our host instead, the proof is for our host and the extension (expecting evil.example) rejects it. With
+    EXTENSION_API_HOSTS set, only those hosts are signed; otherwise the Host header the request arrived on (behind
+    ngrok, the public tunnel domain: a relay cannot reach the tunnel under another name)."""
+    claimed = (claimed or "").strip().lower()
+    own = settings.extension_api_hosts or [(request_host or "").strip().lower()]
+    if not claimed or claimed not in own:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown connection.")
+    return claimed
+
+
+def prove(db: Session, token_id: int, nonce: str, *, host: str | None = None) -> str:
+    """HMAC-SHA256(key = stored hash of the device credential, msg = "jobpilot-prove:v2:<host>:" + nonce), or the legacy
+    host-less "jobpilot-prove:" + nonce when `host` is None.
 
     Only the server that issued the credential holds its hash; the extension can compute the same hash from the
     credential it holds. So a server address published by someone else cannot answer, and the credential is never sent
-    to it. Unknown, revoked, expired or non-device tokens answer 404."""
+    to it. Naming the host stops that server relaying the challenge to the real one (see prove_host). Unknown,
+    revoked, expired or non-device tokens answer 404."""
     import hashlib
     import hmac
 
@@ -69,7 +86,8 @@ def prove(db: Session, token_id: int, nonce: str) -> str:
     now = utcnow()
     if row is None or row.revoked_at is not None or SCOPE_PAIR in (row.scopes or []) or (row.expires_at and _aware(row.expires_at) <= now):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown connection.")
-    return hmac.new(bytes.fromhex(row.token_hash), f"jobpilot-prove:{nonce}".encode(), hashlib.sha256).hexdigest()
+    msg = f"jobpilot-prove:{nonce}" if host is None else f"jobpilot-prove:v2:{host}:{nonce}"
+    return hmac.new(bytes.fromhex(row.token_hash), msg.encode(), hashlib.sha256).hexdigest()
 
 
 # ---- pairing --------------------------------------------------------------------------------

@@ -14,7 +14,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import JSONResponse
 
 from backend.api.deps import is_local_request
-from backend.api.routes import admin, applications, auth, discovery, extension, health, tracker, jobs, profile, reports, resumes, career, growth, studio, dashboard, catalogue, answers
+from backend.api.routes import admin, applications, auth, discovery, extension, health, tracker, jobs, profile, reports, resumes, career, growth, studio, dashboard, catalogue, answers, portals
 from backend.config import VERSION, get_settings
 from backend.db import Base, get_engine, init_engine
 from backend.services.scheduler_service import get_scheduler
@@ -105,7 +105,7 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
 
     for r in (health.router, auth.router, profile.router, jobs.router, applications.router, reports.router,
               discovery.companies, discovery.searches, discovery.notifications, discovery.health, extension.router, tracker.router,
-              admin.router, resumes.router, career.router, studio.router, growth.router, dashboard.router, catalogue.router, answers.router):
+              admin.router, resumes.router, career.router, studio.router, growth.router, dashboard.router, catalogue.router, answers.router, portals.router):
         app.include_router(r, prefix=API_PREFIX)
 
     @app.get("/api/health", include_in_schema=False)

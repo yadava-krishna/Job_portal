@@ -26,6 +26,8 @@
       url: location.href, platform: a.name, title: a.jobTitle?.() || null, company: a.company?.() || null,
       fields: qs.filter((q) => q.kind !== "file").length,
       questions: qs.filter((q) => q.kind !== "file" && q.label).filter((q) => { const c = keyFor(a, q); return !c.never && !(c.key && c.confidence >= 0.4); }).map((q) => q.label),
+      // What the form itself says about each question: required | optional (anything else is unknown, never optional).
+      requirements: Object.fromEntries(qs.filter((q) => q.kind !== "file" && q.label && q.requirement !== "unknown").map((q) => [q.label, q.requirement])),
       resumeField: Boolean(a.resumeInput?.()), resumeAttached: Boolean(a.hasResume?.()), resumeFirst: Boolean(a.resumeFirst),
       assistedSubmit: Boolean(a.assistedSubmit), step: a.step?.() || null, confirmation: JP.submit.confirmation(a),
     };

@@ -43,11 +43,24 @@ JobPilot walks you through five short steps:
 Go to **Settings**. The more you fill in, the more JobPilot can help.
 
 - **Resume & profile:**
+  - After you upload a resume, check what JobPilot read from it. Nothing is used until you click **Save**. Labels next
+    to each detail tell you what needs a look: **From resume** (check it), **Missing** (add it yourself),
+    **Resume differs** (a newer resume says something else) and **Check again** (you confirmed it a long time ago).
+  - Uploading a new resume never changes your saved profile by itself. Where it differs, you see what the new
+    resume says, with **Use this** or **Add** buttons. Take what's right, then save.
   - Add your **LinkedIn, GitHub, portfolio or personal website** links if you have them.
   - Keep **different versions of your resume** (for example one for finance roles, one for operations roles) and
     choose which one is your **default**. You can preview, download, rename or delete versions.
-- **Job preferences:** change the jobs, places and salary you are looking for at any time.
-- **Verified answers:** application forms often ask the same questions. Answer them once here: expected salary,
+- **Job preferences:** change the jobs, places and salary you are looking for at any time. You can also open them
+  from **Jobs**, with the **Preferences** button at the top. After you save, JobPilot updates your match scores; a
+  short note tells you when the new scores are ready.
+- **Portal Connections:** shows what JobPilot can and can't do with LinkedIn, Naukri and Indeed. JobPilot never signs
+  in to these sites. For LinkedIn and Naukri, **Optimize profile** gives a checklist for your profile there, made
+  only from details you already confirmed, with text you can copy. Tick **Mark done** as you finish each item.
+- **Verified answers:** answers you saved for one employer are marked **Only for** that employer, and you can
+  edit them here too. **Still right** confirms an answer that's due for a check. If a saved answer differs from
+  your profile (for example after you changed jobs), it is marked, and JobPilot asks you which one to use.
+- **Verified answers (continued):** application forms often ask the same questions. Answer them once here: expected salary,
   current salary (optional), notice period, when you can start, whether you can work in India or need a visa, and
   whether you can relocate.
   - You can also save **your own answers** to questions you are asked often, for example "Are you comfortable
@@ -147,6 +160,9 @@ Open **Applications**:
   Drag a card to another column, or use the **Move to stage** menu on the card (this also works from the keyboard).
   Each card shows how long ago you applied, and an amber **Follow-up due** note when your reminder date has arrived.
 - **Pending:** applications you started but haven't confirmed yet. Click **Continue** to finish.
+
+Each applied job also says how JobPilot knows you applied: **Confirmed by the employer's page**, **Receipt e-mail
+found**, or **You told JobPilot (not verified)** when you marked it applied yourself.
 
 Click any application to see when you applied, how you applied, its reference number and its full history, written
 in plain words (for example "Moved to Interview"). You can also add **notes** and a **follow-up date** to remind

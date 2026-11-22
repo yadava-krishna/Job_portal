@@ -199,6 +199,8 @@ def parse_active_resume(db: Session, settings: BackendSettings, user: User) -> C
     except ResumeParseError as exc:
         raise HTTPException(422, str(exc)) from None
     parsed["resume"]["path"] = f"resume:{resume.id}"  # never expose server paths to clients
+    parsed["parsed_at"] = utcnow().isoformat()  # provenance: when these values were read (reviewed against confirmed_at)
+    parsed["resume_id"] = resume.id
     prof = get_or_create_profile(db, user)
     prof.parsed_profile = parsed
     prof.experience_months = parsed["total_experience"]["months"]
@@ -332,3 +334,98 @@ def facts_with_provenance(old: dict, new: dict) -> dict:
     out["custom_answers"] = answers
     out["_updated"] = meta
     return out
+
+
+# ---- profile review: what the resume says vs what the user confirmed ---------------------------------------------
+
+STALE_AFTER_DAYS = 180
+_SCALARS = (("full_name", "Full name", "personal"), ("email", "Email", "contact"), ("phone", "Phone", "contact"),
+            ("location", "Location", "contact"), ("headline", "Headline", "personal"), ("summary", "Professional summary", "personal"),
+            ("linkedin_url", "LinkedIn", "links"))
+_LISTS = (("skills", "Skills", "skills"), ("experience", "Employment history", "experience"), ("education", "Education", "education"),
+          ("certifications", "Certifications", "certifications"), ("projects", "Projects", "projects"))
+_REQUIRED = {"full_name", "email", "phone", "location", "skills"}
+
+
+def _norm(v: Any) -> str:
+    return re.sub(r"[^a-z0-9@+]+", " ", str(v or "").lower()).strip()
+
+
+def _item_key(kind: str, item: Any) -> str:
+    if kind == "experience":
+        return _norm(f"{item.get('title')} {item.get('company')}")
+    if kind == "education":
+        return _norm(f"{item.get('degree')} {item.get('institution') or item.get('university')}")
+    if kind == "projects":
+        return _norm(item.get("name"))
+    return _norm(item)
+
+
+def _when(v: Any):
+    from datetime import datetime
+
+    if not v:
+        return None
+    try:
+        t = v if isinstance(v, datetime) else datetime.fromisoformat(str(v))
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=utcnow().tzinfo)
+
+
+def profile_review(prof: CandidateProfile | None) -> dict[str, Any] | None:
+    """Every important field, marked extracted / confirmed / missing / conflict / stale. Nothing is ever confirmed by
+    parsing: `confirmed` only holds what the user saved. A resume read after the last confirmation can only *propose*
+    changes (conflict), never overwrite. Profiles parsed before this check existed have no parse time and are not
+    flagged, so existing users are not sent through a review they already did."""
+    if prof is None or not (prof.parsed_profile or prof.confirmed_profile):
+        return None
+    parsed = editable_from_parsed(prof.parsed_profile).model_dump(mode="json") if prof.parsed_profile else {}
+    confirmed = prof.confirmed_profile or None
+    parsed_at = _when((prof.parsed_profile or {}).get("parsed_at"))
+    confirmed_at = _when(prof.confirmed_at)
+    newer_parse = bool(parsed and confirmed and parsed_at and confirmed_at and parsed_at > confirmed_at)
+    old = bool(confirmed_at and (utcnow() - confirmed_at).days > STALE_AFTER_DAYS)
+    fields: list[dict[str, Any]] = []
+    for key, label, group in _SCALARS:
+        pv, cv = parsed.get(key), (confirmed or {}).get(key)
+        f = {"key": key, "label": label, "group": group, "extracted": pv or None, "confirmed": cv or None}
+        if confirmed is None:
+            f["state"] = "extracted" if pv else ("missing" if key in _REQUIRED else "empty")
+            if not pv and key in _REQUIRED:
+                f["detail"] = "Not found on your resume. Add it yourself."
+        elif newer_parse and pv and _norm(pv) != _norm(cv):
+            f["state"] = "conflict"
+            f["detail"] = "Your new resume says something different. Keep yours or use the resume's."
+        elif not cv:
+            f["state"] = "missing" if key in _REQUIRED else "empty"
+        elif old and key == "location":
+            f["state"], f["detail"] = "stale", f"Confirmed over {STALE_AFTER_DAYS // 30} months ago. Still where you are?"
+        else:
+            f["state"] = "confirmed"
+        fields.append(f)
+    for key, label, group in _LISTS:
+        pv, cv = parsed.get(key) or [], (confirmed or {}).get(key) or []
+        have = {_item_key(key, i) for i in cv}
+        added = [i for i in pv if _item_key(key, i) and _item_key(key, i) not in have]
+        f = {"key": key, "label": label, "group": group, "confirmed": len(cv), "extracted": None}
+        if confirmed is None:
+            f["state"] = "extracted" if pv else ("missing" if key in _REQUIRED else "empty")
+            f["extracted"] = len(pv)
+            if key == "experience":
+                undated = sum(1 for r in pv if not r.get("start"))
+                if undated:
+                    f["detail"] = f"{undated} role{'s' if undated != 1 else ''} without a start date: add {'them' if undated != 1 else 'it'} so experience adds up."
+        elif newer_parse and added:
+            f["state"], f["extracted"] = "conflict", added[:20]
+            f["detail"] = f"Your new resume adds {len(added)} {label.lower() if len(added) != 1 else label.lower().rstrip('s')} not in your profile."
+        elif not cv:
+            f["state"] = "missing" if key in _REQUIRED else "empty"
+        elif old and key == "experience" and any(r.get("is_current") for r in cv):
+            f["state"], f["detail"] = "stale", "Your current role was confirmed a while ago. Still there?"
+        else:
+            f["state"] = "confirmed"
+        fields.append(f)
+    pending = sum(1 for f in fields if f["state"] in ("extracted", "missing", "conflict", "stale"))
+    status_ = "unconfirmed" if confirmed is None else ("needs_review" if any(f["state"] in ("conflict", "stale") for f in fields) else "confirmed")
+    return {"status": status_, "parsed_at": parsed_at, "confirmed_at": confirmed_at, "pending": pending, "fields": fields}

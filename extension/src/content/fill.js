@@ -14,9 +14,11 @@
 //    only elements clicked are radio/checkbox inputs, listbox options and type="button" choice buttons.
 //  * answers the server marks sensitivity "never" are never filled ("Answer this yourself"); stale answers are only
 //    suggestions for review, never silently verified;
-//  * a date picker (<input type=date>) is filled only with an ISO date (YYYY-MM-DD), otherwise left to the user;
-//  * the prepared cover letter goes only into a text box labelled "cover letter", as a suggestion to review (cover
-//    letter file uploads are never touched).
+//  * a date picker (<input type=date>) takes only an ISO date (YYYY-MM-DD). A saved date in another unambiguous form
+//    ("5 March 2026", "March 5, 2026", "2026/03/05", "25-12-2026") is converted; an ambiguous one ("03/04/2026": March
+//    or April?) or a non-date ("immediately", "2 weeks") is never guessed and is left to the user;
+//  * the prepared cover letter goes only into a text box labelled "cover letter" (or the site's own cover-letter box,
+//    e.g. Greenhouse's "Enter manually"), as a suggestion to review (cover letter file uploads are never touched).
 // Every value JobPilot writes is remembered with its source, so the review shows where each answer came from.
 (() => {
   const JP = (globalThis.__jobpilot ??= { adapters: {} });
@@ -41,6 +43,30 @@
   const CONFIRM_LABEL = /\b(salary|ctc|compensation|notice period|authori[sz]|sponsor|visa|relocat|start date|joining)\b/;
   const COVER_LETTER = /^(your )?cover (letter|note)\b|\bcover letter$/;
   const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+  /** An ISO date (YYYY-MM-DD) for a value that can only mean one date, else null. Never guesses day/month order. */
+  function isoDate(raw) {
+    const v = String(raw || "").trim().toLowerCase().replace(/(\d)(st|nd|rd|th)\b/g, "$1").replace(/,/g, " ").replace(/\s+/g, " ");
+    const ok = (y, m, d) => {
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
+        ? `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}` : null;
+    };
+    let m;
+    if ((m = v.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/))) return ok(+m[1], +m[2], +m[3]);
+    const mon = (t) => { const i = MONTHS.indexOf(t.slice(0, 3)); return i >= 0 && /^[a-z]+$/.test(t) ? i + 1 : 0; };
+    if ((m = v.match(/^(\d{1,2}) ([a-z]+) (\d{4})$/)) && mon(m[2])) return ok(+m[3], mon(m[2]), +m[1]);
+    if ((m = v.match(/^([a-z]+) (\d{1,2}) (\d{4})$/)) && mon(m[1])) return ok(+m[3], mon(m[1]), +m[2]);
+    if ((m = v.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/))) {
+      const a = +m[1], b = +m[2], y = +m[3];
+      if (a > 12 && b <= 12) return ok(y, b, a);  // 25-12-2026: day first
+      if (b > 12 && a <= 12) return ok(y, a, b);  // 12/25/2026: month first
+      if (a === b) return ok(y, a, b);
+      return null;  // 03/04/2026: could be either
+    }
+    return null;
+  }
 
   /** Which profile value a question wants: {key, confidence, via, never?}. Shared by detect() and fill(). */
   function keyFor(adapter, q) {
@@ -211,7 +237,8 @@
         }
       } else {
         const a = answers[label];
-        const cover = payload.coverLetter && q.kind === "text" && q.els[0].tagName === "TEXTAREA" && COVER_LETTER.test(norm(label));
+        const cover = payload.coverLetter && q.kind === "text" && q.els[0].tagName === "TEXTAREA"
+          && (Boolean(adapter.isCoverLetter?.(q)) || COVER_LETTER.test(norm(label)));
         if (a?.sensitivity === "never") { report.needs.push({ ...item, reason: "Answer this yourself.", never: true }); continue; }
         if (cover && (!a || a.status === "NEEDS_INPUT" || a.answer == null)) {
           // The cover letter prepared for this application: a suggestion the user reviews, never "verified".
@@ -225,7 +252,16 @@
           confirm = CONFIRM_SOURCES.test(a.source || "") || CONFIRM_LABEL.test(norm(label)) || Boolean(a.confirm);
         }
       }
-      if (q.kind === "date" && !ISO_DATE.test(value.trim())) { report.needs.push({ ...item, reason: "Pick the date yourself." }); continue; }
+      if (q.kind === "date") {
+        const iso = isoDate(value);
+        if (!iso) {
+          report.needs.push({ ...item, reason: ISO_DATE.test(value.trim()) ? "Pick the date yourself."
+            : `Pick the date yourself: "${value.slice(0, 40)}" isn't one exact date${/^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}$/.test(value.trim()) ? " (day and month could be either way round)" : ""}.` });
+          continue;
+        }
+        if (iso !== value.trim()) status = "SUGGESTED";  // converted: show it for a check
+        value = iso;
+      }
 
       // Respect what is already there.
       const current = currentValue(q);
@@ -310,6 +346,6 @@
     setTimeout(() => state.observer?.disconnect(), 10 * 60 * 1000);
   }
 
-  JP.filler = { fill, useProposed, keyFor, chooseComboOption, setText };
+  JP.filler = { fill, useProposed, keyFor, chooseComboOption, setText, isoDate };
   JP.chooseComboOption = chooseComboOption;
 })();

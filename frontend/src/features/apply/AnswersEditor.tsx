@@ -177,6 +177,10 @@ function AnswerRow({ a, draft, error, locked, onChange }: {
           {a.sensitivity === "private" && <Lock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Private answer, stored encrypted" />}
           <span className="min-w-0">{a.question}</span>
           {a.origin === "employer" && a.required && <span className="text-xs font-normal text-destructive">Required</span>}
+          {a.origin === "employer" && !a.required && a.requirement === "optional" && <span className="text-xs font-normal text-muted-foreground">Optional</span>}
+          {a.origin === "employer" && !a.required && a.requirement === "unknown" && (
+            <span className="text-xs font-normal text-caution" title="The employer's form doesn't say. Answer it unless you're sure it's optional.">Required? Not stated</span>
+          )}
         </label>
         <div className="flex items-center gap-1.5">
           {statusChip(a)}

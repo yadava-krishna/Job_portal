@@ -153,8 +153,9 @@ function SideNav({ collapsed, onToggle, onNavigate, onSearch, mobile }: {
                       <Count n={c?.n} collapsed={collapsed} tone={c?.tone} />
                     </NavLink>
                   </Tip>
-                  {open && !collapsed && a.children.length > 1 && (
-                    <div className="relative mt-1 mb-2 ml-[22px] animate-in border-l border-border pl-3 duration-200 fade-in-0 slide-in-from-top-1">
+                  {/* Every section's pages are listed whenever the sidebar is expanded (not only the open section's). */}
+                  {!collapsed && a.children.length > 1 && (
+                    <div className="relative mt-1 mb-2 ml-[22px] border-l border-border pl-3" data-testid={`nav-children-${a.key}`}>
                       {a.children.map((ch) => {
                         const on = isActive(pathname, ch.to);
                         return (

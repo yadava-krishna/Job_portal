@@ -20,17 +20,27 @@ const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padSta
 // credential (or resume downloads), so before the credential goes to an address it has not used before, the extension
 // asks that server to prove it issued the credential: HMAC-SHA256 keyed with SHA-256(credential) (which only the
 // issuing server stores) over a fresh random nonce. The credential itself is never sent for this.
+//
+// The proof also names the host it is for ("jobpilot-prove:v2:<host>:<nonce>"). Without that, a tampered address could
+// forward the challenge to the real server and pass its answer back (a relay). The real server signs only its own
+// host, so a relayed proof names the real host, not the address the credential would go to, and is rejected.
 
 /** A fresh random nonce: 32 bytes as 64 lowercase hex characters. */
 export function newNonce() {
   return toHex(crypto.getRandomValues(new Uint8Array(32)));
 }
 
-/** The proof the real server must give for this credential and nonce (lowercase hex). */
-export async function expectedProof(token, nonce) {
+/** The host (name[:port], lowercase) of a server address, as the proof names it. */
+export function proofHost(base) {
+  try { return new URL(base).host.toLowerCase(); } catch { return ""; }
+}
+
+/** The proof the real server at `host` must give for this credential and nonce (lowercase hex). */
+export async function expectedProof(token, nonce, host) {
+  if (!host) throw new Error("expectedProof needs the server's host");
   const keyBytes = await crypto.subtle.digest("SHA-256", enc(String(token)));
   const key = await crypto.subtle.importKey("raw", keyBytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return toHex(await crypto.subtle.sign("HMAC", key, enc(`jobpilot-prove:${nonce}`)));
+  return toHex(await crypto.subtle.sign("HMAC", key, enc(`jobpilot-prove:v2:${host}:${nonce}`)));
 }
 
 /** Constant-time string comparison (same length required). */
@@ -41,10 +51,10 @@ export function sameString(a, b) {
   return diff === 0;
 }
 
-/** Does `proof` (from the server) match this credential and nonce? Pure: no network, no storage. */
-export async function verifyProof(token, nonce, proof) {
-  if (!token || typeof proof !== "string" || !/^[0-9a-f]{64}$/i.test(proof)) return false;
-  return sameString(await expectedProof(token, nonce), proof.toLowerCase());
+/** Does `proof` (from the server) match this credential, nonce and host? Pure: no network, no storage. */
+export async function verifyProof(token, nonce, proof, host) {
+  if (!token || !host || typeof proof !== "string" || !/^[0-9a-f]{64}$/i.test(proof)) return false;
+  return sameString(await expectedProof(token, nonce, host), proof.toLowerCase());
 }
 
 /** Make sure `base` is the server that issued `token` before sending it there. Throws ApiError(0, UNVERIFIED) if not;
@@ -55,13 +65,15 @@ async function ensureVerified(base, token) {
   const info = await vault.get("tokenInfo");
   if (!Number.isInteger(info?.id)) throw new ApiError(0, UNVERIFIED);
   const nonce = newNonce();
+  const host = proofHost(base);
+  if (!host) throw new ApiError(0, UNVERIFIED);
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   let res;
   try {
     res = await fetch(base + API_PREFIX + "/extension/prove", {
       method: "POST", headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },  // no Authorization
-      body: JSON.stringify({ token_id: info.id, nonce }), signal: ctl.signal, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer",
+      body: JSON.stringify({ token_id: info.id, nonce, v: 2, host }), signal: ctl.signal, credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer",
     });
   } catch {
     throw Object.assign(new ApiError(0, "JobPilot is not reachable right now."), { network: true });
@@ -70,7 +82,7 @@ async function ensureVerified(base, token) {
   }
   let proof = null;
   if (res.ok) { try { proof = (await res.json())?.proof; } catch { proof = null; } }
-  if (!(await verifyProof(token, nonce, proof))) throw new ApiError(0, UNVERIFIED);
+  if (!(await verifyProof(token, nonce, proof, host))) throw new ApiError(0, UNVERIFIED);
   await vault.set("verifiedBase", base);
 }
 
@@ -177,8 +189,10 @@ export const jobpilot = {
   match: (url) => request("/extension/match", { method: "POST", body: { url } }),
   profile: () => request("/extension/autofill-profile"),
   /** Answers for the form's questions; with applicationId the server adds the employer context and this application's own answers. */
-  answers: (questions, applicationId) => request("/extension/answers", { method: "POST",
-    body: Number.isInteger(applicationId) ? { questions, application_id: applicationId } : { questions } }),
+  /** requirements: {label: "required" | "optional"} as the form marks them (labels not listed are unknown). */
+  answers: (questions, applicationId, requirements = {}) => request("/extension/answers", { method: "POST",
+    body: { questions, ...(Number.isInteger(applicationId) ? { application_id: applicationId } : {}),
+            ...(Object.keys(requirements).length ? { requirements } : {}) } }),
   /** Save answers the user ticked "save for next time" in the review panel: {saved: [question], errors: [{question, error}]}. */
   learn: (applicationId, items) => request("/extension/answers/learn", { method: "POST",
     body: Number.isInteger(applicationId) ? { application_id: applicationId, items } : { items } }),

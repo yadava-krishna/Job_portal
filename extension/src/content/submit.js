@@ -48,6 +48,29 @@
       .filter(Boolean).slice(0, 8);
   }
 
+  /** The fields the site marks invalid after a refused submission, so the user can go straight to each one:
+   *  [{ref, label, message}]. Everything already filled stays as it is. */
+  function invalidFields(adapter) {
+    const qs = JP.scan.scan(adapter);
+    const out = [];
+    for (const q of qs) {
+      const e = q.els[0];
+      const flagged = e.getAttribute?.("aria-invalid") === "true" || (e.validity && !e.validity.valid && e.willValidate);
+      if (!flagged) continue;
+      out.push({ ref: q.ref, label: q.label || "A field", message: JP.dom.errorTextFor(e) || e.validationMessage || "The site marks this as invalid." });
+    }
+    return out.slice(0, 12);
+  }
+
+  /** Bring one field into view and focus it (never changes its value, never clicks). */
+  function focusField(ref) {
+    const e = JP.scan.state.refs.get(ref);
+    if (!e?.isConnected) return false;
+    e.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    e.focus?.({ preventScroll: true });
+    return true;
+  }
+
   /** Watch for the outcome after a submission: {outcome: confirmed|errors|uncertain, signal?, signal_kind?, errors?}. */
   async function outcome(adapter, { timeoutMs = 30000, step = 400 } = {}) {
     const started = Date.now();
@@ -56,7 +79,7 @@
       const c = confirmation(adapter);
       if (c) return { outcome: "confirmed", signal: c.signal, signal_kind: c.kind };
       const errs = submitErrors(adapter);
-      if (errs.length && Date.now() - started > 1500) return { outcome: "errors", errors: errs };
+      if (errs.length && Date.now() - started > 1500) return { outcome: "errors", errors: errs, fields: invalidFields(adapter) };
       await sleep(step);
     }
     return { outcome: "uncertain" };
@@ -102,5 +125,5 @@
     return () => { document.removeEventListener("click", onClick, true); formEl.removeEventListener("submit", onFormSubmit, true); };
   }
 
-  JP.submit = { submitButton, confirmation, submitErrors, outcome, authorize, clickSubmit, watchUserSubmit, SUCCESS_TEXT, SUCCESS_URL };
+  JP.submit = { submitButton, confirmation, submitErrors, invalidFields, focusField, outcome, authorize, clickSubmit, watchUserSubmit, SUCCESS_TEXT, SUCCESS_URL };
 })();

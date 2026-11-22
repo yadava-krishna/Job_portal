@@ -36,8 +36,8 @@ ALLOWED: dict[str, set[str]] = {
 ACTIVE = ("PREPARED", "OPENED", "CONFIRMATION_PENDING", "SUBMITTED")
 STAGES = ("applied", "screening", "assessment", "interview", "offer", "rejected", "withdrawn", "ghosted", "archived")
 # How the user applied, from the confirmation source (shown in the tracker).
-SUBMISSION_METHODS = {"user_confirmed": "Employer website, confirmed in JobPilot",
-                      "extension_user_confirmed": "Employer website, confirmed in the extension",
+SUBMISSION_METHODS = {"user_confirmed": "Employer website, reported by you in JobPilot (not verified by the employer)",
+                      "extension_user_confirmed": "Employer website, reported by you in the extension (not verified by the employer)",
                       "smart_apply_assisted": "Smart Apply: submitted after your authorisation; the employer's confirmation was seen",
                       "smart_apply_detected": "Employer website, submitted by you; Smart Apply saw the employer's confirmation"}
 
@@ -313,6 +313,25 @@ def submission_method(app: Application) -> str | None:
     if src.startswith("email"):
         return "Employer website, confirmed by the platform's e-mail"
     return SUBMISSION_METHODS.get(src, src.replace("_", " "))
+
+
+# How strong the evidence is that an application reached the employer. Separate from the workflow status: an
+# application the user says they sent is SUBMITTED (stage "applied") either way, but only these two are independent.
+CONFIRMATION_TYPES = {"employer_confirmed": "Confirmed by the employer's page", "receipt_confirmed": "Receipt e-mail found",
+                      "user_reported": "You told JobPilot (not verified)"}
+
+
+def confirmation_type(app: Application) -> str | None:
+    """employer_confirmed (Smart Apply saw the employer's confirmation), receipt_confirmed (a confirmation e-mail matched),
+    user_reported (the user's own "I applied"), or None when the application is not submitted."""
+    if app.status != "SUBMITTED":
+        return None
+    src = app.confirmation_source or ""
+    if src.startswith("smart_apply_"):
+        return "employer_confirmed"
+    if src.startswith("email"):
+        return "receipt_confirmed"
+    return "user_reported"
 
 
 def needs_input(app: Application) -> list[str]:

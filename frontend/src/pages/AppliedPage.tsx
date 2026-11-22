@@ -17,7 +17,7 @@ import { useReasonLabels } from "@/features/growth/queries";
 import { PipelineBoard } from "@/features/applications/PipelineBoard";
 import { ApplicationDetailDialog, type RejectTarget } from "@/features/applications/ApplicationDetail";
 import { STRIP, StageStrip, stripKeyOf, type StripKey } from "@/features/applications/StageStrip";
-import { ApplyStatePill, WherePill } from "@/features/applications/pills";
+import { ApplyStatePill, EvidencePill, WherePill } from "@/features/applications/pills";
 import { daysSince, followUpState } from "@/features/applications/events";
 import type { RejectionResult } from "@/features/growth/types";
 
@@ -139,6 +139,7 @@ export function AppliedPage() {
                         <div className="flex min-w-0 flex-col items-end gap-1 md:items-start">
                           <WherePill app={a} />
                           {rej.reason && <RejectionLabel {...rej} labels={reasonLabels} />}
+                          {a.status === "SUBMITTED" && <EvidencePill app={a} className="whitespace-normal" />}
                           {a.status !== "SUBMITTED" && <ApplyStatePill state={a.apply_state} label={a.apply_state_label} className="whitespace-normal" />}
                         </div>
                         <div className="readout text-[12.5px] text-muted-foreground max-md:col-span-2 max-md:inline">

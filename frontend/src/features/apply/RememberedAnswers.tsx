@@ -9,8 +9,8 @@ import { Panel } from "@/components/settings/primitives";
 import { errorMessage } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useAnswerMemory, useDeleteMemoryAnswer, useSaveMemoryAnswer } from "@/services/queries";
-import type { MemoryAnswer } from "@/types/api";
+import { useAnswerConflicts, useAnswerMemory, useDeleteMemoryAnswer, useSaveMemoryAnswer } from "@/services/queries";
+import type { AnswerConflict, MemoryAnswer } from "@/types/api";
 import { answerHint, GROUP_LABELS, GROUP_ORDER, memorySourceLabel } from "./copy";
 import { Chip } from "./parts";
 
@@ -39,6 +39,8 @@ export function RememberedAnswers() {
   });
 
   const rows = Array.isArray(list.data) ? list.data : [];
+  const conflicts = useAnswerConflicts(rows.length > 0);
+  const conflictOf = (r: MemoryAnswer) => (r.scope_ref ? undefined : conflicts.data?.find((c) => c.key === r.key));
   const groups = GROUP_ORDER.map((g) => ({ g, rows: rows.filter((r) => (GROUP_ORDER.includes(r.group) ? r.group : "other") === g) })).filter((x) => x.rows.length);
   const stale = rows.filter((r) => r.stale).length;
 
@@ -53,12 +55,18 @@ export function RememberedAnswers() {
           </p>
         ) : (
           <div className="space-y-5">
+            {!!conflicts.data?.length && (
+              <p role="status" data-testid="answer-conflicts" className="rounded-xl bg-caution-tint px-4 py-3 text-[13px] text-caution">
+                {conflicts.data.length === 1 ? "1 saved answer differs" : `${conflicts.data.length} saved answers differ`} from your confirmed profile.
+                Where your profile is newer, JobPilot only offers the saved answer and asks you to pick. Edit or forget the ones that are out of date.
+              </p>
+            )}
             {groups.map(({ g, rows: rs }) => (
               <div key={g} role="group" aria-label={GROUP_LABELS[g] ?? g}>
                 <h4 className="mb-1.5 text-[13px] font-semibold text-heading">{GROUP_LABELS[g] ?? g}</h4>
                 <ul className="divide-y divide-border/70 rounded-xl ring-1 ring-border">
                   {rs.map((r) => (
-                    <MemoryRow key={rowKey(r)} row={r} shown={plain(r)} revealed={revealed.has(rowKey(r))} revealing={reveal.isFetching && revealed.has(rowKey(r))}
+                    <MemoryRow key={rowKey(r)} row={r} conflict={conflictOf(r)} shown={plain(r)} revealed={revealed.has(rowKey(r))} revealing={reveal.isFetching && revealed.has(rowKey(r))}
                                onToggle={() => toggle(r)} onForget={() => setForget(r)} onReveal={() => { if (!revealed.has(rowKey(r))) toggle(r); }} />
                   ))}
                 </ul>
@@ -91,8 +99,9 @@ export function RememberedAnswers() {
   );
 }
 
-function MemoryRow({ row, shown, revealed, revealing, onToggle, onForget, onReveal }: {
-  row: MemoryAnswer; shown: string | null; revealed: boolean; revealing: boolean; onToggle: () => void; onForget: () => void; onReveal: () => void;
+function MemoryRow({ row, conflict, shown, revealed, revealing, onToggle, onForget, onReveal }: {
+  row: MemoryAnswer; conflict?: AnswerConflict; shown: string | null; revealed: boolean; revealing: boolean;
+  onToggle: () => void; onForget: () => void; onReveal: () => void;
 }) {
   const save = useSaveMemoryAnswer();
   const [editing, setEditing] = useState(false);
@@ -114,11 +123,21 @@ function MemoryRow({ row, shown, revealed, revealing, onToggle, onForget, onReve
   const submit = () => {
     const answer = value.trim();
     if (!answer) { setError("Type an answer, or use Forget to remove it."); return; }
-    save.mutate({ key: row.key, question: row.question ?? row.label, answer }, {
+    save.mutate({ key: row.key, question: row.question ?? row.label, answer, ...(scoped ? { scope_ref: row.scope_ref } : {}) }, {
       onSuccess: () => { setEditing(false); toast.success("Saved. Locked in."); },
       onError: (e) => setError(errorMessage(e)),
     });
   };
+  // "Still right": confirm a time-sensitive answer again without retyping it.
+  const reconfirm = () => {
+    if (shown == null) { startEdit(); return; }
+    save.mutate({ key: row.key, question: row.question ?? row.label, answer: shown, ...(scoped ? { scope_ref: row.scope_ref } : {}) }, {
+      onSuccess: () => toast.success("Confirmed again."),
+      onError: (e) => toast.error(errorMessage(e)),
+    });
+  };
+  const where = row.scope_kind === "job" ? (row.scope_name ? `Only for ${row.scope_name}` : "One job only")
+    : scoped ? (row.scope_name ? `Only for ${row.scope_name}` : "One employer only") : null;
 
   return (
     <li className="px-3 py-2.5 text-[13px]" data-testid={`memory-${row.key}`}>
@@ -128,7 +147,9 @@ function MemoryRow({ row, shown, revealed, revealing, onToggle, onForget, onReve
             {row.sensitivity === "private" && <Lock className="size-3.5 text-muted-foreground" aria-label="Private, stored encrypted" />}
             <span id={`${id}-label`} className="font-medium">{row.label}</span>
             {row.stale && <Chip tone="warn" title={row.revalidate_days ? `Time-sensitive: check every ${row.revalidate_days} days` : undefined}>Check this</Chip>}
-            {scoped && <Chip tone="neutral">One employer only</Chip>}
+            {where ? <Chip tone="neutral" title="Used only on applications to this employer or job, never anywhere else">{where}</Chip>
+              : <Chip tone="neutral" title="Reused on any application that asks the same question">Any application</Chip>}
+            {conflict && <Chip tone="warn" title={`Your profile says “${conflict.profile}”`}>{conflict.used === "ask" ? "Profile is newer" : "Differs from profile"}</Chip>}
           </div>
           {!editing && (
             <div className="mt-0.5 text-foreground">
@@ -140,6 +161,9 @@ function MemoryRow({ row, shown, revealed, revealing, onToggle, onForget, onReve
           <div className="mt-0.5 text-xs text-muted-foreground">
             {memorySourceLabel(row.source)}{row.last_confirmed_at ? <> · last confirmed <span className="readout">{formatDate(row.last_confirmed_at)}</span></> : null}
           </div>
+          {conflict && !editing && (
+            <div className="mt-0.5 text-xs text-caution">Your profile says “{conflict.profile}”. {conflict.used === "ask" ? "JobPilot will ask which one to use." : "This saved answer is newer, so it's used."}</div>
+          )}
         </div>
         {!editing && (
           <div className="flex items-center gap-1">
@@ -148,7 +172,8 @@ function MemoryRow({ row, shown, revealed, revealing, onToggle, onForget, onReve
                 {revealed ? <EyeOff /> : <Eye />} {revealed ? "Hide" : "Show"}
               </Button>
             )}
-            {!scoped && <Button size="icon-sm" variant="ghost" aria-label={`Edit ${row.label}`} onClick={startEdit}><Pencil /></Button>}
+            {row.stale && <Button size="sm" variant="outline" onClick={reconfirm} disabled={save.isPending} aria-label={`${row.label} is still right`}>Still right</Button>}
+            <Button size="icon-sm" variant="ghost" aria-label={`Edit ${row.label}`} onClick={startEdit}><Pencil /></Button>
             <Button size="icon-sm" variant="ghost" aria-label={`Forget ${row.label}`} onClick={onForget}><Trash2 /></Button>
           </div>
         )}

@@ -89,6 +89,8 @@ class CandidateProfile(Base, TimestampMixin):
     experience_months: Mapped[int | None] = mapped_column(Integer)
     verified_facts: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Portal profile review (LinkedIn / Naukri): {portal: {item_key: {"done_at": iso}}}. Only what the user ticked.
+    portal_review: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False, server_default=text("'{}'"))
 
 
 class JobPreference(Base, TimestampMixin):
@@ -120,6 +122,9 @@ class JobPreference(Base, TimestampMixin):
     open_to_relocation: Mapped[bool | None] = mapped_column(Boolean)
     work_authorization: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False, server_default=text("'[]'"))  # ISO country codes
     needs_sponsorship: Mapped[bool | None] = mapped_column(Boolean)
+    # Match-score refresh after a preference/profile change: asked for, and last finished (migration 0016).
+    rescore_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rescored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class PlatformPreference(Base, TimestampMixin):

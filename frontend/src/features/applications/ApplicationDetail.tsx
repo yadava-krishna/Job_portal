@@ -18,7 +18,7 @@ import { InterviewFeedbackDialog, RejectionLabel } from "@/features/growth/appli
 import type { RejectionResult } from "@/features/growth/types";
 import { eventDetail, eventLabel } from "./events";
 import { JourneyTimeline } from "./Journey";
-import { ApplyStatePill, StagePill, StatusPill } from "./pills";
+import { ApplyStatePill, EvidencePill, StagePill, StatusPill } from "./pills";
 
 // The backend's interview fields (round_name, interviewers, location) and rejection fields, which the shared types don't list yet.
 type InterviewRow = Interview & { round_name?: string | null; interviewers?: string | null; location?: string | null; interview_type?: string | null; feedback_at?: string | null };
@@ -97,6 +97,7 @@ export function ApplicationDetailDialog({ id, onClose, onReject, rejection, reas
                       <Fact label="Submitted">{data.submitted_at ? <span className="readout">{formatDate(data.submitted_at)}</span> : <span className="text-muted-foreground">Not yet</span>}</Fact>
                       <Fact label="Reference">{data.reference_id ? <span className="readout">{data.reference_id}</span> : <span className="text-muted-foreground">—</span>}</Fact>
                       <Fact label="How you applied">{data.submission_method ?? <span className="text-muted-foreground">—</span>}</Fact>
+                      {data.confirmation_type && <Fact label="Evidence"><EvidencePill app={data} className="whitespace-normal" /></Fact>}
                       {data.apply_state_label && <Fact label="Smart Apply">{data.apply_state_label}{data.apply_state_at && <span className="readout block text-xs text-muted-foreground">{formatDate(data.apply_state_at, true)}</span>}</Fact>}
                       <Fact label="Resume used">{data.resume_used ?? <span className="text-muted-foreground">—</span>}</Fact>
                       {rej?.rejection_reason && <Fact label="Rejection reason"><RejectionLabel reason={rej.rejection_reason} known={rej.rejection_reason_known} labels={reasonLabels} /></Fact>}

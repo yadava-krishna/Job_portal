@@ -107,7 +107,7 @@ describe("fill and attach with the application's package", () => {
     expect(r.ok).toBe(true);
     expect(api.jobpilot.start).toHaveBeenCalledWith(9);
     expect(api.jobpilot.package).toHaveBeenCalledWith(55);
-    expect(api.jobpilot.answers).toHaveBeenCalledWith(["Why Acme?"], 55);
+    expect(api.jobpilot.answers).toHaveBeenCalledWith(["Why Acme?"], 55, {});
     expect(globalThis.__jobpilot.fill.mock.calls[0][0].coverLetter).toBe("Dear Acme team, ...");
     expect(session()).toMatchObject({ applicationId: 55, packageResume: { kind: "studio", id: 12, format: "docx" } });
     expect(recorded().map((b) => b.state)).toEqual(["filling", "needs_information"]);  // nothing authorised or submitted
@@ -125,7 +125,7 @@ describe("fill and attach with the application's package", () => {
 
   it("without a tracked application: plain answers, no package, the default resume", async () => {
     await message({ action: "fill", args: { tabId: TAB, frameId: 0, userJobId: null } }, POPUP);
-    expect(api.jobpilot.answers).toHaveBeenCalledWith(["Why Acme?"], null);
+    expect(api.jobpilot.answers).toHaveBeenCalledWith(["Why Acme?"], null, {});
     expect(api.jobpilot.package).not.toHaveBeenCalled();
     expect(globalThis.__jobpilot.fill.mock.calls[0][0].coverLetter).toBeNull();
     await message({ action: "attachResume", args: { tabId: TAB, frameId: 0, replace: false } }, POPUP);
@@ -141,7 +141,7 @@ describe("Apply from JobPilot with an application id", () => {
     await Promise.all(listeners.updated.map((fn) => fn(TAB, { status: "complete" }, { url: FORM })));
     expect(api.jobpilot.start).not.toHaveBeenCalled();
     expect(api.jobpilot.package).toHaveBeenCalledWith(77);
-    expect(api.jobpilot.answers).toHaveBeenCalledWith(["Why Acme?"], 77);
+    expect(api.jobpilot.answers).toHaveBeenCalledWith(["Why Acme?"], 77, {});
     expect(api.jobpilot.resume).toHaveBeenCalledWith(expect.objectContaining({ kind: "studio", id: 12 }));
     expect(globalThis.__jobpilot.attachResume.mock.calls[0][1]).toEqual({ replace: false });
     expect(recorded().map((b) => b.state)).toEqual(["filling", "needs_information"]);

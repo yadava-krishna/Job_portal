@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApplyDialog } from "@/components/app/ApplyDialog";
 import { EmptyState, NativeSelect, PageHeader, PlatformBadge } from "@/components/app/common";
 import { ImportDialog } from "@/components/app/ImportDialog";
+import { PreferencesSheet } from "@/components/app/PreferencesSheet";
 import { JobCard, JobTile } from "@/components/app/JobCard";
 import { JobDetailSheet } from "@/components/app/JobDetailSheet";
 import { errorMessage } from "@/lib/api";
@@ -177,6 +178,7 @@ export function DiscoverPage() {
   const health = useSourceHealth();
   const initialJob = Number(new URLSearchParams(location.search).get("job")) || null;
   const [importOpen, setImportOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const [linksOpen, setLinksOpen] = useState(false);
   const [clip, setClip] = useState<ClippedJob | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -188,10 +190,11 @@ export function DiscoverPage() {
   });
   const [query, setQuery] = useState<JobQuery>(draft);
 
-  // A job captured by the browser clipper arrives here for review.
+  // A job captured by the browser clipper arrives here for review; ?add=1 (e.g. from Portal Connections) opens Add job.
   useEffect(() => {
     const c = takeClip();
     if (c) { setClip(c); setImportOpen(true); }
+    else if (new URLSearchParams(location.search).get("add") === "1") { setClip(null); setImportOpen(true); }
   }, [location.key]);
 
   const submit = (e?: FormEvent) => { e?.preventDefault(); setQuery({ ...draft, page: 1 }); };
@@ -384,6 +387,9 @@ export function DiscoverPage() {
           </span>
         ) : "Scored against your confirmed profile. Best matches first."}
         actions={<>
+          <Button variant="outline" onClick={() => setPrefsOpen(true)} aria-label="Edit job preferences" data-testid="edit-preferences">
+            <SlidersHorizontal /> <span className="hidden sm:inline">Preferences</span>
+          </Button>
           <Button variant="outline" onClick={runDiscovery} disabled={discover.isPending || !!running}>{running ? <Loader2 className="animate-spin" /> : <RefreshCw />} Run discovery now</Button>
           <Button variant="ink" onClick={() => { setClip(null); setImportOpen(true); }}><Plus /> Add job</Button>
           <DropdownMenu>
@@ -403,6 +409,7 @@ export function DiscoverPage() {
                     onShowUnknownDates={() => { const next = { ...draft, include_unknown_dates: true }; setDraft(next); setQuery({ ...next, page: 1 }); }}
                     empty={<FeedEmptyState lastRun={lastRun} filtered={filtered} running={!!running || discover.isPending} onRun={runDiscovery}
                                            onClearFilters={() => { setDraft(EMPTY_QUERY); setQuery(EMPTY_QUERY); }} />} />
+      <PreferencesSheet open={prefsOpen} onOpenChange={setPrefsOpen} />
       <ImportDialog open={importOpen} onOpenChange={(o) => { setImportOpen(o); if (!o) { setClip(null); if (location.pathname !== "/discover") navigate("/discover"); } }} clip={clip} />
       <Dialog open={linksOpen} onOpenChange={setLinksOpen}>
         <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">

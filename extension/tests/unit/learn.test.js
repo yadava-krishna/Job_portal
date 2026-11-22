@@ -68,7 +68,7 @@ describe("answers in context", () => {
     expect(v("sd")).toBe("2026-12-01");
     expect(byLabel(report.filled, "Earliest start date")).toMatchObject({ confirm: true });
     expect(v("af")).toBe("");
-    expect(byLabel(report.needs, "Available from").reason).toBe("Pick the date yourself.");
+    expect(byLabel(report.needs, "Available from").reason).toMatch(/^Pick the date yourself: "Immediately" isn.t one exact date/);
     expect(byLabel(report.skipped, "Gender")).toBeTruthy();
     expect(v("pw")).toBe("");
     expect(document.getElementById("agree").checked).toBe(false);

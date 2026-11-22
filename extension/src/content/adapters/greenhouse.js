@@ -32,7 +32,11 @@
     },
     root: form,
     jobTitle: () => document.querySelector(".job__title h1, h1.section-header, h1")?.textContent?.trim() || null,
-    ignore: (el) => /^iti-/.test(el.id || "") || el.id === "resume_text" || el.id === "cover_letter_text",
+    // resume_text ("Enter manually" for the resume) stays empty: the real file is attached instead. The cover letter's
+    // "Enter manually" box takes the prepared cover letter, as a suggestion to review.
+    ignore: (el) => /^iti-/.test(el.id || "") || el.id === "resume_text",
+    label: (el) => (el.id === "cover_letter_text" ? "Cover letter" : null),
+    isCoverLetter: (q) => q.els[0].id === "cover_letter_text",
     profileKey: (q) => BY_ID[q.els[0].id],
     skip: (q) => SKIP_ID[q.els[0].id] || (/^discipline--/.test(q.els[0].id) ? "Choose your field of study yourself." : null)
       || (/^(start|end)-(month|year)--/.test(q.els[0].id) ? "Dates: fill these yourself." : null)

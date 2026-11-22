@@ -36,15 +36,46 @@ router = APIRouter(tags=["profile"])
 
 
 def _rescore_in_background(settings, user_id: int) -> None:
-    from backend.models import User
+    from backend.models import JobPreference, User, utcnow
 
     db = session_factory()()
     try:
         user = db.get(User, user_id)
         if user:
+            started = utcnow()
             matching_service.rescore_user(db, settings, user)
+            pref = db.execute(select(JobPreference).where(JobPreference.user_id == user_id)).scalar_one_or_none()
+            if pref is not None:
+                pref.rescored_at = started  # scores reflect every change saved before this run started
+                db.commit()
+    except Exception:  # noqa: BLE001  (a failed refresh leaves requested > rescored, which the app shows with a retry)
+        import logging
+
+        logging.getLogger(__name__).exception("match-score refresh failed for user %s", user_id)
     finally:
         db.close()
+
+
+def _request_rescore(db, settings, user, bg: BackgroundTasks) -> None:
+    """Ask for fresh match scores after a change; the app follows progress through GET /preferences/rescore."""
+    from backend.models import JobPreference, utcnow
+
+    pref = db.execute(select(JobPreference).where(JobPreference.user_id == user.id)).scalar_one_or_none()
+    if pref is not None:
+        pref.rescore_requested_at = utcnow()
+        db.commit()
+    bg.add_task(_rescore_in_background, settings, user.id)
+
+
+def _rescore_status(db, user) -> dict:
+    from backend.models import JobPreference
+
+    pref = db.execute(select(JobPreference).where(JobPreference.user_id == user.id)).scalar_one_or_none()
+    req = pref.rescore_requested_at if pref else None
+    done = pref.rescored_at if pref else None
+    aware = (lambda t: t if t is None or t.tzinfo else t.replace(tzinfo=__import__("datetime").timezone.utc))
+    req, done = aware(req), aware(done)
+    return {"requested_at": req, "rescored_at": done, "pending": bool(req and (done is None or done < req))}
 
 
 def _profile_out(db, user) -> ProfileOut:
@@ -58,7 +89,7 @@ def _profile_out(db, user) -> ProfileOut:
     return ProfileOut(
         has_resume=resume is not None, resume=ResumeOut.model_validate(resume) if resume else None, parsed=parsed, confirmed=confirmed,
         confirmed_at=prof.confirmed_at, experience=exp, parse_warnings=(prof.parsed_profile or {}).get("warnings", []),
-        verified_facts=prof.verified_facts or {},
+        verified_facts=prof.verified_facts or {}, review=resume_service.profile_review(prof),
     )
 
 
@@ -70,7 +101,7 @@ def get_profile(user: CurrentUser, db: DbSession) -> ProfileOut:
 @router.put("/profile", response_model=ProfileOut)
 def put_profile(body: EditableProfile, user: CurrentUser, db: DbSession, settings: SettingsDep, bg: BackgroundTasks) -> ProfileOut:
     resume_service.confirm_profile(db, user, body)
-    bg.add_task(_rescore_in_background, settings, user.id)
+    _request_rescore(db, settings, user, bg)
     return _profile_out(db, user)
 
 
@@ -162,8 +193,21 @@ def get_preferences(user: CurrentUser, db: DbSession) -> PreferencesOut:
 @router.put("/preferences", response_model=PreferencesOut)
 def put_preferences(body: Preferences, user: CurrentUser, db: DbSession, settings: SettingsDep, bg: BackgroundTasks) -> PreferencesOut:
     row = preference_service.save_preferences(db, user, body)
-    bg.add_task(_rescore_in_background, settings, user.id)
+    _request_rescore(db, settings, user, bg)
     return preference_service.preferences_out(row)
+
+
+@router.get("/preferences/rescore")
+def rescore_status(user: CurrentUser, db: DbSession) -> dict:
+    """Whether your match scores are being refreshed after a change (pending), and when they were last refreshed."""
+    return _rescore_status(db, user)
+
+
+@router.post("/preferences/rescore", status_code=status.HTTP_202_ACCEPTED)
+def rescore_now(user: CurrentUser, db: DbSession, settings: SettingsDep, bg: BackgroundTasks) -> dict:
+    """Refresh your match scores again (e.g. after a refresh that didn't finish)."""
+    _request_rescore(db, settings, user, bg)
+    return _rescore_status(db, user)
 
 
 @router.get("/platforms", response_model=list[PlatformInfo])
