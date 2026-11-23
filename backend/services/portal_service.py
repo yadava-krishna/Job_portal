@@ -1,9 +1,17 @@
 """Portal Connections and portal profile review (LinkedIn, Naukri, Indeed).
 
-Three separate things, never mixed up:
-  * job source      how jobs from the portal can reach JobPilot (links you paste, alert e-mails, the clipper)
-  * account connection  an approved sign-in with the portal: none exists today, so nothing is ever "connected"
-  * application     how you apply: on the portal itself (native hand-off); JobPilot never fills or submits there
+Each portal reports every capability separately, never one "connected" flag:
+  identity_auth           the portal's official sign-in is set up on this JobPilot server (LinkedIn OIDC, Indeed OAuth)
+  account_linked          the user actually linked an account through it (connection_service)
+  profile_access          the fields that account shared under the scopes the user granted
+  job_retrieval           approved API access to the portal's jobs: none exists for JobPilot, so always unavailable
+  application_submission  approved API access to apply there: none exists, so always unavailable
+  native_handoff          JobPilot opens the original job on the portal, in the user's own browser (always)
+  reconnect_required      the link expired or was revoked
+  listings                how many of the user's JobPilot jobs came from the portal (by link, clipper or alert e-mail)
+plus the V3 ones that stay true: jobs reach JobPilot through links, alert e-mails and the clipper (source), profile
+checklists (profile_guidance), the Apply Workspace hand-off (application_handoff), and no automation on the portals
+(assisted_submission).
 
 The profile review is built only from your confirmed JobPilot profile, preferences and saved answers. It suggests
 wording made of facts you already confirmed, never new achievements, and never edits the portal for you. Limits used:
@@ -20,42 +28,167 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.models import CandidateProfile, JobPreference, User, utcnow
+from backend.config import BackendSettings
+from backend.models import CandidateProfile, ExternalIdentity, JobPreference, User, utcnow
 from backend.schemas.profile import EditableProfile
 
-PORTALS = ("linkedin", "naukri", "indeed")
+PORTALS = ("linkedin", "naukri", "indeed")  # the order of the cards
 NAMES = {"linkedin": "LinkedIn", "naukri": "Naukri", "indeed": "Indeed"}
 HOME = {"linkedin": "https://www.linkedin.com/jobs/", "naukri": "https://www.naukri.com/", "indeed": "https://in.indeed.com/"}
 LINKEDIN_HEADLINE, LINKEDIN_ABOUT, NAUKRI_HEADLINE = 220, 2600, 250
-NO_CONNECTION = {
-    "linkedin": "LinkedIn's job and apply APIs are open only to approved partners. JobPilot has no approved connection, so it never signs in to LinkedIn or reads your account.",
-    "naukri": "Naukri offers no approved connection for tools like JobPilot. JobPilot never signs in to Naukri or reads your account.",
-    "indeed": "Indeed offers no approved connection for tools like JobPilot. JobPilot never signs in to Indeed or reads your account.",
+SIGN_IN = {
+    "linkedin": "Sign In with LinkedIn (OpenID Connect): LinkedIn shares your name, photo and e-mail address. Nothing else.",
+    "indeed": "Indeed's official sign-in (OAuth): Indeed shares your e-mail address. Nothing else.",
+    "naukri": "Naukri offers no official sign-in for apps like JobPilot. You sign in on naukri.com yourself; JobPilot never sees your Naukri password or OTP.",
+}
+NO_JOBS_API = {
+    "linkedin": "LinkedIn's job APIs are for approved partners only, and signing in doesn't grant them.",
+    "indeed": "Indeed hasn't published a job-seeker API JobPilot is approved for. JobPilot never calls undocumented APIs.",
+    "naukri": "Naukri has no public job API for apps like JobPilot.",
+}
+NO_SUBMIT_API = {
+    "linkedin": "Easy Apply has no API for apps like JobPilot.",
+    "indeed": "Indeed Apply is built for employers' hiring systems, not job-seeker apps.",
+    "naukri": "Naukri has no application API for apps like JobPilot.",
 }
 NO_AUTOMATION = {
-    "linkedin": "LinkedIn's rules forbid tools that automate activity on its site, including Easy Apply. You apply there yourself.",
-    "naukri": "Naukri's terms forbid automated tools on its site. You apply there yourself.",
-    "indeed": "Indeed's terms forbid automating Indeed Apply. You apply there yourself.",
+    "linkedin": "LinkedIn's rules forbid automating its site, Easy Apply included. You click apply there yourself.",
+    "naukri": "Naukri's terms forbid automated tools. You click apply there yourself.",
+    "indeed": "Indeed's terms forbid automating Indeed Apply. You click apply there yourself.",
 }
 
 
-def connections() -> list[dict[str, Any]]:
-    """What JobPilot can and can't do with each portal, as the code actually supports it."""
+def _cap(available: bool, detail: str, **extra: Any) -> dict[str, Any]:
+    return {"available": available, "detail": detail, **extra}
+
+
+SUMMARY = {
+    "linkedin": "Link your LinkedIn sign-in, bring LinkedIn jobs in, and tune your profile there.",
+    "naukri": "Opens naukri.com in your browser. Bring Naukri jobs in by link and prep applications here.",
+    "indeed": "Link your Indeed sign-in and bring Indeed jobs in by link.",
+}
+LABELS = {"not_configured": "Not configured", "not_linked": "Ready to connect", "linked": "Connected",
+          "reconnect_required": "Reconnect required", "authorization_required": "Provider authorization required",
+          "native_only": "Opens in browser"}
+
+
+def _listing_counts(db: Session, user: User) -> dict[str, int]:
+    """How many jobs in the user's feed (new or shortlisted, as Discover shows them) came from each portal, by any
+    source they were seen on. Applied and dismissed jobs aren't counted: Discover's feed doesn't list them either."""
+    from sqlalchemy import func, or_
+
+    from backend.models import Job, JobSourceLink, UserJob
+
+    out = {}
+    for p in PORTALS:
+        linked = select(JobSourceLink.id).where(JobSourceLink.job_id == Job.id, JobSourceLink.platform == NAMES[p]).exists()
+        out[p] = db.execute(select(func.count(UserJob.id)).join(Job, Job.id == UserJob.job_id)
+                            .where(UserJob.user_id == user.id, UserJob.status.in_(["new", "shortlisted"]), or_(Job.platform == NAMES[p], linked))).scalar_one()
+    return out
+
+
+def connections(db: Session | None = None, settings: BackendSettings | None = None, user: User | None = None) -> list[dict[str, Any]]:
+    """What JobPilot can and can't do with each portal for this user, as the code and this server's setup support it.
+
+    status: not_configured | not_linked (ready to connect) | linked | reconnect_required | authorization_required (the
+    portal refused JobPilot's app in the admin's last real test) | native_only (Naukri: opens in the browser).
+    `reason` is the one thing standing in the way, said once; capability details stay short."""
+    from backend.services import connection_service, identity_providers, portal_setup_service
+
+    linked: dict[str, ExternalIdentity] = {}
+    counts: dict[str, int] = {}
+    tests: dict[str, dict[str, Any] | None] = {}
+    if db is not None and user is not None:
+        linked = {r.provider: r for r in db.execute(select(ExternalIdentity).where(ExternalIdentity.user_id == user.id)).scalars()}
+        counts = _listing_counts(db, user)
+    if db is not None:
+        tests = {p: portal_setup_service.last_test(portal_setup_service._row(db, p)) for p in identity_providers.PROVIDERS}
+    is_admin = getattr(user, "role", "user") == "admin"
     out = []
     for p in PORTALS:
-        out.append({
-            "portal": p, "name": NAMES[p], "url": HOME[p],
-            "capabilities": {
-                "source": {"available": True, "detail": "Jobs reach JobPilot when you paste a job link, forward its alert e-mails, or use the clipper."},
-                "profile_guidance": {"available": p != "indeed",
-                                     "detail": ("A checklist for your profile there, built from your confirmed JobPilot profile." if p != "indeed" else
-                                                "Not offered: JobPilot doesn't have verified Indeed profile requirements, so it gives no Indeed checklist.")},
-                "account_connection": {"available": False, "status": "unavailable", "detail": NO_CONNECTION[p]},
-                "application_handoff": {"available": True, "detail": "The Apply Workspace prepares your resume and answers, opens the job there, and tracks the outcome you report."},
-                "assisted_submission": {"available": False, "detail": NO_AUTOMATION[p]},
-            },
-            "actions": (["optimize"] if p != "indeed" else []) + ["open", "import"],
-        })
+        name = NAMES[p]
+        prov = identity_providers.get(settings, p, db) if settings is not None else None
+        ident = linked.get(p)
+        view = connection_service.public(ident, prov) if ident else None
+        setup = portal_setup_service.setup_state(prov, tests.get(p)) if prov is not None else None
+        reason = None
+        if p == "naukri":
+            prov_state, prov_detail = "unavailable", SIGN_IN["naukri"]
+        elif prov is None or not prov.configured:
+            prov_state, prov_detail = "not_configured", "Not set up on this JobPilot server yet."
+            reason = (f"{name} sign-in isn't set up on this JobPilot server yet. "
+                                    + ("Set it up with your developer app's credentials." if is_admin else
+                                       f"A JobPilot admin needs to add {name} developer app credentials."))
+        elif setup == "authorization_required":
+            prov_state, prov_detail = "authorization_required", f"{name} hasn't accepted JobPilot's app yet."
+            reason = (f"{name} refused JobPilot's app in the last test, so connecting won't work yet. "
+                                    + ("Check the app in setup, then test again." if is_admin else "A JobPilot admin is sorting it out."))
+        else:
+            prov_state, prov_detail = "available", SIGN_IN[p]
+            if prov.simulated:
+                prov_detail = (f"SIMULATED: this server signs in with a local test server, not {name}. "
+                               f"It never sees your real {name} account.")
+        if p == "naukri":
+            status_ = "native_only"
+        elif view:
+            status_ = view["status"]
+        else:
+            status_ = {"available": "not_linked"}.get(prov_state, prov_state)
+        if view and view["status"] == "reconnect_required":
+            reason = view["status_detail"] or f"{name} needs you to sign in again before JobPilot can use the link."
+        granted = view["scopes"] if view and view["status"] == "linked" else []
+        requested = list(prov.scopes) if prov else []
+        limited = bool(granted) and not set(requested) <= set(granted)
+        label = LABELS[status_]
+        if status_ == "linked" and limited:
+            label = "Connected with limited permissions"
+        if (view and view.get("simulated")) or (prov and prov.simulated and status_ in ("not_linked", "linked")):
+            label += " (simulated)"
+        fields = sorted({f for s in granted for f in identity_providers.SCOPE_FIELDS.get(p, {}).get(s, [])})
+        n = counts.get(p, 0)
+        caps = {
+            # Account
+            "identity_auth": _cap(prov_state == "available", prov_detail, state=prov_state),
+            "account_linked": _cap(bool(view and view["status"] == "linked"),
+                                   (f"Linked{' as ' + view['name'] if view and view.get('name') else ''}." if view and view["status"] == "linked" else
+                                    "Reconnect to use it again." if view else
+                                    "Nothing to link: Naukri has no official sign-in." if p == "naukri" else
+                                    "Not linked.")),
+            "profile_access": _cap(bool(fields), (f"{', '.join(fields)}. Shown here only; your JobPilot profile stays as you confirmed it."
+                                                  if fields else "None." if p == "naukri" or not view else "Nothing shared.")
+                                   , fields=fields),
+            # Discovery
+            "listings": _cap(n > 0, (f"{n} {name} job{'s' if n != 1 else ''} in your JobPilot feed." if n else
+                                     f"No {name} jobs in JobPilot yet."), count=n),
+            "source": _cap(True, "Paste a job link, use the clipper, or forward job-alert e-mails."),
+            "job_retrieval": _cap(False, NO_JOBS_API[p]),
+            # Applications
+            "application_handoff": _cap(True, "The Apply Workspace keeps your chosen resume and answers and records the outcome you report."),
+            "native_handoff": _cap(True, f"Opens the original job on {name} in this browser, so you stay signed in there."),
+            "assisted_submission": _cap(False, NO_AUTOMATION[p]),
+            "application_submission": _cap(False, NO_SUBMIT_API[p]),
+            # Profile improvement
+            "profile_guidance": _cap(p != "indeed", ("A checklist built from your confirmed JobPilot profile." if p != "indeed" else
+                                                     "Not offered: JobPilot has no verified Indeed profile requirements.")),
+            # State
+            "reconnect_required": _cap(bool(view and view["status"] == "reconnect_required"),
+                                       (view["status_detail"] if view and view["status"] == "reconnect_required" else "No.")),
+        }
+        actions: list[str] = []
+        if p != "naukri" and prov_state == "available":
+            actions += ["reconnect", "disconnect"] if view and view["status"] == "reconnect_required" else \
+                       ["check", "reconnect", "disconnect"] if view else ["connect"]
+        elif view:  # linked earlier, sign-in no longer usable on this server: they can still remove it
+            actions.append("disconnect")
+        actions += (["optimize"] if p != "indeed" else []) + ["open", "import", "prepare", "browse"]
+        if p != "naukri" and is_admin:
+            actions.append("setup")
+        out.append({"portal": p, "name": name, "url": HOME[p], "kind": "native" if p == "naukri" else "oauth",
+                    "simulated": bool(prov and prov.simulated), "summary": SUMMARY[p], "reason": reason,
+                    "status": status_, "status_label": label, "limited": limited, "identity": view,
+                    "setup_state": setup if is_admin else None,
+                    "scopes": {"requested": requested, "granted": granted},
+                    "capabilities": caps, "actions": actions})
     return out
 
 

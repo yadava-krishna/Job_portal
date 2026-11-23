@@ -92,6 +92,34 @@ def split_role_header(header: str) -> tuple[str, str, str]:
     return header, "", "low"
 
 
+# Places, so a location line ("Bangalore, India", "Remote") is never read as a job title or an employer.
+_PLACES = {
+    "india", "usa", "united states", "us", "uk", "united kingdom", "uae", "united arab emirates", "singapore", "canada",
+    "germany", "australia", "netherlands", "ireland", "france", "japan", "remote", "hybrid", "on-site", "onsite",
+    "bangalore", "bengaluru", "mumbai", "navi mumbai", "pune", "hyderabad", "chennai", "delhi", "new delhi", "gurgaon",
+    "gurugram", "noida", "kolkata", "ahmedabad", "jaipur", "kochi", "cochin", "coimbatore", "mysore", "mysuru",
+    "chandigarh", "indore", "lucknow", "thiruvananthapuram", "trivandrum", "visakhapatnam", "vadodara", "nagpur",
+    "bhubaneswar", "mangalore", "mangaluru", "dubai", "london", "new york", "san francisco", "seattle", "toronto",
+    "karnataka", "maharashtra", "tamil nadu", "telangana", "kerala", "uttar pradesh", "haryana", "west bengal",
+    "gujarat", "rajasthan", "andhra pradesh", "delhi ncr", "ncr", "california", "texas", "ontario",
+}
+_PLACE_PART = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,30}$")
+
+
+def is_location(text: str) -> bool:
+    """True for a line that is only a place: "Bangalore, India", "Pune", "Remote", "Hyderabad, Telangana, India",
+    "Bengaluru (Hybrid)". A known place must appear, and nothing may look like a job title or an employer name."""
+    t = " ".join(str(text or "").replace("(", ",").replace(")", "").split()).strip(" ,|-–—")
+    if not t or len(t) > 60 or _TITLE_NOUN_RE.search(t) or re.search(r"\d", t):
+        return False
+    parts = [p.strip() for p in re.split(r"\s*[,/|]\s*|\s+[-–—]\s+", t) if p.strip()]
+    if not parts or len(parts) > 4 or not all(_PLACE_PART.match(p) for p in parts):
+        return False
+    if re.search(r"\b(ltd|limited|inc|llp|llc|pvt|private|corp|corporation|technologies|solutions|services|bank|labs|group|systems|consulting|software|university|college|institute)\b", t, re.I):
+        return False
+    return all(p.lower() in _PLACES for p in parts)  # every part a known place: "Zeta, Bangalore" is not a location
+
+
 def sep_join(parts: list[str], sep: str) -> str:
     joiner = {r"\s+\|\s+": " | ", r"\s+I\s+": " I ", r",\s+": ", "}.get(sep, " - ")
     return joiner.join(parts)
@@ -109,9 +137,25 @@ def _header_block(lines: list[str], i: int, date_idx: set[int]) -> list[int]:
         ln = lines[j].strip()
         if is_bullet(lines[j]) or j in date_idx or not ln or len(ln) > 90 or ln.endswith((".", ",", ";")):
             break
+        if is_location(ln):  # a location line between title/company and the dates: not part of the header
+            j -= 1
+            continue
         block.insert(0, j)
         j -= 1
     return block
+
+
+def _location_near(lines: list[str], i: int, block: list[int]) -> str | None:
+    """The location of the role whose dates are on line `i`: on the date line itself, or a location-only line just
+    above (within the header) or just below it."""
+    rest = DATE_RANGE_RE.sub("", lines[i]).strip(" |,-–—")
+    if rest and is_location(rest):
+        return rest
+    lo = (block[0] if block else i) - 1
+    for j in [*range(i - 1, max(lo, -1), -1), i + 1, i + 2]:
+        if 0 <= j < len(lines) and is_location(lines[j].strip()):
+            return lines[j].strip()
+    return None
 
 
 def parse_experience(lines: list[str], today: date) -> tuple[list[dict[str, Any]], list[str]]:
@@ -121,6 +165,8 @@ def parse_experience(lines: list[str], today: date) -> tuple[list[dict[str, Any]
     headers: dict[int, list[int]] = {}
     for i in date_idx:
         remainder = DATE_RANGE_RE.sub("", lines[i]).strip(" |,-–—")
+        if is_location(remainder):  # "Bangalore, India | Jan 2022 – Present": the place, not the role
+            remainder = ""
         headers[i] = [] if (len(remainder) > 3 and not is_bullet(lines[i])) else _header_block(lines, i, date_set)
 
     roles: list[dict[str, Any]] = []
@@ -131,6 +177,28 @@ def parse_experience(lines: list[str], today: date) -> tuple[list[dict[str, Any]
             header = " | ".join(lines[j].strip() for j in block)
         else:
             header = DATE_RANGE_RE.sub("", lines[i]).strip(" |,-–—")
+            if is_location(header):
+                header = ""
+        location = _location_near(lines, i, block)
+        # A place written on the title/company line ("Paytm, Bangalore, India"): kept as the location, not the company.
+        if header and not location:
+            for sep in (r"\s+\|\s+", r",\s+", r"\s+[-–—]\s+"):
+                parts = re.split(sep, header)
+                for k in range(1, len(parts)):
+                    tail = ", ".join(parts[k:]) if sep == r",\s+" else " ".join(parts[k:])
+                    if is_location(tail) and not is_location(", ".join(parts[:k])):
+                        header, location = sep_join(parts[:k], sep), tail
+                        break
+                if location:
+                    break
+        elif header and location:
+            for sep in (r"\s+\|\s+", r",\s+"):
+                parts = re.split(sep, header)
+                if len(parts) > 1 and (", ".join(parts[-2:]) == location or parts[-1] == location):
+                    keep = parts[:-2] if ", ".join(parts[-2:]) == location else parts[:-1]
+                    if keep:
+                        header = sep_join(keep, sep)
+                        break
         if not header:
             warnings.append(f"Could not find a title/company line for the role dated '{lines[i].strip()}'.")
         title, company, confidence = split_role_header(header)
@@ -140,11 +208,23 @@ def parse_experience(lines: list[str], today: date) -> tuple[list[dict[str, Any]
             nxt = date_idx[n + 1]
             stop = headers[nxt][0] if headers[nxt] else nxt
         body_from = i + 1
-        # "Title / dates / Company" layout: the company is the plain line right under the dates.
+        # "Title / dates / Company" layout: the company is the plain line right under the dates. A one-line header split
+        # only at a comma ("Senior Analyst, Payments Risk") is a title with a comma when that line exists.
+        comma_only = len(block) == 1 and "," in header and not re.search(r"\s(\||I|@|at|—|–)\s", header)
+        if company and comma_only and body_from < stop:
+            nxt = lines[body_from].strip()
+            nxt_i = body_from + 1 if is_location(nxt) and body_from + 1 < stop else body_from
+            cand = lines[nxt_i].strip()
+            if cand and not is_bullet(lines[nxt_i]) and len(cand) <= 80 and not cand.endswith((".", ";", ":")) \
+                    and not DATE_RANGE_RE.search(cand) and not is_location(cand):
+                title, company, confidence, body_from = header, "", "medium", nxt_i
         if not company and body_from < stop:
             below = lines[body_from].strip()
+            if below and is_location(below) and body_from + 1 < stop:  # dates, then the place, then the employer
+                body_from += 1
+                below = lines[body_from].strip()
             if below and not is_bullet(lines[body_from]) and len(below) <= 80 and not below.endswith((".", ";", ":")) \
-                    and not DATE_RANGE_RE.search(below):
+                    and not DATE_RANGE_RE.search(below) and not is_location(below):
                 company, confidence, body_from = below, "medium", body_from + 1
                 header = f"{header} | {below}"
         if confidence == "low":
@@ -160,7 +240,8 @@ def parse_experience(lines: list[str], today: date) -> tuple[list[dict[str, Any]
                 "is_current": current,
                 "months": months_between(start, end),
                 "date_text": DATE_RANGE_RE.search(lines[i]).group(0),  # type: ignore[union-attr]
-                "bullets": join_bullets(lines[body_from:stop]),
+                "location": location,
+                "bullets": [b for b in join_bullets([ln for ln in lines[body_from:stop] if not is_location(ln.strip())])],
             }
         )
     if not roles:

@@ -32,7 +32,7 @@ export const SETTINGS_GROUPS: SettingsGroupDef[] = [
       { key: "platforms", label: "Platforms", icon: Plug,
         description: "Which job sites JobPilot looks at, and how jobs from each one reach you." },
       { key: "portals", label: "Portal Connections", icon: Cable,
-        description: "What JobPilot can and can't do with LinkedIn, Naukri and Indeed, and a checklist to sharpen your profile there." },
+        description: "Connect LinkedIn or Indeed, open Naukri, bring portal jobs in by link, and get to each application prepared." },
     ],
   },
   {

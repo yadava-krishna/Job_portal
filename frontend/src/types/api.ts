@@ -538,6 +538,12 @@ export interface PackageResume {
   format: "pdf" | "docx" | null;
   selected_by: "you" | "default" | null;
   ready: boolean;
+  /** A suggestion (with the reason) when nothing is chosen yet. Never used until the user picks it. */
+  recommended?: { kind: "upload" | "studio"; id: number; name: string; format: "pdf" | "docx"; why: string } | null;
+  /** The exact file chosen: Studio revision and the file's SHA-256 (or the upload's). */
+  revision?: number | null;
+  checksum?: string | null;
+  chosen_at?: string | null;
 }
 
 export interface PackageProfileRow { key: string; label: string; value: string | number | null; source: string }
@@ -548,6 +554,8 @@ export interface PackageEligibility { label: string; status: "ok" | "warn" | "fa
 export interface PackageReadiness {
   profile: boolean;
   resume: boolean;
+  /** There are resumes, but none is chosen for this application yet. */
+  resume_choice_needed?: boolean;
   known_questions: boolean;
   form_inspected: boolean;
   to_check: number;

@@ -12,6 +12,7 @@
     ["first_name", [/^(legal )?first name\b/, /^given name\b/, /^forename\b/]],
     ["last_name", [/^(legal )?last name\b/, /^surname\b/, /^family name\b/]],
     ["full_name", [/^(your )?(full |legal )?name\b(?! of)/, /^candidate name\b/]],
+    ["email_confirm", [/^(confirm|re-?enter|repeat|retype|verify) (your )?e-?mail( address)?\b/, /^e-?mail( address)? (confirmation|again)\b/]],
     ["email", [/^(your )?e-?mail( address)?\b/]],
     ["phone_country_code", [/^(phone |mobile )?(country|dial(l)?ing|isd) code\b/]],
     ["phone", [/^(your )?(phone|mobile|contact|cell)( phone)?( number| no\.?)?\b/]],
@@ -141,6 +142,13 @@
       const hits = texts.flatMap((t, i) => (new RegExp(`^${yn[1]}\\b`).test(t) ? [i] : []));
       if (hits.length === 1) return hits[0];
       return -1;
+    }
+    // A dial code ("+91") against country options ("India (+91)", "+91 India"): the one option carrying that code.
+    const dial = /^\+\d{1,4}$/.exec(String(answer).trim());
+    if (dial) {
+      const code = dial[0].replace("+", "\\+");
+      const hits = options.flatMap((o, i) => (new RegExp(`(^|[\\s(])${code}($|[\\s)])`).test(String(o)) ? [i] : []));
+      return hits.length === 1 ? hits[0] : -1;
     }
     const q = quantity(answer);
     if (q) {

@@ -26,6 +26,7 @@ from backend.models import (
     Company,
     DiscoveryRun,
     ExtensionToken,
+    ExternalIdentity,
     Interview,
     JobPreference,
     JobView,
@@ -305,6 +306,7 @@ def export(db: Session, user: User) -> dict[str, Any]:
         "notifications": [_row(n, {"user_id"}) for n in q(Notification)],
         "discovery_runs": [_row(r, {"user_id"}) for r in q(DiscoveryRun)],
         "browser_extension_connections": [_row(t, {"user_id", "token_hash"}) for t in q(ExtensionToken)],
+        "linked_portal_accounts": [_row(i, {"user_id", "access_token_encrypted", "refresh_token_encrypted"}) for i in q(ExternalIdentity)],
         "activity_sessions": [_row(s, {"user_id"}) for s in q(UserActivitySession)],
         **_career_export(db, user, q),
     }

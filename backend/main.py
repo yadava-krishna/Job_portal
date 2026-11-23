@@ -57,7 +57,7 @@ def create_app(*, start_scheduler: bool = True) -> FastAPI:
         allow_credentials=False,  # bearer tokens, no cookies
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "ngrok-skip-browser-warning", "X-Request-ID"],
-        expose_headers=["Content-Disposition", "Retry-After", "X-Request-ID", "X-Page-Count", "X-Resume-Sha256"],
+        expose_headers=["Content-Disposition", "Retry-After", "X-Request-ID", "X-Page-Count", "X-Resume-Sha256", "X-Revision", "X-Checksum"],
         max_age=600,
     )
 

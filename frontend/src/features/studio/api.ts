@@ -117,37 +117,68 @@ export interface ExportResult {
 
 export type IssueLevel = "error" | "warning" | "suggestion" | "info";
 export type IssueKind = "format" | "accuracy" | "writing" | "job";
+/** Where an issue is: section *type*, block index within that section, bullet index, and the field. */
+export interface IssueWhere { section: string; block?: number | null; bullet?: number | null; field?: string | null }
 export interface FeedbackIssue {
+  /** Stable across re-checks (built from what the issue is about, not list positions). */
+  id?: string;
   level: IssueLevel;
   code: string;
   /** format = objective, mechanical checks; accuracy = figures not in your profile; writing = style opinions; job = job coverage */
   kind?: IssueKind;
   message: string;
-  /** Feedback uses the section *type*; block/bullet are indexes in that section. */
-  where: { section: string; block?: number; bullet?: number } | null;
+  where: IssueWhere | null;
+  /** The entry it concerns, e.g. "Data Analyst — Paytm". */
+  entry?: string | null;
+  why?: string;
+  evidence?: string;
+  fix?: string;
+  /** Same cause reported more than once (e.g. on export and read-back): shown once with a count. */
+  count?: number;
+}
+export interface ScoreInfo { score: number | null; method: string }
+export interface Scores {
+  resume_quality: ScoreInfo & { counts?: Record<IssueLevel, number> };
+  job_match?: ScoreInfo & { category?: string | null };
+  alignment?: ScoreInfo & { matched: { skill: string; required: boolean }[]; addable: { skill: string; required: boolean }[];
+    gaps: { skill: string; required: boolean }[]; note?: string };
 }
 export interface Feedback {
   resume_version_id: number;
+  /** The revision this check analysed (its exported PDF). */
+  revision?: number;
+  checksum?: string | null;
+  export_id?: number | null;
   job_id: number | null;
   pages: number | null;
   issues: FeedbackIssue[];
   readiness: number;
+  scores?: Scores;
   score_method?: string;
   ats_safe_template: boolean;
   note: string;
 }
 
+export type SuggestionCategory = "structure" | "writing" | "emphasize" | "confirm" | "gap";
 export interface Suggestion {
   id: string;
-  kind: "rewrite" | "reorder" | "add_skill" | "reorder_skills" | "reorder_entries";
-  /** Suggestions use section/block/bullet *indexes* of the saved document. */
-  where: { section: number; block: number; bullet?: number };
+  kind: "rewrite" | "reorder" | "add_skill" | "reorder_skills" | "reorder_entries" | "edit_field" | "confirm" | "gap";
+  /** Suggestions use section/block/bullet *indexes* of the saved document. Gaps have no place. */
+  where: { section: number; block: number; bullet?: number; field?: string } | null;
   before: string | null;
   after: string | null;
   order?: number[];
   skill?: string;
+  field?: string;
   evidence: "supported" | "unknown";
   reason: string;
+  category?: SuggestionCategory;
+  category_label?: string;
+  why?: string;
+  effect?: string;
+  verified?: boolean;
+  where_label?: string;
+  actions?: ("review" | "go_to" | "ignore" | "profile")[];
 }
 
 export interface AttachResult {
@@ -172,8 +203,8 @@ export const studioKeys = {
   templates: ["studio", "templates"] as const,
   versions: ["studio", "versions"] as const,
   version: (id: number) => ["studio", "version", id] as const,
-  feedback: (id: number, jobId: number | null) => ["studio", "feedback", id, jobId] as const,
-  suggestions: (id: number, jobId: number | null) => ["studio", "suggestions", id, jobId] as const,
+  feedback: (id: number, jobId: number | null, revision?: number) => ["studio", "feedback", id, jobId, revision ?? null] as const,
+  suggestions: (id: number, jobId: number | null, revision?: number) => ["studio", "suggestions", id, jobId, revision ?? null] as const,
 };
 
 export const useStudioTemplates = () =>
@@ -200,20 +231,26 @@ export const useStudioVersion = (id: number | null) =>
     refetchOnWindowFocus: false,
   });
 
-export const useStudioFeedback = (id: number, jobId: number | null, enabled: boolean) =>
+/** The check of one saved revision. Keyed by revision, so an answer for an older revision can never be shown as the
+ *  current one; the server also refuses (409) a check asked for a revision that is no longer current. */
+export const useStudioFeedback = (id: number, jobId: number | null, enabled: boolean, revision?: number) =>
   useQuery({
-    queryKey: studioKeys.feedback(id, jobId),
-    queryFn: async () => (await api.get<Feedback>(`/studio/versions/${id}/feedback`, { params: jobId ? { user_job_id: jobId } : {} })).data,
+    queryKey: studioKeys.feedback(id, jobId, revision),
+    queryFn: async () => (await api.get<Feedback>(`/studio/versions/${id}/feedback`, {
+      params: { ...(jobId ? { user_job_id: jobId } : {}), ...(revision != null ? { revision } : {}) }, timeout: 120_000 })).data,
     enabled,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
+    retry: (n, e) => !(axios.isAxiosError(e) && e.response?.status === 409) && n < 1,
   });
 
-export const useStudioSuggestions = (id: number, jobId: number | null, enabled: boolean) =>
+export const useStudioSuggestions = (id: number, jobId: number | null, enabled: boolean, revision?: number) =>
   useQuery({
-    queryKey: studioKeys.suggestions(id, jobId),
+    queryKey: studioKeys.suggestions(id, jobId, revision),
     queryFn: async () => (await api.get<Suggestion[]>(`/studio/versions/${id}/suggestions`, { params: jobId ? { user_job_id: jobId } : {} })).data,
     enabled,
     refetchOnWindowFocus: false,
+    staleTime: Infinity,
   });
 
 export function useCreateVersion() {
@@ -260,10 +297,12 @@ export async function exportVersion(id: number, format: "pdf" | "docx"): Promise
   return (await api.post<ExportResult>(`/studio/versions/${id}/export`, { format }, { timeout: 120_000 })).data;
 }
 
-export async function fetchPreview(id: number): Promise<{ blob: Blob; pages: number | null }> {
+export async function fetchPreview(id: number): Promise<{ blob: Blob; pages: number | null; revision: number | null }> {
   const res = await api.get(`/studio/versions/${id}/preview.pdf`, { responseType: "blob", timeout: 120_000 });
   const raw = Number(res.headers?.["x-page-count"]);
-  return { blob: new Blob([res.data as Blob], { type: "application/pdf" }), pages: Number.isFinite(raw) && raw > 0 ? raw : null };
+  const rev = Number(res.headers?.["x-revision"]);
+  return { blob: new Blob([res.data as Blob], { type: "application/pdf" }), pages: Number.isFinite(raw) && raw > 0 ? raw : null,
+           revision: Number.isFinite(rev) && rev > 0 ? rev : null };
 }
 
 /** Classify a save failure from the backend's 409 detail. */
@@ -307,9 +346,11 @@ export function move<T>(list: T[], from: number, to: number): T[] {
  */
 export function applySuggestion(sections: Section[], s: Suggestion): { sections: Section[] } | { error: string } {
   const stale = { error: "That part of the resume changed since the suggestion was made. Refresh suggestions." };
-  const sec = sections[s.where.section];
+  if (!s.where) return { error: "This one needs you: add the evidence to your profile first." };
+  const si = s.where.section;
+  const sec = sections[si];
   if (!sec) return stale;
-  const replaceSection = (ns: Section) => sections.map((x, i) => (i === s.where.section ? ns : x));
+  const replaceSection = (ns: Section) => sections.map((x, i) => (i === si ? ns : x));
   if (s.kind === "add_skill") {
     const skill = s.skill ?? s.after;
     if (!skill) return stale;
@@ -330,23 +371,30 @@ export function applySuggestion(sections: Section[], s: Suggestion): { sections:
   }
   const blk = sec.blocks[s.where.block];
   if (!blk) return stale;
+  if (s.kind === "confirm" || s.kind === "gap") return { error: "This one needs you: use Go to field (or add the evidence to your profile)." };
+  if (s.kind === "edit_field") {
+    const f = s.field ?? s.where.field;
+    const content = blk.content as Record<string, unknown>;
+    if (!f || s.after == null || (s.before != null && content[f] !== s.before)) return stale;
+    return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where!.block ? ({ ...b, content: { ...content, [f]: s.after } } as Block) : b)) }) };
+  }
   if (s.kind === "reorder_skills") {
     if (blk.type !== "skill_group") return stale;
     const items = blk.content.items ?? [];
     const order = s.order ?? [];
     if (order.length !== items.length || new Set(order).size !== order.length || order.some((i) => items[i] == null)) return stale;
-    return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where.block ? ({ ...b, content: { ...blk.content, items: order.map((i) => items[i]) } } as Block) : b)) }) };
+    return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where!.block ? ({ ...b, content: { ...blk.content, items: order.map((i) => items[i]) } } as Block) : b)) }) };
   }
   if (s.kind === "rewrite") {
     const ui = s.where.bullet ?? -1;
     const bullet = blk.bullets[ui];
     if (!bullet || s.after == null || (s.before != null && bullet.text !== s.before)) return stale;
     const bullets = blk.bullets.map((u, i) => (i === ui ? { ...u, text: s.after as string, source: "suggestion" as const } : u));
-    return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where.block ? ({ ...b, bullets } as Block) : b)) }) };
+    return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where!.block ? ({ ...b, bullets } as Block) : b)) }) };
   }
   // reorder
   const order = s.order ?? [];
   if (order.length !== blk.bullets.length || new Set(order).size !== order.length || order.some((i) => !blk.bullets[i])) return stale;
   const bullets = order.map((i) => blk.bullets[i]);
-  return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where.block ? ({ ...b, bullets } as Block) : b)) }) };
+  return { sections: replaceSection({ ...sec, blocks: sec.blocks.map((b, i) => (i === s.where!.block ? ({ ...b, bullets } as Block) : b)) }) };
 }

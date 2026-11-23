@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -519,6 +520,76 @@ class ExtensionToken(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ExternalIdentity(Base, TimestampMixin):
+    """A portal account linked through the portal's official OAuth/OpenID Connect sign-in (Settings -> Portal Connections).
+
+    Linked by the provider's stable subject id, never by e-mail. One identity can belong to only one JobPilot user, and a
+    user has at most one per provider. Tokens are encrypted (CredentialCipher) and never leave the backend. The name and
+    e-mail shown here are what the provider shared; they never overwrite the user's verified JobPilot profile."""
+
+    __tablename__ = "external_identities"
+    __table_args__ = (UniqueConstraint("provider", "subject", name="uq_external_identity_subject"),
+                      UniqueConstraint("user_id", "provider", name="uq_external_identity_user_provider"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(200))
+    email: Mapped[str | None] = mapped_column(String(320))
+    email_verified: Mapped[bool | None] = mapped_column(Boolean)
+    picture_url: Mapped[str | None] = mapped_column(Text)
+    scopes: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    access_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    access_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refresh_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # linked | reconnect_required
+    status: Mapped[str] = mapped_column(String(30), default="linked", nullable=False)
+    status_detail: Mapped[str | None] = mapped_column(String(300))
+    # Which ID-token checks ran at link time, e.g. {"signature": true, "nonce": "matched"}: shown in diagnostics.
+    checks: Mapped[dict[str, Any]] = mapped_column(JSONType, default=dict, nullable=False)
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_validated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OAuthState(Base):
+    """One pending portal sign-in: single use, expires in 10 minutes, bound to the user who started it. Only the state's
+    SHA-256 is stored; the PKCE verifier is encrypted."""
+
+    __tablename__ = "oauth_states"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    nonce: Mapped[str | None] = mapped_column(String(100))
+    code_verifier_encrypted: Mapped[str | None] = mapped_column(Text)
+    redirect_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    scopes: Mapped[list[str]] = mapped_column(JSONType, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # link: a user linking their own account | test: an admin testing the server's setup (nothing is linked)
+    purpose: Mapped[str] = mapped_column(String(10), default="link", server_default=text("'link'"), nullable=False)
+
+
+class PortalProviderConfig(Base, TimestampMixin):
+    """A portal's developer app credentials saved by an admin (Settings -> Portal Connections -> Set up), and the result
+    of the admin's last real sign-in test. The client secret is encrypted with CredentialCipher and never returned by
+    any API. Server environment settings (LINKEDIN_CLIENT_ID, ...) take precedence over what is saved here."""
+
+    __tablename__ = "portal_provider_configs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    client_id: Mapped[str | None] = mapped_column(String(200))
+    client_secret_encrypted: Mapped[str | None] = mapped_column(Text)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # verified | authorization_required | cancelled | failed
+    last_test_status: Mapped[str | None] = mapped_column(String(30))
+    last_test_detail: Mapped[str | None] = mapped_column(String(300))
+    last_test_simulated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
 
 
 class Interview(Base, TimestampMixin):

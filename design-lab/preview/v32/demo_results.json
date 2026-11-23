@@ -1,0 +1,87 @@
+[
+ [
+  "not configured: three portal cards",
+  true,
+  ""
+ ],
+ [
+  "not configured: no Connect button anywhere",
+  true,
+  ""
+ ],
+ [
+  "not configured: says what the owner must set",
+  true,
+  ""
+ ],
+ [
+  "LinkedIn: linked after consent, identity shown",
+  true,
+  ""
+ ],
+ [
+  "Indeed: linked (PKCE + iss), granted permissions shown",
+  true,
+  "Name not shared \u00b7 test.candidate@example.com (verified by Indeed)\n\nLinked Nov 23, 2026 \u00b7 last checked Nov 23, 2026 \u00b7 access renews automatically\n\nPermissions you granted:\nemail\noffline_access"
+ ],
+ [
+  "linked accounts still show no job API or submission",
+  true,
+  ""
+ ],
+ [
+  "disconnect: LinkedIn back to Not linked",
+  true,
+  ""
+ ],
+ [
+  "revoked on the provider: Check connection shows Reconnect needed",
+  true,
+  ""
+ ],
+ [
+  "cancel on the provider: nothing linked, said plainly",
+  true,
+  ""
+ ],
+ [
+  "reconnect: linked again",
+  true,
+  ""
+ ],
+ [
+  "Naukri: Open on Naukri waits for an explicit resume choice",
+  true,
+  ""
+ ],
+ [
+  "Naukri: enabled once the resume is chosen",
+  true,
+  ""
+ ],
+ [
+  "Naukri: the original listing opens in this browser",
+  true,
+  "https://www.naukri.com/job-listings-accounts-receivable-analyst-acme-health-bengaluru-3-to-5-years-231125000001"
+ ],
+ [
+  "opening the page is not applying: asks for the outcome",
+  true,
+  ""
+ ],
+ [
+  "I applied is recorded as user-reported, not verified",
+  true,
+  ""
+ ],
+ [
+  "tracked under Applications",
+  true,
+  ""
+ ],
+ [
+  "no request reached LinkedIn, Indeed or Naukri (Naukri page intercepted)",
+  true,
+  "['https://www.naukri.com/job-listings-accounts-receivable-analyst-acme-health-bengaluru-3-to-5-years-231125000001']"
+ ]
+]

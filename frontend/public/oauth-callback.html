@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Where LinkedIn and Indeed send you back after their sign-in (the registered redirect URI). Nothing is exchanged
+         here: oauth-callback.js keeps the code and state in this tab for the signed-in app and returns to Settings. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; base-uri 'none'; form-action 'none'" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JobPilot · Returning to Portal Connections</title>
+  </head>
+  <body>
+    <p>Returning to JobPilot… If nothing happens, <a href="./#/settings?tab=portals">open Portal Connections</a>.</p>
+    <script src="./oauth-callback.js"></script>
+  </body>
+</html>

@@ -60,7 +60,7 @@ beforeEach(() => {
   store.clear();
   Object.assign(api.jobpilot, {
     start: vi.fn(async () => ({ application_id: 55 })),
-    package: vi.fn(async (id) => ({ application_id: id, resume: { kind: "studio", id: 12, format: "docx", name: "Tailored for Acme" }, cover_letter: "Dear Acme team, ..." })),
+    package: vi.fn(async (id) => ({ application_id: id, resume: { kind: "studio", id: 12, format: "docx", name: "Tailored for Acme", selected_by: "you" }, cover_letter: "Dear Acme team, ..." })),
     answers: vi.fn(async (qs) => qs.map((q) => ({ question: q, answer: null, status: "NEEDS_INPUT" }))),
     state: vi.fn(async (id, body) => ({ apply_state: body.state, apply_state_label: body.state })),
     resume: vi.fn(async (c) => ({ name: c.format === "docx" ? "cv.docx" : "cv.pdf", type: "application/pdf", buf: new Uint8Array([37, 80]).buffer })),
@@ -84,13 +84,15 @@ describe("pure session decisions", () => {
     for (const s of [null, undefined, "draft", "submitted_confirmed", "submission_uncertain", "interrupted", "failed"]) expect(afterTabClosed(s)).toBeNull();
   });
 
-  it("uses the popup's pick, else the application's package resume, else the default", () => {
+  it("uses the popup's pick, else the resume the user chose for the application, else none (never a silent default)", () => {
     const pkg = { kind: "studio", id: 12, format: "docx", name: "Tailored" };
-    expect(resumeChoice(null, { packageResume: pkg })).toEqual({ choice: { ...pkg }, from: "package" });
+    expect(resumeChoice(null, { packageResume: pkg, packageResumeConfirmed: true })).toEqual({ choice: { ...pkg }, from: "package" });
+    // A package resume that was only JobPilot's default (not chosen by the user) is not attached on its own.
+    expect(resumeChoice(null, { packageResume: pkg, packageResumeConfirmed: false })).toEqual({ choice: null, from: "none" });
     expect(resumeChoice({ kind: "upload", id: 3, format: "pdf" }, { packageResume: pkg }).choice).toMatchObject({ kind: "upload", id: 3 });
     expect(resumeChoice(null, { resume: { kind: "upload", id: 3, format: "pdf" }, packageResume: pkg }).from).toBe("popup");
-    expect(resumeChoice(null, {})).toEqual({ choice: null, from: "default" });
-    expect(resumeChoice(null, { packageResume: { kind: "evil", id: 1 } }).from).toBe("default");
+    expect(resumeChoice(null, {})).toEqual({ choice: null, from: "none" });
+    expect(resumeChoice(null, { packageResume: { kind: "evil", id: 1 }, packageResumeConfirmed: true }).from).toBe("none");
     expect(validResume({ kind: "upload", id: "x" })).toBeNull();
     expect(handoffApplicationId("12")).toBe(12);
     for (const bad of [null, undefined, "", 0, -3, 1.5, "abc", {}]) expect(handoffApplicationId(bad)).toBeNull();
@@ -123,13 +125,16 @@ describe("fill and attach with the application's package", () => {
     expect(api.jobpilot.resume).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "upload", id: 3 }));
   });
 
-  it("without a tracked application: plain answers, no package, the default resume", async () => {
+  it("without a tracked application: plain answers, no package, and no resume until the user picks one", async () => {
     await message({ action: "fill", args: { tabId: TAB, frameId: 0, userJobId: null } }, POPUP);
     expect(api.jobpilot.answers).toHaveBeenCalledWith(["Why Acme?"], null, {});
     expect(api.jobpilot.package).not.toHaveBeenCalled();
     expect(globalThis.__jobpilot.fill.mock.calls[0][0].coverLetter).toBeNull();
-    await message({ action: "attachResume", args: { tabId: TAB, frameId: 0, replace: false } }, POPUP);
-    expect(api.jobpilot.resume).toHaveBeenLastCalledWith({ kind: "upload" });
+    const none = await message({ action: "attachResume", args: { tabId: TAB, frameId: 0, replace: false } }, POPUP);
+    expect(none.data).toMatchObject({ ok: false, needsChoice: true });
+    expect(api.jobpilot.resume).not.toHaveBeenCalled();  // nothing downloaded or attached by default
+    await message({ action: "attachResume", args: { tabId: TAB, frameId: 0, replace: false, resume: { kind: "upload", id: 4, format: "pdf" } } }, POPUP);
+    expect(api.jobpilot.resume).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "upload", id: 4 }));
   });
 });
 

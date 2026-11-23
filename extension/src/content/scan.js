@@ -3,7 +3,9 @@
 (() => {
   const JP = (globalThis.__jobpilot ??= { adapters: {} });
   if (JP.scan) return;
-  const { clean, visible, choiceVisible, writable, textOf } = JP.dom;
+  const { clean, visible, choiceVisible, writable, textOf, byId, deepAll } = JP.dom;
+  // Adapters for web-component forms (adapter.deep) are scanned through shadow roots too.
+  const all = (adapter, root, selector) => (adapter.deep ? deepAll(root, selector) : [...root.querySelectorAll(selector)]);
 
   const state = (JP.state ??= { filled: new WeakMap(), refs: new Map(), nextRef: 1, observer: null });
   const TEXT_TYPES = new Set(["text", "email", "tel", "url", "number", "search", ""]);
@@ -17,7 +19,7 @@
     }
     const by = el.getAttribute("aria-labelledby");
     if (by) {
-      const t = by.split(/\s+/).map((id) => textOf(el.ownerDocument.getElementById(id))).filter(Boolean).join(" ");
+      const t = by.split(/\s+/).map((id) => textOf(byId(el, id))).filter(Boolean).join(" ");
       if (t) return clean(t);
     }
     if (el.getAttribute("aria-label")) return clean(el.getAttribute("aria-label"));
@@ -35,7 +37,7 @@
     const role = first.closest("[role=radiogroup],[role=group]");
     if (role) {
       const by = role.getAttribute("aria-labelledby");
-      if (by) return clean(by.split(/\s+/).map((id) => textOf(first.ownerDocument.getElementById(id))).join(" "));
+      if (by) return clean(by.split(/\s+/).map((id) => textOf(byId(first, id))).join(" "));
       if (role.getAttribute("aria-label")) return clean(role.getAttribute("aria-label"));
     }
     return "";
@@ -80,7 +82,7 @@
     const root = adapter.root() || document.body;
     const out = [];
     const groups = new Map();
-    for (const el of root.querySelectorAll("input,textarea,select")) {
+    for (const el of all(adapter, root, "input,textarea,select")) {
       if (adapter.ignore?.(el)) continue;
       const tag = el.tagName.toLowerCase();
       const type = (el.getAttribute("type") || "").toLowerCase();
@@ -119,7 +121,7 @@
                  single: g.els.length === 1, signals: signals(g.els[0], label) });
     }
     // Custom dropdowns that are a button opening a listbox (Workday and others).
-    for (const btn of root.querySelectorAll("button[aria-haspopup='listbox']")) {
+    for (const btn of all(adapter, root, "button[aria-haspopup='listbox']")) {
       if (adapter.ignore?.(btn) || !visible(btn) || !writable(btn) || (btn.getAttribute("type") || "").toLowerCase() !== "button") continue;
       const label = labelFor(btn, adapter);
       out.push({ kind: "listbutton", els: [btn], label, required: btn.getAttribute("aria-required") === "true",
@@ -127,7 +129,7 @@
     }
     for (const q of adapter.extraQuestions?.(root) ?? []) out.push({ signals: { label: q.label }, ...q });
     // Stable document order, and a ref per question for the review panel.
-    out.sort((a, b) => (a.els[0].compareDocumentPosition(b.els[0]) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    out.sort((a, b) => JP.dom.orderCompare(a.els[0], b.els[0]));
     for (const q of out) {
       q.ref = refFor(q.els[0]);
       q.requirement = q.requirement || requirementOf(Boolean(q.required), clean(q.label));

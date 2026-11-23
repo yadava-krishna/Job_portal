@@ -14,6 +14,11 @@ _REDACTIONS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}"), "[REDACTED_KEY]"),
     (re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._\-]{8,}"), r"\1 [REDACTED]"),
     (re.compile(r"(?i)\b(password|passwd|pwd|token|api[_-]?key|secret|cookie|session)\b(\s*[=:]\s*)\S+"), r"\1\2[REDACTED]"),
+    # OAuth: tokens, client secrets, PKCE verifiers, codes and states in query strings, form bodies or JSON; any JWT.
+    (re.compile(r"(?i)([\"']?\b(?:access_token|refresh_token|id_token|client_secret|code_verifier)\b[\"']?\s*[=:]\s*[\"']?)[^\s&\"',}]+"),
+     r"\1[REDACTED]"),
+    (re.compile(r"(?i)((?:[?&]|\b)(?:code|state|nonce)=|[\"'](?:code|state|nonce)[\"']\s*:\s*[\"'])[^\s&\"',}]+"), r"\1[REDACTED]"),
+    (re.compile(r"\beyJ[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]{5,}\.[A-Za-z0-9_\-]*"), "[REDACTED_JWT]"),
     (re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"), "[EMAIL]"),
     (re.compile(r"(?<!\d)(?:\+?91[\s\-]?)?[6-9]\d{4}[\s\-]?\d{5}(?!\d)"), "[PHONE]"),
 ]

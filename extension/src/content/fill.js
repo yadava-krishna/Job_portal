@@ -121,8 +121,10 @@
 
   function listboxOptions(input) {
     const id = input.getAttribute("aria-controls") || input.getAttribute("aria-owns");
-    const box = (id && input.ownerDocument.getElementById(id)) || null;
-    const scope = box || input.ownerDocument;
+    const box = (id && JP.dom.byId(input, id)) || null;
+    // In a web component the option list usually lives in the same shadow root as the input.
+    const tree = input.getRootNode?.();
+    const scope = box || (tree && tree !== input.ownerDocument && tree.querySelector?.("[role=option]") ? tree : input.ownerDocument);
     return [...scope.querySelectorAll("[role=option]")].filter((o) => visible(o) && o.getAttribute("aria-disabled") !== "true");
   }
 
@@ -194,6 +196,9 @@
    * Fill the form. payload = {fields, answers: {label: {answer, status, source, confirm, stale, sensitivity, ...}}, coverLetter?, overwrite}
    * Returns a report: {filled, review, unsure, kept, skipped, needs, files}.
    */
+  // Profile keys that reuse another profile value: "confirm your e-mail" repeats the e-mail address.
+  const FIELD_ALIAS = { email_confirm: "email" };
+
   async function fill(adapter, payload) {
     const questions = scan(adapter);
     const report = { platform: adapter.name, filled: [], review: [], unsure: [], kept: [], skipped: [], needs: [], files: [] };
@@ -219,8 +224,8 @@
       let value = null; let status = "VERIFIED"; let source = "profile"; let confirm = false;
       const key = cls.key && cls.confidence >= 0.4 ? cls.key : null;
       if (key) {
-        if (used.has(key) && !["first_name", "last_name"].includes(key)) { report.skipped.push({ ...item, reason: "Already filled in another field on this form." }); continue; }
-        value = fields[key] ?? null;
+        if (used.has(key) && !["first_name", "last_name", "email_confirm"].includes(key)) { report.skipped.push({ ...item, reason: "Already filled in another field on this form." }); continue; }
+        value = fields[FIELD_ALIAS[key] || key] ?? null;
         if (value == null || value === "") {
           if (cls.confidence < FILL_THRESHOLD) { report.needs.push({ ...item, reason: "Needs your answer." }); continue; }
           report.needs.push({ ...item, reason: `Add your ${KEY_WORDS[key] || label.toLowerCase()} to your JobPilot profile.`, where: "settings/profile" });

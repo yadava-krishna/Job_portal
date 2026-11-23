@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import String, case, cast, func, or_, select
 
 from backend.api import serializers
@@ -91,6 +91,16 @@ def import_job(body: ImportJobRequest, user: CurrentUser, db: DbSession, setting
         raise HTTPException(422, "Provide at least the job URL or title.")
     run, feed = discovery_service.import_job(db, settings, user, body)
     return ImportResult(run=serializers.run(run), user_job_ids=[u.id for u in feed], errors=[e["message"] for e in run.error_details or []])
+
+
+class ImportPreviewRequest(BaseModel):
+    url: HttpUrl
+
+
+@router.post("/import/preview")
+def import_preview(body: ImportPreviewRequest, user: CurrentUser, db: DbSession, settings: SettingsDep) -> dict:
+    """Check a job link before importing it: which portal and job it is, and whether it's already in your feed. Saves nothing."""
+    return discovery_service.preview_import(db, settings, user, str(body.url))
 
 
 @router.post("/import-file", response_model=ImportResult, status_code=status.HTTP_201_CREATED)

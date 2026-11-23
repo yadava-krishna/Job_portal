@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, Plus, Trash2, Eraser } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,16 @@ type Drag = { kind: "section"; from: number } | { kind: "block"; section: number
 /** Structured editor for a resume document: sections → blocks (contact, text, entry, skill group) → bullets. */
 export function DocumentEditor({ sections, onChange, readOnly }: { sections: Section[]; onChange: (s: Section[]) => void; readOnly: boolean }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // "Go to" from Check or Suggestions: open the section that holds the field (StudioEditor focuses the field).
+  useEffect(() => {
+    const open = (e: Event) => {
+      const type = (e as CustomEvent<{ section: string }>).detail?.section;
+      const i = sections.findIndex((x) => x.type === type);
+      if (i >= 0) setCollapsed((c) => ({ ...c, [sections[i]._k ?? String(i)]: false }));
+    };
+    window.addEventListener("studio:goto", open);
+    return () => window.removeEventListener("studio:goto", open);
+  }, [sections]);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -149,7 +159,7 @@ function BlockEditor({ section, block, index, count, readOnly, onChange, onMove,
   );
 
   return (
-    <div className={cn("rounded-xl border bg-background p-3", !block.visible && "border-dashed opacity-70")}>
+    <div data-where={`${section.type}:${index}`} className={cn("rounded-xl border bg-background p-3 transition-shadow duration-300", !block.visible && "border-dashed opacity-70")}>
       {block.type === "contact" && <ContactEditor id={id} c={block.content} onChange={(content) => onChange({ ...block, content })} />}
 
       {block.type === "text" && (
@@ -240,7 +250,7 @@ function BulletsEditor({ id, bullets, onChange }: { id: string; bullets: Bullet[
         const bid = `${id}-b${u._k ?? ui}`;
         const fromProfile = u.source === "profile";
         return (
-          <div key={u._k ?? ui} className={cn("rounded-lg border bg-card p-1.5 transition-colors duration-150 focus-within:border-route/40", !u.approved && "border-dashed bg-muted/40")}>
+          <div key={u._k ?? ui} data-bullet={ui} className={cn("rounded-lg border bg-card p-1.5 transition-colors duration-150 focus-within:border-route/40", !u.approved && "border-dashed bg-muted/40")}>
             <label htmlFor={bid} className="sr-only">Bullet {ui + 1}</label>
             <Textarea id={bid} rows={2} value={u.text} className="min-h-0 resize-y border-0 px-1.5 py-1 shadow-none focus-visible:ring-0"
                       onChange={(e) => set(ui, { text: e.target.value, source: fromProfile ? "user" : u.source })} />

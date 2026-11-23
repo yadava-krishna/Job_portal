@@ -1,0 +1,172 @@
+[
+ [
+  "overview: three cards in order LinkedIn, Naukri, Indeed",
+  true,
+  "['portal-linkedin', 'portal-naukri', 'portal-indeed']"
+ ],
+ [
+  "unconfigured: no Connect button for a candidate",
+  true,
+  ""
+ ],
+ [
+  "unconfigured: candidate sees no setup controls",
+  true,
+  ""
+ ],
+ [
+  "unconfigured: one plain reason, no setting names",
+  true,
+  ""
+ ],
+ [
+  "details: grouped Account / Discovery / Applications / Profile improvement",
+  true,
+  ""
+ ],
+ [
+  "Naukri: Open Naukri opens naukri.com in a new tab",
+  true,
+  "https://www.naukri.com/"
+ ],
+ [
+  "Naukri: no Connect, and how to come back is explained",
+  true,
+  ""
+ ],
+ [
+  "import: the link is recognised as a Naukri job",
+  true,
+  ""
+ ],
+ [
+  "import: nothing saved before confirming",
+  true,
+  "0"
+ ],
+ [
+  "import: saved through the existing import service",
+  true,
+  ""
+ ],
+ [
+  "apply: Open on Naukri waits for an explicit resume choice",
+  true,
+  ""
+ ],
+ [
+  "apply: the original Naukri listing opens",
+  true,
+  "https://www.naukri.com/job-listings-accounts-receivable-analyst-acme-health-bengaluru-3-to-5-years-231125000777"
+ ],
+ [
+  "apply: recorded as user-reported, not verified",
+  true,
+  ""
+ ],
+ [
+  "apply: tracked under Applications",
+  true,
+  ""
+ ],
+ [
+  "second Naukri job imported",
+  true,
+  "{\"run\":{\"id\":2,\"trigger\":\"manual\",\"status\":\"completed\",\"sources\":[\"user_job_url\"],\"started_at\":\"2026-11-23T11:35:12.199795\",\"completed_at\":\"2026-11-23T11:35:12.222215\",\"jobs_found\":1,\"jobs_new\":1,\"job"
+ ],
+ [
+  "find jobs: Naukri listing count reflects the import",
+  true,
+  ""
+ ],
+ [
+  "browse: Discover opens filtered to Naukri",
+  true,
+  ""
+ ],
+ [
+  "mobile: no horizontal scrolling at 390px",
+  true,
+  "390"
+ ],
+ [
+  "admin: Set up LinkedIn / Set up Indeed are the main actions",
+  true,
+  ""
+ ],
+ [
+  "setup: callback URL read from the server's configuration",
+  true,
+  ""
+ ],
+ [
+  "setup: links to LinkedIn Developers and names the OIDC product",
+  true,
+  ""
+ ],
+ [
+  "setup: Test connection is off until credentials exist",
+  true,
+  ""
+ ],
+ [
+  "setup: the secret field is masked",
+  true,
+  ""
+ ],
+ [
+  "setup: the secret never comes back from the API or into the page",
+  true,
+  ""
+ ],
+ [
+  "setup: candidates can't read the setup",
+  true,
+  ""
+ ],
+ [
+  "test: goes to the real LinkedIn authorization URL (not the simulator)",
+  true,
+  ""
+ ],
+ [
+  "test: the refusal is shown as the result, nothing linked",
+  true,
+  ""
+ ],
+ [
+  "candidate: Provider authorization required, still no Connect",
+  true,
+  ""
+ ],
+ [
+  "Indeed: partner approval and Partner Console explained",
+  true,
+  ""
+ ],
+ [
+  "setup: removing the credentials turns LinkedIn sign-in off again",
+  true,
+  ""
+ ],
+ [
+  "simulated: labelled on the chip and the button",
+  true,
+  ""
+ ],
+ [
+  "simulated: Connected (simulated) and 'not your LinkedIn account'",
+  true,
+  ""
+ ],
+ [
+  "simulated: never 'verified by LinkedIn'",
+  true,
+  ""
+ ],
+ [
+  "disconnect: the card updates once the backend confirms",
+  true,
+  ""
+ ]
+]

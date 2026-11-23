@@ -15,7 +15,7 @@ import { useJobs } from "@/services/queries";
 import {
   applySuggestion, exportVersion, saveConflict, saveVersion, studioKeys, useCloneVersion, useStudioFeedback, useStudioSuggestions, useStudioTemplates,
   useStudioVersion, useStudioVersions, withKeys,
-  type Suggestion, type Version, type VersionSummary,
+  type IssueWhere, type Suggestion, type Version, type VersionSummary,
 } from "./api";
 import { DocumentEditor } from "./DocumentEditor";
 import { CheckPanel, DesignPanel, HistoryPanel, SuggestionsPanel } from "./Panels";
@@ -99,8 +99,8 @@ export function StudioEditor({ id }: { id: number }) {
   const versions = useStudioVersions();
   const versionList = Array.isArray(versions.data) ? versions.data : [];
   // Read-only views of the panels' caches (enabled: false never fetches; the panels run the checks when opened).
-  const feedbackCache = useStudioFeedback(id, jobId, false);
-  const suggestionsCache = useStudioSuggestions(id, jobId, false);
+  const feedbackCache = useStudioFeedback(id, jobId, false, savedRevision);
+  const suggestionsCache = useStudioSuggestions(id, jobId, false, savedRevision);
 
   const apply = (next: Version) => {
     draftRef.current = next;
@@ -271,12 +271,32 @@ export function StudioEditor({ id }: { id: number }) {
     }
   };
 
+  // Check / Suggestions → "Go to": open Content, expand the section, then focus the exact field and highlight its item.
+  const [tab, setTab] = useState("content");
+  const goTo = (w: IssueWhere) => {
+    setTab("content");
+    setMobileView("edit");
+    window.dispatchEvent(new CustomEvent("studio:goto", { detail: { section: w.section } }));
+    window.setTimeout(() => {
+      const box = document.querySelector<HTMLElement>(`[data-where="${w.section}:${w.block ?? 0}"]`);
+      if (!box) { toast.error("That item isn't in the editor any more. Re-check to refresh."); return; }
+      const suffix: Record<string, string> = { title: "-title", organization: "-org", dates: "-start", location: "-loc", text: "-text", items: "-items",
+                                               name: "-name", email: "-email", phone: "-phone", detail: "-detail" };
+      const target = w.bullet != null ? box.querySelector<HTMLElement>(`[data-bullet="${w.bullet}"] textarea`)
+        : (w.field && suffix[w.field] ? box.querySelector<HTMLElement>(`[id$="${suffix[w.field]}"]`) : null) ?? box.querySelector<HTMLElement>("input, textarea");
+      box.scrollIntoView({ block: "center", behavior: "smooth" });
+      box.classList.add("ring-2", "ring-route/50");
+      window.setTimeout(() => box.classList.remove("ring-2", "ring-route/50"), 1600);
+      target?.focus({ preventScroll: true });
+    }, 120);
+  };
+
   const accept = (s: Suggestion): boolean => {
     if (!draftRef.current) return false;
     const r = applySuggestion(draftRef.current.sections, s);
     if ("error" in r) { toast.error(r.error); return false; }
     update({ sections: r.sections });
-    toast.success("Applied. Saving…");
+    toast.success("Applied. Saving, then the Check tab re-checks the new PDF. Undo (Ctrl+Z) takes it back.");
     return true;
   };
 
@@ -365,7 +385,7 @@ export function StudioEditor({ id }: { id: number }) {
       {/* Split view: inspector and paper preview each scroll on their own, so tabs, design and export stay in reach. */}
       <div className="grid gap-4 lg:-mb-10 lg:h-[calc(100dvh-9.75rem)] lg:min-h-[540px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,21fr)_minmax(0,19fr)]">
         <section aria-label="Editor" className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-card ring-1 ring-border", mobileView !== "edit" && "hidden lg:flex")}>
-          <Tabs defaultValue="content" className="min-h-0 flex-1 gap-0">
+          <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="min-h-0 flex-1 gap-0">
             <div className="shrink-0 overflow-x-auto border-b px-2.5 py-2">
               <TabsList>
                 <TabsTrigger value="content">Content</TabsTrigger>
@@ -383,10 +403,10 @@ export function StudioEditor({ id }: { id: number }) {
                            onTemplate={(template_key) => update({ template_key, settings: styleReset(draft.settings) })} onSettings={(settings) => update({ settings })} />
             </TabsContent>
             <TabsContent value="check" className="min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4">
-              <CheckPanel versionId={draft.id} jobId={jobId} onJob={setJobId} revision={savedRevision} />
+              <CheckPanel versionId={draft.id} jobId={jobId} onJob={setJobId} revision={savedRevision} onGoTo={goTo} />
             </TabsContent>
             <TabsContent value="suggestions" className="min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4">
-              <SuggestionsPanel versionId={draft.id} jobId={jobId} onJob={setJobId} sections={draft.sections} readOnly={readOnly} onAccept={accept}
+              <SuggestionsPanel versionId={draft.id} jobId={jobId} onJob={setJobId} sections={draft.sections} readOnly={readOnly} onAccept={accept} onGoTo={goTo} revision={savedRevision}
                                 handled={handledSuggestions} onHandledChange={setHandledSuggestions} />
             </TabsContent>
             <TabsContent value="history" className="min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-4">

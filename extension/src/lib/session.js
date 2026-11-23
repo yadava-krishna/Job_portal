@@ -20,16 +20,16 @@ export function validResume(r) {
 }
 
 /**
- * Which resume to attach: the one the user picked in the popup (now, or earlier for this session), else the one chosen
- * for this application in JobPilot (its package), else null (the server's default: the active upload).
- * Returns {choice, from: "popup"|"package"|"default"}.
+ * Which resume to attach: the one the user picked in the popup (now, or earlier for this session), else the one the
+ * user chose for this application in JobPilot (its package, only when they confirmed it there), else none: JobPilot
+ * never falls back to a default file on its own. Returns {choice, from: "popup"|"package"|"none"}.
  */
 export function resumeChoice(explicit, session) {
   const picked = validResume(explicit) || validResume(session?.resume);
   if (picked) return { choice: picked, from: "popup" };
   const pkg = validResume(session?.packageResume);
-  if (pkg) return { choice: pkg, from: "package" };
-  return { choice: null, from: "default" };
+  if (pkg && session?.packageResumeConfirmed) return { choice: pkg, from: "package" };
+  return { choice: null, from: "none" };
 }
 
 /** The optional application id the JobPilot web app hands over with a job, or null. */

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { FileUp, Loader2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { ArrowRight, CheckCircle2, FileUp, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -7,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, NativeSelect } from "@/components/app/common";
-import { errorMessage } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { ClippedJob } from "@/lib/clipper";
 import { useImportFile, useImportJob } from "@/services/queries";
 
@@ -125,6 +127,208 @@ export function ImportDialog({ open, onOpenChange, clip, onImported }: {
             {importJob.isPending && <Loader2 className="animate-spin" />} Save & score
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---- Guided import of one job link (Portal Connections) ---------------------------------------------------------------
+// The same import as "Add a job" above (POST /jobs/import, same validation), in steps: paste the link, see what JobPilot
+// recognises from the link itself (portal, job ID, already in your feed?), add the details from the listing, review,
+// save, then continue to the Apply Workspace. JobPilot never downloads the portal's page.
+
+type Portal = "LinkedIn" | "Naukri" | "Indeed";
+interface Preview { recognized: boolean; platform: Portal | null; job_id: string | null; url: string | null; detail: string;
+  existing: { user_job_id: number; title: string; company: string } | null }
+const HOMES: Record<Portal, string> = { LinkedIn: "https://www.linkedin.com/jobs/", Naukri: "https://www.naukri.com/", Indeed: "https://in.indeed.com/" };
+
+function basicUrlProblem(raw: string): string | null {
+  if (!raw.trim()) return "Paste the job's link first.";
+  try {
+    const u = new URL(raw.trim());
+    return u.protocol === "https:" || u.protocol === "http:" ? null : "That isn't a web link. Copy it from the browser's address bar.";
+  } catch {
+    return "That doesn't look like a link. Copy it from the browser's address bar (it starts with https://).";
+  }
+}
+
+export function GuidedImportDialog({ open, onOpenChange, platform, onPrepare, onView }: {
+  open: boolean; onOpenChange: (o: boolean) => void; platform?: Portal | null;
+  onPrepare: (userJobId: number) => void; onView: (userJobId: number) => void;
+}) {
+  const [step, setStep] = useState<"link" | "details" | "review" | "done">("link");
+  const [url, setUrl] = useState("");
+  const [urlProblem, setUrlProblem] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [manualPlatform, setManualPlatform] = useState<Portal>(platform ?? "LinkedIn");
+  const [form, setForm] = useState<Form>(empty);
+  const [result, setResult] = useState<{ id: number; duplicate: boolean } | null>(null);
+  const importJob = useImportJob();
+  const check = useMutation({
+    mutationFn: async (link: string) => (await api.post<Preview>("/jobs/import/preview", { url: link })).data,
+    onSuccess: (p) => setPreview(p),
+    onError: (e) => setUrlProblem(errorMessage(e)),
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    setStep("link"); setUrl(""); setUrlProblem(null); setPreview(null); setForm(empty); setResult(null);
+    setManualPlatform(platform ?? "LinkedIn");
+    importJob.reset(); check.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, platform]);
+
+  const set = (k: keyof Form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const recognised = preview?.recognized ? preview : null;
+  const where = recognised?.platform ?? (preview ? manualPlatform : platform ?? null);
+  const submitLink = () => {
+    const bad = basicUrlProblem(url);
+    setUrlProblem(bad);
+    setPreview(null);
+    if (!bad) check.mutate(url.trim());
+  };
+  const save = () => {
+    const body: Record<string, unknown> = {
+      url: recognised?.url ?? null, platform: recognised ? null : manualPlatform,
+      title: form.title.trim() || null, company: form.company.trim() || null, location: form.location.trim() || null,
+      description: form.description.trim() || null, posted_date: form.posted_date.trim() || null, salary: form.salary.trim() || null,
+      experience: form.experience.trim() || null, work_mode: form.work_mode || null, screening_questions: [],
+      posted_date_source: "user", captured_via: "form",
+    };
+    importJob.mutate(body, {
+      onSuccess: (r) => {
+        if (r.user_job_ids[0]) { setResult({ id: r.user_job_ids[0], duplicate: r.run.duplicates > 0 }); setStep("done"); }
+        else toast.error(r.errors[0] ?? "JobPilot couldn't save this job.");
+      },
+    });
+  };
+  const words = form.description.trim() ? form.description.trim().split(/\s+/).length : 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-xl" data-testid="guided-import">
+        <DialogHeader>
+          <DialogTitle>{step === "done" ? "Job saved" : `Import a ${platform ?? "job"} link`}</DialogTitle>
+          <DialogDescription>
+            {step === "link" ? "JobPilot reads the link only. It never downloads the page or signs in anywhere for you."
+              : step === "details" ? "Copy these from the listing you have open. The full description gives the most accurate match."
+              : step === "review" ? "Check what will be saved. Nothing is saved until you confirm."
+              : "Scored against your profile. Continue to the Apply Workspace when you're ready."}
+          </DialogDescription>
+        </DialogHeader>
+        <ol className="flex gap-1.5" aria-label="Progress">
+          {(["link", "details", "review", "done"] as const).map((s, i) => (
+            <li key={s} aria-current={s === step ? "step" : undefined}
+                className={cn("h-1 flex-1 rounded-full", ["link", "details", "review", "done"].indexOf(step) >= i ? "bg-route" : "bg-border")}>
+              <span className="sr-only">{["Link", "Details", "Review", "Saved"][i]}</span>
+            </li>
+          ))}
+        </ol>
+
+        {step === "link" && (
+          <div className="space-y-3">
+            <ol className="list-decimal space-y-1 pl-5 text-sm marker:font-semibold marker:text-route">
+              <li>Open a job on {platform ? <a href={HOMES[platform]} target="_blank" rel="noopener noreferrer" className="font-medium text-route underline-offset-4 hover:underline">{platform}</a> : "LinkedIn, Indeed or Naukri"} in another tab.</li>
+              <li>Copy its link from the address bar.</li>
+              <li>Paste it here and check it.</li>
+            </ol>
+            <form className="flex items-start gap-2" onSubmit={(e) => { e.preventDefault(); submitLink(); }}>
+              <div className="min-w-0 flex-1">
+                <label htmlFor="gi-url" className="sr-only">Job link</label>
+                <Input id="gi-url" value={url} onChange={(e) => { setUrl(e.target.value); setUrlProblem(null); }} inputMode="url" autoFocus
+                       placeholder={platform === "Naukri" ? "https://www.naukri.com/job-listings-…" : platform === "Indeed" ? "https://in.indeed.com/viewjob?jk=…" : "https://www.linkedin.com/jobs/view/…"}
+                       aria-invalid={!!urlProblem} aria-describedby={urlProblem ? "gi-url-problem" : undefined} />
+              </div>
+              <Button type="submit" disabled={check.isPending}>{check.isPending ? <Loader2 className="animate-spin" /> : <Search />} Check link</Button>
+            </form>
+            {urlProblem && <p id="gi-url-problem" role="alert" className="text-sm text-destructive">{urlProblem}</p>}
+            {preview && (preview.recognized ? (
+              <div className="rounded-xl bg-success-tint/60 p-3 text-sm ring-1 ring-success/25" data-testid="link-recognised">
+                <p className="flex items-center gap-1.5 font-medium text-success"><CheckCircle2 className="size-4" aria-hidden /> {preview.platform} job{preview.job_id ? ` ${preview.job_id}` : ""} recognised</p>
+                {platform && preview.platform !== platform && <p className="mt-1 text-xs text-foreground">That's a {preview.platform} link, not {platform}. That's fine: it's saved as {preview.platform}.</p>}
+                {preview.existing ? (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-foreground">Already in your jobs: <b>{preview.existing.title || "Untitled"}</b>{preview.existing.company ? ` at ${preview.existing.company}` : ""}.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => { onOpenChange(false); onPrepare(preview.existing!.user_job_id); }}>Prepare application <ArrowRight /></Button>
+                      <Button size="sm" variant="outline" onClick={() => setStep("details")}>Add details anyway</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="mt-1 text-xs text-muted-foreground">{preview.detail}</p>
+                    <Button size="sm" className="mt-2" onClick={() => setStep("details")}>Add details <ArrowRight /></Button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div role="alert" className="rounded-xl bg-caution-tint p-3 text-sm text-caution ring-1 ring-caution/25" data-testid="link-unrecognised">
+                <p>{preview.detail}</p>
+                <Button size="sm" variant="outline" className="mt-2" onClick={() => setStep("details")}>Enter details manually</Button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {step === "details" && (
+          <div className="space-y-3">
+            {!recognised && (
+              <Field label="Portal" htmlFor="gi-platform" hint="The link wasn't recognised, so it isn't saved. Pick where the job is listed.">
+                <NativeSelect id="gi-platform" value={manualPlatform} onChange={(v) => setManualPlatform(v as Portal)} className="w-full"
+                              options={(["LinkedIn", "Naukri", "Indeed"] as const).map((x) => ({ value: x, label: x }))} />
+              </Field>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Job title (required)" htmlFor="gi-title"><Input id="gi-title" value={form.title} onChange={set("title")} /></Field>
+              <Field label="Company" htmlFor="gi-company"><Input id="gi-company" value={form.company} onChange={set("company")} /></Field>
+              <Field label="Location" htmlFor="gi-loc"><Input id="gi-loc" value={form.location} onChange={set("location")} placeholder="Bengaluru" /></Field>
+              <Field label="Experience" htmlFor="gi-exp"><Input id="gi-exp" value={form.experience} onChange={set("experience")} placeholder="3-6 years" /></Field>
+            </div>
+            <Field label="Job description" htmlFor="gi-desc" hint="Paste the whole description from the listing.">
+              <Textarea id="gi-desc" rows={7} value={form.description} onChange={set("description")} />
+            </Field>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep("link")}>Back</Button>
+              <Button onClick={() => setStep("review")} disabled={!form.title.trim()}>Review</Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "review" && (
+          <div className="space-y-3">
+            <dl className="divide-y rounded-xl text-sm ring-1 ring-border" data-testid="import-review">
+              {([
+                ["Portal", where], ["Job ID", recognised?.job_id ?? "None (no recognised link)"], ["Link", recognised?.url ?? "Not saved"],
+                ["Title", form.title], ["Company", form.company || "Not given"], ["Location", form.location || "Not given"],
+                ["Description", words ? `${words} words` : "None"],
+              ] as const).map(([k, v]) => (
+                <div key={k} className="flex gap-3 px-3 py-2"><dt className="w-24 shrink-0 text-muted-foreground">{k}</dt><dd className="min-w-0 break-words">{v}</dd></div>
+              ))}
+            </dl>
+            {!words && <p className="text-xs text-caution">Without the description, the match score is a rough guess. You can add it later.</p>}
+            {importJob.isError && <p role="alert" className="text-sm text-destructive">{errorMessage(importJob.error)}</p>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setStep("details")} disabled={importJob.isPending}>Back</Button>
+              <Button onClick={save} disabled={importJob.isPending}>
+                {importJob.isPending ? <><Loader2 className="animate-spin" /> Saving and scoring…</> : "Save & score"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {step === "done" && result && (
+          <div className="space-y-3" data-testid="import-done">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-success"><CheckCircle2 className="size-4" aria-hidden />
+              {result.duplicate ? "It was already in your jobs, so it was updated with these details." : "Added to your jobs and scored."}</p>
+            <DialogFooter className="sm:justify-between">
+              <Button variant="ghost" onClick={() => { setStep("link"); setUrl(""); setPreview(null); setForm(empty); setResult(null); importJob.reset(); }}>Import another</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => { onOpenChange(false); onView(result.id); }}>View in Discover</Button>
+                <Button onClick={() => { onOpenChange(false); onPrepare(result.id); }}>Prepare application <ArrowRight /></Button>
+              </div>
+            </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

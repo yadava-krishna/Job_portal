@@ -207,6 +207,14 @@ function SideNav({ collapsed, onToggle, onNavigate, onSearch, mobile }: {
             <DropdownMenuItem onClick={signOut}><LogOut /> Sign out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* Always visible, not only inside the account menu. */}
+        <Tip show={collapsed} label="Sign out">
+          <button type="button" onClick={() => void signOut()} aria-label={collapsed ? "Sign out" : undefined} data-testid="sidebar-sign-out"
+                  className={cn("mt-1.5 flex h-9 items-center gap-3 rounded-xl text-[13px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring",
+                    collapsed ? "mx-auto w-11 justify-center" : "px-3")}>
+            <LogOut className="size-4 shrink-0" aria-hidden /> {!collapsed && "Sign out"}
+          </button>
+        </Tip>
       </div>
     </div>
   );

@@ -473,6 +473,23 @@ def import_job(db: Session, settings: BackendSettings, user: User, req: ImportJo
     return finish_run(db, run), feed
 
 
+def preview_import(db: Session, settings: BackendSettings, user: User, url: str) -> dict:
+    """What an import of this link would recognise, without saving anything: the same parsing and validation as
+    import_job. JobPilot reads only the link itself; it never downloads the portal's page."""
+    try:
+        rec = record_from_mapping({"url": url}, source="manual")
+        posting, _, _ = _posting_from_record(rec, settings)
+    except ValueError:
+        return {"recognized": False, "platform": None, "job_id": None, "url": None, "existing": None,
+                "detail": "That isn't a LinkedIn, Indeed or Naukri job link JobPilot recognises. Check the link, or enter the job's details yourself."}
+    job = db.execute(select(Job).where(Job.job_key == posting.job_key)).scalar_one_or_none()
+    uj = db.execute(select(UserJob).where(UserJob.user_id == user.id, UserJob.job_id == job.id)).scalar_one_or_none() if job else None
+    return {"recognized": True, "platform": posting.platform.value, "job_id": posting.platform_job_id, "url": posting.url,
+            "existing": {"user_job_id": uj.id, "title": job.title, "company": job.company} if uj else None,
+            "detail": (f"{posting.platform.value} job" + (f" {posting.platform_job_id}" if posting.platform_job_id else "") +
+                       ". JobPilot reads only the link, not the page: add the title, company and description from the listing.")}
+
+
 def import_file(db: Session, settings: BackendSettings, user: User, filename: str, content: bytes) -> tuple[DiscoveryRun, list[UserJob], list[str]]:
     suffix = Path(filename or "").suffix.lower()
     if suffix not in (".json", ".csv", ".txt"):

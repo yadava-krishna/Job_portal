@@ -54,7 +54,7 @@ async function supportedFrames(tabId) {
   const out = [];
   for (const r of probes) {
     const p = await allowedPlatform(r.result);
-    if (p) out.push({ frameId: r.frameId, url: r.result, platform: p.name, generic: !p.builtin && p.id !== "workday" });
+    if (p) out.push({ frameId: r.frameId, url: r.result, platform: p.name, generic: !p.builtin && !["workday", "smartrecruiters"].includes(p.id) });
   }
   return out;
 }
@@ -68,6 +68,11 @@ async function inject(tabId, frames) {
 async function run(tabId, frameId, func, args = []) {
   const [res] = await chrome.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, func, args });
   return res?.result;
+}
+
+async function sha256(buf) {
+  const d = await crypto.subtle.digest("SHA-256", buf);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function toBase64(buf) {
@@ -124,9 +129,11 @@ async function inspect({ tabId } = {}) {
   }
   await inject(tab.id, frames);
   const details = [];
+  const diagnostics = [];  // frames with no recognised form: what they hold (counts only), so the popup can explain
   for (const f of frames) {
     const d = await run(tab.id, f.frameId, () => globalThis.__jobpilot.detect());
     if (d?.platform) details.push({ ...f, ...d, platform: d.platform });
+    else diagnostics.push({ frameId: f.frameId, url: f.url, platform: f.platform, census: d?.census || null });
   }
   const form = details.sort((a, b) => b.fields - a.fields)[0];
   const connected = await jobpilot.connected();
@@ -136,8 +143,24 @@ async function inspect({ tabId } = {}) {
     try { resumes = await jobpilot.resumes(); } catch { resumes = []; }
   }
   const session = await getSession(tab.id);
-  if (!form) return { supported: true, tabId: tab.id, form: null, platform: frames[0].platform, match, resumes, session };
+  if (!form) return { supported: true, tabId: tab.id, form: null, platform: frames[0].platform, match, resumes, session, diagnostics: diagnose(diagnostics, tab.url) };
   return { supported: true, tabId: tab.id, form, match, resumes, session };
+}
+
+/** Why no form was recognised, from what the frames hold: {reason, frameHost?, origin?}. */
+function diagnose(frames, topUrl) {
+  const c = frames.map((f) => f.census).filter(Boolean);
+  const sum = (k) => c.reduce((n, x) => n + (x[k] || 0), 0);
+  let topHost = "";
+  try { topHost = new URL(topUrl || "").hostname; } catch { /* about:blank */ }
+  const foreign = [...new Set(c.flatMap((x) => x.frames || []).filter((h) => h && !["inline", "unknown", topHost].includes(h)))];
+  const allowedHosts = new Set(frames.map((f) => { try { return new URL(f.url).hostname; } catch { return ""; } }));
+  const frameHost = foreign.find((h) => !allowedHosts.has(h) && !/captcha|recaptcha|hcaptcha|google|doubleclick|youtube/.test(h));
+  const counts = { lightFields: sum("lightFields"), deepFields: sum("deepFields"), shadowHosts: sum("shadowHosts"), closedHosts: sum("closedHosts"), opaqueHosts: sum("opaqueHosts"), forms: sum("forms") };
+  if (frameHost) return { reason: "frame", frameHost, origin: `https://${frameHost}/*`, ...counts };
+  if (counts.opaqueHosts >= 3 && !counts.deepFields && counts.lightFields < 2) return { reason: "closed_components", ...counts };
+  if (counts.lightFields + counts.deepFields >= 2) return { reason: "fields_unrecognised", ...counts };
+  return { reason: "no_fields", ...counts };
 }
 
 async function fill({ tabId, frameId, overwrite, userJobId, applicationId, resume }) {
@@ -171,6 +194,7 @@ async function fill({ tabId, frameId, overwrite, userJobId, applicationId, resum
     try {
       const pkg = await jobpilot.package(session.applicationId);
       session.packageResume = validResume(pkg?.resume);
+      session.packageResumeConfirmed = pkg?.resume?.selected_by === "you";  // chosen (not just defaulted) in JobPilot
       coverLetter = typeof pkg?.cover_letter === "string" && pkg.cover_letter.trim() ? pkg.cover_letter.trim() : null;
     } catch { /* no package: the default resume, no cover letter */ }
   }
@@ -201,13 +225,16 @@ async function attachResume({ tabId, frameId, replace, resume }) {
   const session = await getSession(tabId);
   const picked = validResume(resume);
   if (picked && session) { session.resume = picked; await putSession(session); }  // picked in the popup for this session
-  // The popup's pick, else the resume chosen for this application in JobPilot, else the default (active upload).
-  const { choice } = resumeChoice(picked, session);
+  // The popup's pick, else the resume the user chose for this application in JobPilot. Never a silent default.
+  const { choice, from } = resumeChoice(picked, session);
+  if (!choice) return { ok: false, needsChoice: true, reason: "Choose which resume to attach. JobPilot never picks one for you." };
   const file = await fetchResume(choice);
   const payload = { name: file.name, type: file.type, b64: toBase64(file.buf) };
   const res = await run(tabId, frameId, (f, opts) => globalThis.__jobpilot.attachResume(f, opts), [payload, { replace: Boolean(replace) }]);
   if (res?.ok && session) {
-    session.resumeUsed = { kind: choice?.kind || "upload", id: choice?.id ?? file.resumeId ?? null, format: choice?.format || "pdf", name: file.name, verified: true };
+    // The exact file attached, for the application's history: what, chosen where, its size and content hash.
+    session.resumeUsed = { kind: choice.kind, id: choice.id, format: choice.format || "pdf", name: file.name, chosen: from, verified: true,
+                           size: file.buf.byteLength, sha256: await sha256(file.buf), checksum: file.checksum || null };
     await putSession(session);
   }
   return res;
@@ -372,8 +399,14 @@ async function external(msg) {
   if (!(await jobpilot.connected())) throw new ApiError(0, "Smart Apply isn't connected yet. Open Settings → Browser extension and create a connection code.");
   const userJobId = Number(msg.userJobId);
   if (!Number.isInteger(userJobId) || userJobId <= 0) throw new ApiError(0, "Not allowed.");
-  const url = formUrl(msg.url);
-  if (!url) throw new ApiError(0, "Smart Apply fills Greenhouse, Lever and Ashby forms. Open this listing and apply there.");
+  // Greenhouse, Lever and Ashby (built in), or a known application system the user already allowed on its site
+  // (e.g. SmartRecruiters): the listing opens and JobPilot fills the form once it appears.
+  let url = formUrl(msg.url);
+  if (!url) {
+    const p = platformForUrl(msg.url || "");
+    if (p?.optional && p.known && (await allowedPlatform(msg.url))) url = new URL(msg.url).toString();
+  }
+  if (!url) throw new ApiError(0, "Smart Apply fills Greenhouse, Lever and Ashby forms, and sites you allowed it on. Open this listing and apply there.");
   // Record the hand-over before the form loads (a fast page could finish loading first and be missed).
   const applicationId = handoffApplicationId(msg.applicationId);  // optional: the application to track directly
   const tab = await chrome.tabs.create({ url: "about:blank", active: true });
@@ -387,6 +420,7 @@ async function external(msg) {
  *  and attach the resume. Same fill as the popup's button; submitting still needs the user in the review panel. */
 async function autoFill(tabId, h) {
   const key = handoffKey(tabId);
+  let keep = false;
   h.running = true;
   await vault.set(key, h);
   badge(tabId, "…", "JobPilot is filling this application");
@@ -405,15 +439,24 @@ async function autoFill(tabId, h) {
       }
       if (!form) await sleep(750);
     }
-    if (!form) { badge(tabId, "!", "No application form found yet. Click Apply on the page, then click here and Fill."); return; }
+    if (!form) {
+      // Still on the job listing (SmartRecruiters opens its form on the next page after "I'm interested"): keep the
+      // hand-over until it expires, so the form is filled when it loads.
+      badge(tabId, "!", "No application form found yet. Click Apply on the page; JobPilot fills the form when it opens.");
+      keep = Date.now() - h.at < HANDOFF_TTL_MS;
+      if (keep) await vault.set(key, { ...h, running: false });
+      return;
+    }
     const r = await fill({ tabId, frameId: form.frameId, overwrite: false, userJobId: h.userJobId, applicationId: h.applicationId });
-    // The resume chosen for this application in JobPilot (its package), else the default. Never replaces a file.
-    await attachResume({ tabId, frameId: form.frameId, replace: false }).catch(() => null);  // a form without a file field
-    badge(tabId, r?.report?.needs?.length ? "!" : "✓", r?.report?.needs?.length ? "Filled: some questions need you" : "Filled: review and submit in the panel");
+    // The resume the user chose for this application in JobPilot (never a default, never replacing a file).
+    const att = await attachResume({ tabId, frameId: form.frameId, replace: false }).catch(() => null);  // a form without a file field
+    const noResume = att?.needsChoice;
+    badge(tabId, r?.report?.needs?.length || noResume ? "!" : "✓",
+          noResume ? "Filled. Choose your resume: open JobPilot from the toolbar." : r?.report?.needs?.length ? "Filled: some questions need you" : "Filled: review and submit in the panel");
   } catch (e) {
     badge(tabId, "!", `JobPilot couldn't fill this form: ${e?.message || "unknown error"}. Click here to try again.`);
   } finally {
-    await vault.remove(key);
+    if (!keep) await vault.remove(key);
   }
 }
 

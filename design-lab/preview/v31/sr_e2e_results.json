@@ -1,0 +1,72 @@
+[
+ [
+  "listing page: says no form yet and to click I'm interested",
+  true,
+  "SmartRecruiters page\nNo application form is on this page yet. Click \u201cI'm interested\u201d on the page; when the form shows, click Check again.\nWhat JobPilot found\nCheck again\nDownload my resume"
+ ],
+ [
+  "form page: the SmartRecruiters form is detected",
+  true,
+  "SmartRecruiters Data Analyst, Payments Risk\nNot in your JobPilot jobs, so it will not be tracked. You can still fill the form.\nSmart Apply: fill and review here; you submit on the page.\nMissing from your JobPilot profile\nCurrent salary (CTC)\nWork authorisation\nEarliest start date\nAdd verified answer"
+ ],
+ [
+  "no resume is preselected: the user must choose",
+  true,
+  ""
+ ],
+ [
+  "Attach is disabled until a resume is chosen",
+  true,
+  ""
+ ],
+ [
+  "resume attached to the drop zone and read back",
+  true,
+  "[['Test_Candidate_Resume.pdf', 4318]]"
+ ],
+ [
+  "first name filled",
+  true,
+  ""
+ ],
+ [
+  "e-mail and its confirmation filled with the same address",
+  true,
+  "test.candidate@example.com / test.candidate@example.com"
+ ],
+ [
+  "phone filled",
+  true,
+  ""
+ ],
+ [
+  "gender never answered",
+  true,
+  ""
+ ],
+ [
+  "privacy consent never ticked",
+  true,
+  ""
+ ],
+ [
+  "review panel reports the form's empty Experience section",
+  true,
+  ""
+ ],
+ [
+  "required fields still empty: the form shows its errors",
+  true,
+  "1"
+ ],
+ [
+  "confirmation shown after the user's own submit click",
+  true,
+  ""
+ ],
+ [
+  "nothing was sent to SmartRecruiters",
+  true,
+  "[]"
+ ]
+]

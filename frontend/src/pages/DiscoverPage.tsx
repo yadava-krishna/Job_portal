@@ -185,8 +185,12 @@ export function DiscoverPage() {
   const [running, setRunning] = useState<string | null>(null);
   const [draft, setDraft] = useState<JobQuery>(() => {
     // Arriving from a saved search ("View matches") pre-filters the feed to what it found.
-    const sid = Number(new URLSearchParams(location.search).get("search"));
-    return sid ? { ...EMPTY_QUERY, saved_search_id: sid } : EMPTY_QUERY;
+    // ?platform=Naukri (from Portal Connections) shows the jobs that came from that portal.
+    const params = new URLSearchParams(location.search);
+    const sid = Number(params.get("search"));
+    const platform = params.get("platform");
+    const base = platform && /^[A-Za-z]{2,30}$/.test(platform) ? { ...EMPTY_QUERY, platform: [platform] } : EMPTY_QUERY;
+    return sid ? { ...base, saved_search_id: sid } : base;
   });
   const [query, setQuery] = useState<JobQuery>(draft);
 

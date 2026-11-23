@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Query, Request, status
+from pydantic import BaseModel, Field
 
 from backend.api.deps import CurrentAdmin, DbSession, SettingsDep, client_ip
 from backend.schemas.admin import (
@@ -21,7 +22,7 @@ from backend.schemas.admin import (
     UserStatusUpdate,
 )
 from backend.schemas.discovery import SourceConnectorOut
-from backend.services import admin_service
+from backend.services import admin_service, portal_setup_service
 from backend.services.connectors import registry
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -247,3 +248,33 @@ def admin_ops_health(admin: CurrentAdmin, db: DbSession, settings: SettingsDep) 
     from backend.services import ops_health_service
 
     return ops_health_service.overview(db, settings)
+
+
+# ---- Portal sign-in setup (LinkedIn, Indeed): Settings -> Portal Connections -> Set up ----------------------------
+
+class PortalCredentials(BaseModel):
+    """The developer app's credentials. The secret is write-only: leave it out to keep the saved one."""
+    client_id: str = Field(min_length=1, max_length=200)
+    client_secret: str | None = Field(default=None, max_length=500)
+
+
+@router.get("/portals")
+def portal_setup(admin: CurrentAdmin, db: DbSession, settings: SettingsDep) -> list[dict[str, Any]]:
+    """How LinkedIn and Indeed sign-in are set up on this server. Never includes a client secret."""
+    return portal_setup_service.overview(db, settings)
+
+
+@router.put("/portals/{provider}/credentials")
+def save_portal_credentials(provider: str, body: PortalCredentials, admin: CurrentAdmin, db: DbSession, settings: SettingsDep) -> dict[str, Any]:
+    return portal_setup_service.save(db, settings, admin, provider, body.client_id, body.client_secret)
+
+
+@router.delete("/portals/{provider}/credentials")
+def remove_portal_credentials(provider: str, admin: CurrentAdmin, db: DbSession, settings: SettingsDep) -> dict[str, Any]:
+    return portal_setup_service.clear(db, settings, admin, provider)
+
+
+@router.post("/portals/{provider}/test")
+def test_portal_signin(provider: str, admin: CurrentAdmin, db: DbSession, settings: SettingsDep) -> dict[str, Any]:
+    """Start a real sign-in on the portal for this admin. Nothing is linked; the result is recorded and shown in setup."""
+    return portal_setup_service.start_test(db, settings, admin, provider)

@@ -84,7 +84,7 @@ describe("getting the extension from where you apply", () => {
     api.post.mockResolvedValue({ data: app });
     wrap(<ApplyDialog item={ghItem} onClose={() => {}} />);
     const cta = await screen.findByTestId("apply-extension-cta");
-    expect(cta.querySelector("a[download]")?.getAttribute("href")).toMatch(/downloads\/jobpilot-smart-apply-2\.3\.0\.zip$/);
+    expect(cta.querySelector("a[download]")?.getAttribute("href")).toMatch(/downloads\/jobpilot-smart-apply-2\.4\.0\.zip$/);
     expect(screen.getByText("How to set it up").getAttribute("href")).toBe("#/settings?tab=extension");
   });
 });

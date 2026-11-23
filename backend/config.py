@@ -57,6 +57,27 @@ class BackendSettings(BaseModel):
     extension_api_hosts: list[str] = Field(default_factory=list)
     # Answer the old host-less proof (extension 2.2.0 and earlier). Off: that proof can be relayed (see SECURITY.md).
     extension_prove_legacy: bool = False
+    # Portal account linking (Settings -> Portal Connections). A provider is offered only when its client id, secret and
+    # an exact registered redirect URI are all set. The redirect URI defaults to <PUBLIC_APP_URL>/oauth-callback.html.
+    linkedin_client_id: str | None = None
+    linkedin_client_secret: str | None = None
+    linkedin_redirect_uri: str | None = None
+    linkedin_pkce: bool = False          # LinkedIn's discovery document doesn't advertise PKCE for web apps
+    linkedin_require_nonce: bool = False  # LinkedIn's discovery document doesn't list a nonce claim; a nonce present is always checked
+    indeed_client_id: str | None = None
+    indeed_client_secret: str | None = None
+    indeed_redirect_uri: str | None = None
+    indeed_scopes: str = "email offline_access"
+    # Local simulated providers only (tests and demos): {"linkedin": {"authorize": ..., "token": ..., ...}}. Refused in production.
+    oauth_dev_endpoints: dict = Field(default_factory=dict)
+
+    @field_validator("oauth_dev_endpoints", mode="before")
+    @classmethod
+    def _dev_endpoints(cls, v):
+        if isinstance(v, str):
+            import json
+            return json.loads(v) if v.strip() else {}
+        return v or {}
 
     @field_validator("extension_api_hosts", mode="before")
     @classmethod
@@ -147,5 +168,16 @@ def get_settings() -> BackendSettings:
         "scheduler_run_time": _env("SCHEDULER_RUN_TIME", "09:00"),
         "extension_api_hosts": _env("EXTENSION_API_HOSTS", ""),
         "extension_prove_legacy": _env("EXTENSION_PROVE_LEGACY", "false").lower() == "true",
+        "public_app_url": _env("PUBLIC_APP_URL"),
+        "linkedin_client_id": _env("LINKEDIN_CLIENT_ID"),
+        "linkedin_client_secret": _env("LINKEDIN_CLIENT_SECRET"),
+        "linkedin_redirect_uri": _env("LINKEDIN_REDIRECT_URI"),
+        "linkedin_pkce": _env("LINKEDIN_PKCE", "false").lower() == "true",
+        "linkedin_require_nonce": _env("LINKEDIN_REQUIRE_NONCE", "false").lower() == "true",
+        "indeed_client_id": _env("INDEED_CLIENT_ID"),
+        "indeed_client_secret": _env("INDEED_CLIENT_SECRET"),
+        "indeed_redirect_uri": _env("INDEED_REDIRECT_URI"),
+        "indeed_scopes": _env("INDEED_SCOPES", "email offline_access"),
+        "oauth_dev_endpoints": _env("OAUTH_DEV_ENDPOINTS", ""),
     }
     return BackendSettings.model_validate(data)

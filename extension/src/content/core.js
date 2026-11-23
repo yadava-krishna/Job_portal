@@ -20,7 +20,8 @@
 
   JP.detect = () => {
     const a = adapterHere();
-    if (!a) return { url: location.href, platform: null };
+    // No form recognised: say what the page holds (counts only, never values), so the popup can explain why.
+    if (!a) return { url: location.href, platform: null, census: JP.dom.census() };
     const qs = scan(a);
     return {
       url: location.href, platform: a.name, title: a.jobTitle?.() || null, company: a.company?.() || null,
@@ -30,6 +31,7 @@
       requirements: Object.fromEntries(qs.filter((q) => q.kind !== "file" && q.label && q.requirement !== "unknown").map((q) => [q.label, q.requirement])),
       resumeField: Boolean(a.resumeInput?.()), resumeAttached: Boolean(a.hasResume?.()), resumeFirst: Boolean(a.resumeFirst),
       assistedSubmit: Boolean(a.assistedSubmit), step: a.step?.() || null, confirmation: JP.submit.confirmation(a),
+      coverLetterField: Boolean(a.coverLetterInput?.()), adapter: a.generic ? "generic" : a.name,
     };
   };
 

@@ -43,3 +43,15 @@ export const PROFILE = {
   location: "Bengaluru, Karnataka", current_company: "Example Corp", current_title: "AR Analyst", linkedin_url: "https://www.linkedin.com/in/test-candidate",
   github_url: "https://github.com/test-candidate", school: "Example University", degree: "B.Com", total_experience_years: 6.5,
 };
+
+/** Build the declarative shadow roots (<template shadowrootmode>) of a fixture, as Chrome does when parsing a page.
+ *  jsdom parses the templates but does not attach them. `mode` forces every root's mode (to test closed roots). */
+export function attachShadows(root = document, mode = null) {
+  for (const t of [...root.querySelectorAll("template[shadowrootmode]")]) {
+    const host = t.parentElement;
+    const sr = host.attachShadow({ mode: mode || t.getAttribute("shadowrootmode") });
+    sr.append(t.content.cloneNode(true));
+    t.remove();
+    attachShadows(sr, mode);
+  }
+}

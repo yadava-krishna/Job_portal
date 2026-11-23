@@ -38,7 +38,7 @@ export function DestinationLine({ dest, source }: { dest: PackageDestination; so
 export function ReadinessStrip({ readiness }: { readiness: PackageReadiness }) {
   const chips: { ok: boolean; label: string; unknown?: boolean }[] = [
     { ok: readiness.profile, label: readiness.profile ? "Profile ready" : "Profile incomplete" },
-    { ok: readiness.resume, label: readiness.resume ? "Resume chosen" : "No resume yet" },
+    { ok: readiness.resume, label: readiness.resume ? "Resume chosen" : readiness.resume_choice_needed ? "Choose your resume" : "No resume yet" },
     { ok: readiness.known_questions, label: readiness.known_questions ? "Known questions answered" : "Known questions need answers" },
     { ok: readiness.form_inspected, unknown: !readiness.form_inspected,
       label: readiness.form_inspected ? "Employer form inspected" : "Employer form not inspected yet" },

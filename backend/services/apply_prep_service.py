@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.models import Application, Resume, User, UserJob, utcnow
@@ -86,28 +87,52 @@ def _employer_questions(db: Session, pkg: dict[str, Any], dest: dict[str, Any], 
     return [], "not_inspected"
 
 
+def _recommend_resume(db: Session, user: User, app: Application) -> dict[str, Any] | None:
+    """A resume to suggest (never to use without the user's choice), with the evidence for it:
+    a Resume Studio version made for this job, else the user's most recently edited Studio version, else their
+    default upload."""
+    from backend.models import ResumeVersion
+
+    versions = list(db.execute(select(ResumeVersion).where(ResumeVersion.user_id == user.id, ResumeVersion.status != "archived")
+                               .order_by(ResumeVersion.updated_at.desc())).unique().scalars())
+    for v in versions:
+        if v.target_job_id and v.target_job_id == app.job_id:
+            return {"kind": "studio", "id": v.id, "name": v.name, "format": "pdf", "why": "Made in Resume Studio for this job."}
+    if versions:
+        v = versions[0]
+        return {"kind": "studio", "id": v.id, "name": v.name, "format": "pdf", "why": "Your most recently edited Resume Studio version."}
+    r = resume_service.active_resume(db, user)
+    if r is not None:
+        return {"kind": "upload", "id": r.id, "name": r.original_filename, "format": "docx" if r.stored_path.lower().endswith(".docx") else "pdf",
+                "why": "Your default uploaded resume."}
+    return None
+
+
 def _resume(db: Session, user: User, app: Application, pkg: dict[str, Any]) -> dict[str, Any]:
+    """The resume for this application. Only a resume the user chose for it counts as ready ("selected_by": "you");
+    otherwise a recommendation is offered and the user must pick or confirm it. Never a silent default."""
     from backend.models import ResumeVersion
 
     choice = pkg.get("resume_choice") or {}
     if choice.get("kind") == "studio" and choice.get("id"):
         v = db.get(ResumeVersion, choice["id"])
         if v is not None and v.user_id == user.id:
-            return {"kind": "studio", "id": v.id, "name": v.name, "format": choice.get("format") or "pdf", "selected_by": "you", "ready": True}
+            return {"kind": "studio", "id": v.id, "name": v.name, "format": choice.get("format") or "pdf", "selected_by": "you", "ready": True,
+                    "revision": choice.get("revision"), "checksum": app.resume_checksum, "chosen_at": choice.get("at")}
     if choice.get("kind") == "upload" and choice.get("id"):
         r = db.get(Resume, choice["id"])
         if r is not None and r.user_id == user.id:
             return {"kind": "upload", "id": r.id, "name": r.original_filename, "format": "docx" if r.stored_path.lower().endswith(".docx") else "pdf",
-                    "selected_by": "you", "ready": True}
-    if app.resume_version_id:
+                    "selected_by": "you", "ready": True, "checksum": r.sha256, "chosen_at": choice.get("at")}
+    if app.resume_version_id:  # attached to the application from Resume Studio ("Use for an application")
         v = db.get(ResumeVersion, app.resume_version_id)
         if v is not None and v.user_id == user.id:
-            return {"kind": "studio", "id": v.id, "name": v.name, "format": "pdf", "selected_by": "you", "ready": True}
-    r = resume_service.active_resume(db, user)
-    if r is None:
-        return {"kind": None, "id": None, "name": None, "format": None, "selected_by": None, "ready": False}
-    return {"kind": "upload", "id": r.id, "name": r.original_filename, "format": "docx" if r.stored_path.lower().endswith(".docx") else "pdf",
-            "selected_by": "default", "ready": True}
+            return {"kind": "studio", "id": v.id, "name": v.name, "format": "pdf", "selected_by": "you", "ready": True, "checksum": app.resume_checksum}
+    rec = _recommend_resume(db, user, app)
+    if rec is None:
+        return {"kind": None, "id": None, "name": None, "format": None, "selected_by": None, "ready": False, "recommended": None}
+    # Nothing chosen yet: shown as a recommendation the user confirms. Not ready until they do.
+    return {"kind": None, "id": None, "name": None, "format": None, "selected_by": None, "ready": False, "recommended": rec}
 
 
 def _next_action(app: Application, caps: dict[str, Any], dest: dict[str, Any]) -> str:
@@ -186,14 +211,15 @@ def build(db: Session, settings, user: User, app: Application, *, refresh_questi
     readiness = {
         "profile": bool(prof.get("ready")) and not any(m["key"] in ("profile", "full_name", "email", "phone") for m in missing),
         "resume": resume["ready"],
+        "resume_choice_needed": not resume["ready"] and bool(resume.get("recommended")),
         "known_questions": not needs,
         "form_inspected": inspected,
         "to_check": len(to_check),
         "needs_input": len(needs),
         "other_unanswered": len(other),
     }
-    readiness["level"] = ("blocked" if not readiness["profile"] or not readiness["resume"] else
-                          "needs_input" if needs else
+    readiness["level"] = ("blocked" if not readiness["profile"] or (not readiness["resume"] and not readiness["resume_choice_needed"]) else
+                          "needs_input" if needs or readiness["resume_choice_needed"] else
                           "ready" if inspected else "ready_known")
     readiness["summary"] = {
         "blocked": "Finish your profile and add a resume first.",
@@ -201,6 +227,8 @@ def build(db: Session, settings, user: User, app: Application, *, refresh_questi
         "ready": "Everything the employer's form asks for is prepared.",
         "ready_known": "Everything JobPilot knows is prepared. The employer's form may ask more: Smart Apply shows those questions when it opens it.",
     }[readiness["level"]]
+    if readiness["resume_choice_needed"]:
+        readiness["summary"] = "Choose the resume for this application." + (f" {readiness['summary']}" if needs else "")
     if other and readiness["level"] in ("ready", "ready_known"):
         readiness["summary"] = ("Everything required that JobPilot knows of is prepared. "
                                 f"{len(other)} other question{'s' if len(other) != 1 else ''} on the form "
@@ -287,6 +315,12 @@ def select_resume(db: Session, settings, user: User, app: Application, kind: str
     else:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown resume kind.")
     pkg["resume_choice"] = {"kind": kind, "id": rid, "format": fmt if fmt in ("pdf", "docx") else "pdf", "at": utcnow().isoformat()}
+    if kind == "studio":  # the exact revision and file chosen, for the application's history
+        v = db.get(ResumeVersion, rid)
+        pkg["resume_choice"].update({"revision": v.revision, "checksum": app.resume_checksum, "export_id": app.resume_export_id})
+    else:
+        pkg["resume_choice"]["checksum"] = r.sha256
+        app.resume_checksum = r.sha256
     app.package = pkg
     db.commit()
 
@@ -396,6 +430,6 @@ def extension_view(app: Application) -> dict[str, Any]:
     """What the extension needs from the package: the chosen resume and the destination. Never the answers' history."""
     pkg = app.package or {}
     res = pkg.get("resume") or {}
-    return {"application_id": app.id, "resume": {k: res.get(k) for k in ("kind", "id", "format", "name")} if res.get("kind") else None,
+    return {"application_id": app.id, "resume": {k: res.get(k) for k in ("kind", "id", "format", "name", "selected_by", "checksum")} if res.get("kind") else None,
             "destination_url": (pkg.get("destination") or {}).get("url"), "action": pkg.get("action"),
             "overrides": pkg.get("overrides") or {}, "cover_letter": app.cover_letter or None}

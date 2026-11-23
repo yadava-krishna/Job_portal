@@ -91,13 +91,17 @@ def preview(version_id: int, user: CurrentUser, db: DbSession, settings: Setting
     e = ss.export(db, settings, user, v, "pdf")
     r = _file(get_storage().get(e.file_key), "pdf", ss.download_name(v, "pdf"), inline=True)
     r.headers["X-Page-Count"] = str(e.page_count or "")
+    # Which revision this PDF is: the editor ignores a preview that arrives after a newer save.
+    r.headers["X-Revision"] = str(v.revision)
+    r.headers["X-Checksum"] = e.checksum
     return r
 
 
 @router.get("/versions/{version_id}/layout")
 def layout(version_id: int, user: CurrentUser, db: DbSession) -> dict:
     """Page count, how full each page is, layout warnings and settings that would save a page (suggestions only)."""
-    return ss.layout(ss.owned_version(db, user, version_id))
+    v = ss.owned_version(db, user, version_id)
+    return {**ss.layout(v), "revision": v.revision, "checksum": v.content_checksum}
 
 
 class ExportIn(BaseModel):
@@ -121,8 +125,11 @@ def download(export_id: int, user: CurrentUser, db: DbSession) -> Response:
 
 
 @router.get("/versions/{version_id}/feedback")
-def feedback(version_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep, user_job_id: int | None = None) -> dict:
-    return ss.feedback(db, settings, user, ss.owned_version(db, user, version_id), user_job_id)
+def feedback(version_id: int, user: CurrentUser, db: DbSession, settings: SettingsDep, user_job_id: int | None = None,
+             revision: int | None = None) -> dict:
+    """Check one revision (its exported PDF and its content). Pass the revision you are looking at: a check asked for
+    an older revision is refused with 409, so a slow answer never replaces a newer one."""
+    return ss.feedback(db, settings, user, ss.owned_version(db, user, version_id), user_job_id, revision)
 
 
 @router.get("/versions/{version_id}/suggestions")

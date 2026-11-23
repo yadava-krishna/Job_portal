@@ -166,6 +166,8 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
   const smart = pkg ? canSmartApply(destUrl) && pkg.capabilities.autofill : canSmartApply(destUrl);
   const smartReady = smart && !!ext?.connected;
   const autofillAction = !!pkg && (pkg.action === "review_autofill" || pkg.action === "resume");
+  // On LinkedIn, Indeed and Naukri you upload the resume yourself: choose which one before the job opens.
+  const nativeNeedsResume = !!pkg && pkg.action === "open_native" && !!pkg.readiness.resume_choice_needed;
 
   /** Manual and native paths: the page opens in the click itself (pop-up blockers), then the hand-off is recorded. */
   const openEmployerPage = () => {
@@ -276,7 +278,7 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
               <DestinationSuggestions appId={app.id} dest={pkg.destination} locked={locked} />
               <ChecksList conflicts={pkg.conflicts} eligibility={pkg.eligibility} />
               <AnswersEditor appId={app.id} answers={pkg.answers} locked={locked} onDirtyChange={onDirty} />
-              <ResumeChooser appId={app.id} resume={pkg.resume} locked={locked} />
+              <ResumeChooser appId={app.id} resume={pkg.resume} locked={locked} uploadOn={pkg.action === "open_native" ? platform : undefined} />
               <ProfileSummary pkg={pkg} onSettings={onClose} />
               {app.cover_letter && pkg.action !== "open_native" && <CoverLetter text={app.cover_letter} />}
               {pkg.action === "open_native" && <CopyReadyPanel pkg={pkg} coverLetter={app.cover_letter} />}
@@ -361,8 +363,9 @@ export function ApplyDialog({ item, onClose }: { item: UserJob | null; onClose: 
               {smartReady && autofillAction && (
                 <Button variant="outline" onClick={openEmployerPage} disabled={busy || starting || !destUrl}><ExternalLink /> Apply by hand</Button>
               )}
-              <Button className="max-sm:order-first max-sm:col-span-2" onClick={primary} disabled={busy || starting || (!destUrl && pkg.action !== "resolve_uncertain" && pkg.action !== "done")}
-                      data-testid="workspace-primary">
+              <Button className="max-sm:order-first max-sm:col-span-2" onClick={primary}
+                      disabled={busy || starting || (!destUrl && pkg.action !== "resolve_uncertain" && pkg.action !== "done") || nativeNeedsResume}
+                      title={nativeNeedsResume ? "Choose the resume you'll upload first" : undefined} data-testid="workspace-primary">
                 {starting ? <Loader2 className="animate-spin" /> : smartReady && autofillAction ? <Wand2 /> : <ExternalLink />}
                 {actionLabel(pkg.action, pkg.destination, smartReady)}
               </Button>
@@ -434,7 +437,8 @@ function NextStep({ pkg, smartReady, platform }: { pkg: ApplyPackage; smartReady
   const text = smartReady
     ? <>Next: <strong>{actionLabel(pkg.action, pkg.destination, true)}</strong> opens the form and fills it. Check every answer in the Smart Apply panel, submit on {platform} yourself, then come back here.</>
     : pkg.action === "open_native"
-      ? <>Next: open the job on <strong>{platform}</strong>, paste your answers from the list above, submit there, then come back here and confirm.</>
+      ? <>Next: open the job on <strong>{platform}</strong> in this browser (if you're signed in there already, you stay signed in; JobPilot never sees your {platform} password),
+          upload {pkg.readiness.resume_choice_needed ? "the resume you choose above" : "the resume you chose"}, paste your answers from the list above, submit there, then come back here and confirm.</>
       : <>Next: open the employer's form, complete the application <strong>on {platform}</strong>, then come back here and confirm.</>;
   return (
     <p className="flex gap-2 rounded-xl bg-paper-sunk px-3 py-2.5 text-[13px]">
@@ -567,7 +571,7 @@ function SmartApplyProgress({ state, label, platform }: { state: string | null |
   );
 }
 
-const EXT_ZIP = `${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.3.0.zip`;
+const EXT_ZIP = `${import.meta.env.BASE_URL}downloads/jobpilot-smart-apply-2.4.0.zip`;
 
 /** Where Smart Apply stands in this browser, and the one next step to make one-click applying work. */
 function SmartApplyCard({ message, smart, ext, onClose }: { message: string; smart: boolean; ext: SmartApplyStatus | null | undefined; onClose: () => void }) {

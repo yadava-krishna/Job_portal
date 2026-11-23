@@ -208,7 +208,12 @@ def test_quality_checker_separates_objective_checks_and_reads_the_export_back(cl
     assert saved.status_code == 200, saved.text
     codes = {i["code"]: i for i in client.get(f"/api/v1/studio/versions/{v['id']}/feedback", headers=h).json()["issues"]}
     assert codes["date_order"]["level"] == "error" and codes["date_order"]["kind"] == "format"
-    assert "duplicate_entry" in codes and "unsupported_chars" in codes and "🚀" in codes["unsupported_chars"]["message"]
+    # The emoji: printed but risky for application systems (unsupported_chars), or missing from the PDF where no
+    # installed font draws it (dropped_chars, as on the production image).
+    chars = codes.get("unsupported_chars") or codes.get("dropped_chars")
+    assert "duplicate_entry" in codes and chars and "🚀" in chars["message"] + chars["evidence"]
+    assert chars["where"]["section"] == "experience" and chars["where"]["field"] == "bullet" and chars["fix"]
+    assert "entry_dates_unread" not in codes  # reversed dates are one finding (date_order), not two
 
 
 def test_job_tailoring_reorders_skills_and_projects_without_adding_anything(client, resume_bytes):
@@ -234,4 +239,7 @@ def test_job_tailoring_reorders_skills_and_projects_without_adding_anything(clie
     reordered = [items[i] for i in rs["order"]]
     assert sorted(reordered) == sorted(items) and reordered.index("Accounts Receivable") < reordered.index("Tableau")
     assert kinds["reorder_entries"]["order"] == [1, 0]
-    assert all(s["evidence"] == "supported" for s in sug)
+    # Every change JobPilot can apply is backed by verified data; gaps and confirmations change nothing.
+    assert all(s["evidence"] == "supported" for s in sug if s["kind"] not in ("gap", "confirm"))
+    assert all(s["after"] is None and s.get("order") is None for s in sug if s["kind"] in ("gap", "confirm"))
+    assert all(s["category"] and s["why"] and s["effect"] for s in sug)

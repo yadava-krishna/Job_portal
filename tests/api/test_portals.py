@@ -1,4 +1,4 @@
-"""Portal Connections: honest capabilities (no account connection, no automation on the portals), and LinkedIn/Naukri
+"""Portal Connections: honest capabilities (no account linked without a configured sign-in, no automation on the portals), and LinkedIn/Naukri
 checklists built only from the confirmed profile, per user."""
 
 from __future__ import annotations
@@ -14,7 +14,10 @@ def test_capabilities_are_honest(client, resume_bytes):
     assert set(rows) == {"linkedin", "naukri", "indeed"}
     for p in rows.values():
         c = p["capabilities"]
-        assert c["account_connection"]["available"] is False and c["assisted_submission"]["available"] is False
+        # No sign-in is configured on this server, so nothing is linked and no Connect action is offered.
+        assert c["identity_auth"]["available"] is False and c["account_linked"]["available"] is False
+        assert c["job_retrieval"]["available"] is False and c["application_submission"]["available"] is False
+        assert c["assisted_submission"]["available"] is False and c["native_handoff"]["available"]
         assert c["source"]["available"] and c["application_handoff"]["available"]
         assert "connect" not in p["actions"]
     assert rows["indeed"]["capabilities"]["profile_guidance"]["available"] is False and "optimize" not in rows["indeed"]["actions"]

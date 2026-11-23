@@ -32,8 +32,9 @@ export function PreviewPane({ versionId, revision, templateName, onApplySettings
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const { blob, pages: n } = await fetchPreview(versionId);
-        if (cancelled) return;
+        const { blob, pages: n, revision: rev } = await fetchPreview(versionId);
+        // A PDF of an older revision (a slow response overtaken by a save) is never shown as current.
+        if (cancelled || (rev != null && rev < revision)) return;
         const next = typeof URL.createObjectURL === "function" ? URL.createObjectURL(blob) : null;
         if (urlRef.current) {
           URL.revokeObjectURL(urlRef.current);
@@ -97,7 +98,7 @@ function LayoutBar({ versionId, revision, onApply }: { versionId: number; revisi
   return (
     <div className="shrink-0 space-y-1.5 border-b px-3.5 py-2 text-xs" aria-live="polite">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="readout font-medium text-foreground">{r.pages} page{r.pages === 1 ? "" : "s"}</span>
+        <span className="readout font-medium text-foreground" data-testid="layout-pages">{r.pages} page{r.pages === 1 ? "" : "s"}</span>
         <span className="flex items-center gap-1" aria-label="How full each page is">
           {r.page_fill.map((f, i) => (
             <span key={i} title={`Page ${i + 1}: about ${Math.round(f * 100)}% full`} className="flex h-[18px] w-3.5 items-end overflow-hidden rounded-[3px] bg-paper-sunk ring-1 ring-border">

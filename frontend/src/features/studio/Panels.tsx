@@ -10,7 +10,7 @@ import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   useStudioFeedback, useStudioSuggestions, useStudioTemplates, useStudioVersions,
-  type DateFormat, type FeedbackIssue, type IssueLevel, type HeadingStyle, type PageSize, type Section, type StudioSettings, type Suggestion, type TemplateKey, type Version, type VersionSummary,
+  type DateFormat, type FeedbackIssue, type IssueLevel, type IssueWhere, type SuggestionCategory, type HeadingStyle, type PageSize, type Section, type StudioSettings, type Suggestion, type TemplateKey, type Version, type VersionSummary,
 } from "./api";
 import { JobPicker, TemplatePicker, VersionStatusBadge } from "./parts";
 
@@ -165,27 +165,82 @@ const kindChip: Record<string, [string, string]> = {
   writing: ["Writing", "bg-lavender text-violet"],
 };
 
-function whereLabel(w: FeedbackIssue["where"]): string | null {
+function whereLabel(i: FeedbackIssue): string | null {
+  const w = i.where;
   if (!w) return null;
   const parts = [w.section.charAt(0).toUpperCase() + w.section.slice(1)];
-  if (w.block != null) parts.push(`item ${w.block + 1}`);
+  if (i.entry && w.section !== "header") parts.push(i.entry);
+  else if (w.block != null) parts.push(`item ${w.block + 1}`);
   if (w.bullet != null) parts.push(`bullet ${w.bullet + 1}`);
+  else if (w.field && !["bullet", "text", "items"].includes(w.field)) parts.push(w.field === "organization" ? "employer" : w.field);
   return parts.join(" · ");
 }
 
-export function CheckPanel({ versionId, jobId, onJob, revision }: { versionId: number; jobId: number | null; onJob: (j: number | null) => void; revision: number }) {
-  const fb = useStudioFeedback(versionId, jobId, true);
-  const [checkedAt, setCheckedAt] = useState(revision);
-  const outdated = fb.data && checkedAt !== revision;
-  const recheck = () => { setCheckedAt(revision); void fb.refetch(); };
+/** One of the three separate evaluations. They measure different things and are never averaged. */
+function ScoreCard({ title, value, unit = "", caption, method, tone, testId }: {
+  title: string; value: number | null | undefined; unit?: string; caption: string; method: string; tone: "route" | "violet" | "caution"; testId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div data-testid={testId} className="flex min-w-0 flex-1 basis-44 flex-col rounded-2xl bg-card p-3 ring-1 ring-border">
+      <span className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{title}</span>
+      <span className={cn("readout mt-0.5 text-2xl font-semibold", tone === "route" ? "text-route" : tone === "violet" ? "text-violet" : "text-caution")}>
+        {value == null ? "—" : `${value}${unit}`}
+      </span>
+      <span className="text-xs text-muted-foreground">{caption}</span>
+      <button type="button" className="mt-1.5 self-start text-[11px] font-medium text-route underline-offset-2 hover:underline" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? "Hide how it's worked out" : "How it's worked out"}
+      </button>
+      {open && <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{method}</p>}
+    </div>
+  );
+}
+
+function IssueRow({ i, onGoTo }: { i: FeedbackIssue; onGoTo?: (w: IssueWhere) => void }) {
+  const [open, setOpen] = useState(false);
+  const place = whereLabel(i);
+  const more = Boolean(i.why || i.evidence || i.fix);
+  return (
+    <li className="bg-card px-3 py-2.5 text-sm" data-issue={i.id ?? i.code}>
+      <div className="flex items-start gap-2">
+        {i.kind && <span className={cn("mt-px shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase", kindChip[i.kind]?.[1] ?? kindChip.writing[1])}
+          title={KIND_HELP[i.kind]}>{kindChip[i.kind]?.[0] ?? "Writing"}</span>}
+        <span className="min-w-0 flex-1">
+          {i.message}{(i.count ?? 1) > 1 && <span className="readout ml-1 text-xs text-muted-foreground">×{i.count}</span>}
+          {place && <span className="mt-0.5 block text-xs text-muted-foreground">{place}</span>}
+        </span>
+        <span className="flex shrink-0 gap-1">
+          {more && <Button size="xs" variant="ghost" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Less" : "Details"}</Button>}
+          {i.where && onGoTo && <Button size="xs" variant="outline" onClick={() => onGoTo(i.where as IssueWhere)}>Go to <ArrowRight /></Button>}
+        </span>
+      </div>
+      {open && (
+        <dl className="mt-2 grid gap-1 rounded-lg bg-paper-sunk p-2.5 text-xs">
+          {i.why && <><dt className="font-semibold text-heading">Why it matters</dt><dd className="text-muted-foreground">{i.why}</dd></>}
+          {i.evidence && <><dt className="mt-1 font-semibold text-heading">Evidence</dt><dd className="break-words text-muted-foreground">{i.evidence}</dd></>}
+          {i.fix && <><dt className="mt-1 font-semibold text-heading">How to fix it</dt><dd className="text-muted-foreground">{i.fix}</dd></>}
+        </dl>
+      )}
+    </li>
+  );
+}
+
+export function CheckPanel({ versionId, jobId, onJob, revision, onGoTo }: {
+  versionId: number; jobId: number | null; onJob: (j: number | null) => void; revision: number; onGoTo?: (w: IssueWhere) => void;
+}) {
+  // Keyed by the saved revision: every save re-checks the new revision's exported PDF, and an answer for an older
+  // revision is never shown as current.
+  const fb = useStudioFeedback(versionId, jobId, true, revision);
   const issues = fb.data?.issues ?? [];
+  const sc = fb.data?.scores;
+  const quality = sc?.resume_quality.score ?? fb.data?.readiness;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Check against a job (optional)" htmlFor="ck-job" className="min-w-56 flex-1">
           <JobPicker id="ck-job" value={jobId} onChange={onJob} emptyLabel="General check (no job)" />
         </Field>
-        <Button size="sm" variant="outline" onClick={recheck} disabled={fb.isFetching}>
+        <Button size="sm" variant="outline" onClick={() => void fb.refetch()} disabled={fb.isFetching}>
           {fb.isFetching ? <Loader2 className="animate-spin" /> : <RefreshCw />} Re-check
         </Button>
       </div>
@@ -193,44 +248,41 @@ export function CheckPanel({ versionId, jobId, onJob, revision }: { versionId: n
         : fb.isError ? <p className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">{errorMessage(fb.error, "Couldn't run the check")}</p>
           : fb.data && (
             <>
-              {outdated && <p className="rounded-xl bg-caution-tint p-2.5 text-xs text-caution">You've edited since this check. Re-check to update it.</p>}
-              <div className="flex flex-wrap items-center gap-4 rounded-2xl bg-paper-sunk p-4">
-                <div className="relative size-16 shrink-0">
-                  <svg viewBox="0 0 36 36" className="size-16 -rotate-90" aria-hidden>
-                    <circle cx="18" cy="18" r="15.5" fill="none" strokeWidth="3.5" className="stroke-border" />
-                    <circle cx="18" cy="18" r="15.5" fill="none" strokeWidth="3.5" strokeLinecap="round" pathLength={100}
-                            strokeDasharray={`${Math.max(0, Math.min(100, fb.data.readiness))} 100`} className="stroke-route transition-[stroke-dasharray] duration-500" />
-                  </svg>
-                  <div className="readout absolute inset-0 flex items-center justify-center text-[17px] font-semibold text-heading">{fb.data.readiness}</div>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="font-display text-[15px] font-bold text-heading">Checklist score</span>
-                    <span className="readout text-xs text-muted-foreground">{fb.data.readiness}/100 · {fb.data.pages != null ? `${fb.data.pages} page${fb.data.pages === 1 ? "" : "s"}` : "Pages unknown"}</span>
-                  </div>
-                  <p className="mt-0.5 max-w-md text-xs text-muted-foreground">
-                    {fb.data.score_method ?? "How many of these layout and wording checks pass."} It is not a prediction of whether you'll be shortlisted or hired.
-                  </p>
-                </div>
+              <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground" data-testid="check-revision">
+                <Check className="size-3.5 text-success" aria-hidden />
+                Checked revision {fb.data.revision ?? revision}: the exported PDF, {fb.data.pages != null ? `${fb.data.pages} page${fb.data.pages === 1 ? "" : "s"}` : "pages unknown"}, the same file the preview shows.
+              </p>
+              <div className="flex flex-wrap gap-2.5" aria-label="Three separate evaluations">
+                {sc?.job_match && <ScoreCard testId="score-job-match" title="Job Match" value={sc.job_match.score} unit="%" tone="route"
+                  caption="Your verified profile vs this job" method={sc.job_match.method} />}
+                <ScoreCard testId="score-quality" title="Resume Quality" value={quality} unit="/100" tone="violet"
+                  caption="This PDF's build, wording and readability" method={sc?.resume_quality.method ?? fb.data.score_method ?? ""} />
+                {sc?.alignment && <ScoreCard testId="score-alignment" title="Resume–Job Alignment" value={sc.alignment.score} unit="%" tone="caution"
+                  caption={sc.alignment.score == null ? (sc.alignment.note ?? "") : `${sc.alignment.matched.length} of the job's skills printed on this resume`} method={sc.alignment.method} />}
               </div>
+              {sc?.job_match ? (
+                <p className="rounded-xl bg-paper-sunk p-3 text-xs leading-relaxed text-muted-foreground">
+                  <strong className="text-heading">Why these differ:</strong> Job Match looks at everything you've verified about yourself, so it stays the same while you edit.
+                  Resume Quality only checks how this document is built and read. Alignment counts what this resume actually shows for the job.
+                  A strong match with a lower quality score means the fit is there and the document needs fixing. None of these is an ATS score or predicts hiring.
+                </p>
+              ) : <p className="text-xs text-muted-foreground">Pick a job above to see Job Match and Resume–Job Alignment next to Resume Quality.</p>}
+              {sc?.alignment && (sc.alignment.addable.length > 0 || sc.alignment.gaps.length > 0) && (
+                <div className="grid gap-2 text-xs sm:grid-cols-2">
+                  {sc.alignment.addable.length > 0 && <p className="rounded-xl bg-route-tint/50 p-2.5"><strong className="text-heading">In your profile, not on this resume:</strong> {sc.alignment.addable.map((a) => a.skill).join(", ")}</p>}
+                  {sc.alignment.gaps.length > 0 && <p className="rounded-xl bg-paper-sunk p-2.5"><strong className="text-heading">No evidence yet (never added for you):</strong> {sc.alignment.gaps.map((a) => a.skill).join(", ")}</p>}
+                </div>
+              )}
               {!issues.length ? <p className="flex items-center gap-2 rounded-xl bg-success-tint p-3 text-sm font-medium text-success"><Check className="size-4" /> No issues found. Clean.</p> : (
                 (Object.keys(levelMeta) as IssueLevel[]).map((lvl) => {
                   const group = issues.filter((i) => i.level === lvl);
                   if (!group.length) return null;
                   return (
                     <section key={lvl} aria-label={levelMeta[lvl].label}>
-                      <h3 className={cn("mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold", levelMeta[lvl].cls)}>{levelMeta[lvl].icon} {levelMeta[lvl].label} <span className="readout font-normal">({group.length})</span></h3>
+                      <h3 className={cn("mb-1.5 flex items-center gap-1.5 text-[13px] font-semibold", levelMeta[lvl].cls)}>{levelMeta[lvl].icon} {levelMeta[lvl].label} <span className="readout font-normal">({group.length})</span>
+                        {lvl === "info" && <span className="font-normal text-muted-foreground">: notes don't lower Resume Quality</span>}</h3>
                       <ul className="divide-y overflow-hidden rounded-xl ring-1 ring-border">
-                        {group.map((i, n) => (
-                          <li key={`${i.code}-${n}`} className="flex items-start gap-2 bg-card px-3 py-2.5 text-sm">
-                            {i.kind && <span className={cn("mt-px shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase", kindChip[i.kind]?.[1] ?? kindChip.writing[1])}
-                              title={KIND_HELP[i.kind]}>{kindChip[i.kind]?.[0] ?? "Writing"}</span>}
-                            <span className="min-w-0 flex-1">
-                              {i.message}
-                              {whereLabel(i.where) && <span className="ml-1 text-xs text-muted-foreground">({whereLabel(i.where)})</span>}
-                            </span>
-                          </li>
-                        ))}
+                        {group.map((i, n) => <IssueRow key={i.id ?? `${i.code}-${n}`} i={i} onGoTo={onGoTo} />)}
                       </ul>
                     </section>
                   );
@@ -245,7 +297,15 @@ export function CheckPanel({ versionId, jobId, onJob, revision }: { versionId: n
 
 // ---------------- suggestions (suggest-only) ----------------
 
+const CATEGORY_ORDER: SuggestionCategory[] = ["structure", "writing", "emphasize", "confirm", "gap"];
+const CATEGORY_TITLE: Record<SuggestionCategory, string> = {
+  structure: "A · Structural fixes", writing: "B · Writing and clarity", emphasize: "C · Verified experience to emphasise",
+  confirm: "D · Missing information only you can confirm", gap: "E · Requirements you can't evidence yet",
+};
+
 function suggestionTarget(s: Suggestion, sections: Section[]): string {
+  if (s.where_label) return s.where_label;
+  if (!s.where) return "";
   const sec = sections[s.where.section];
   if (!sec) return "";
   if (s.kind === "add_skill" || s.kind === "reorder_entries") return sec.heading;
@@ -254,13 +314,20 @@ function suggestionTarget(s: Suggestion, sections: Section[]): string {
   return [sec.heading, title, s.where.bullet != null ? `bullet ${s.where.bullet + 1}` : ""].filter(Boolean).join(" · ");
 }
 
-export function SuggestionsPanel({ versionId, jobId, onJob, sections, readOnly, onAccept, handled: handledProp, onHandledChange }: {
+const KIND_TITLE: Record<Suggestion["kind"], string> = {
+  rewrite: "Reword", reorder: "Reorder bullets", reorder_skills: "Reorder skills", reorder_entries: "Reorder projects", add_skill: "Add skill",
+  edit_field: "Fix characters", confirm: "Add missing detail", gap: "Requirement",
+};
+
+export function SuggestionsPanel({ versionId, jobId, onJob, sections, readOnly, onAccept, onGoTo, handled: handledProp, onHandledChange, revision }: {
   versionId: number; jobId: number | null; onJob: (j: number | null) => void; sections: Section[]; readOnly: boolean;
   onAccept: (s: Suggestion) => boolean;
+  onGoTo?: (w: IssueWhere) => void;
   /** Optional: keep accepted/dismissed suggestions in the parent so they stay hidden across tab switches. */
   handled?: Set<string>; onHandledChange?: (h: Set<string>) => void;
+  revision?: number;
 }) {
-  const sug = useStudioSuggestions(versionId, jobId, true);
+  const sug = useStudioSuggestions(versionId, jobId, true, revision);
   const [localHandled, setLocalHandled] = useState<Set<string>>(new Set());
   const handled = handledProp ?? localHandled;
   const setHandled = (next: Set<string>) => (onHandledChange ? onHandledChange(next) : setLocalHandled(next));
@@ -268,9 +335,14 @@ export function SuggestionsPanel({ versionId, jobId, onJob, sections, readOnly, 
   const list = all.filter((s) => !handled.has(s.id));
   const done = (id: string) => setHandled(new Set(handled).add(id));
   const refresh = () => { setHandled(new Set()); void sug.refetch(); };
+  const goTo = (s: Suggestion) => {
+    if (!s.where || !onGoTo) return;
+    const sec = sections[s.where.section];
+    if (sec) onGoTo({ section: sec.type, block: s.where.block, bullet: s.where.bullet ?? null, field: s.where.field ?? (s.where.bullet != null ? "bullet" : null) });
+  };
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">Suggestions use only facts already in your profile. Nothing changes unless you accept it.</p>
+      <p className="text-xs text-muted-foreground">Suggestions use only facts already in your verified profile. Nothing changes unless you accept it, and Undo takes it back.</p>
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Tailor for a job (optional)" htmlFor="sg-job" className="min-w-56 flex-1">
           <JobPicker id="sg-job" value={jobId} onChange={onJob} emptyLabel="General suggestions (no job)" />
@@ -284,46 +356,64 @@ export function SuggestionsPanel({ versionId, jobId, onJob, sections, readOnly, 
               <p className="font-display text-[15px] font-bold text-heading">{all.length ? "All caught up. Love that for you." : "No suggestions right now."}</p>
               <p className="mt-1 text-xs text-muted-foreground">{all.length ? "Refresh to see the ones you dismissed again." : jobId == null ? "Pick a job to get job-specific ones." : "This version already reads well for that job."}</p>
             </div>
-          ) : (
-              <ul className="space-y-2.5">
-                {list.map((s) => (
-                  <li key={s.id} className="rounded-2xl bg-card p-3 text-sm ring-1 ring-border animate-in fade-in-0 duration-200" aria-label={`Suggestion: ${s.reason}`}>
-                    <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="font-semibold text-heading">{s.kind === "rewrite" ? "Reword" : s.kind === "reorder" ? "Reorder bullets" : s.kind === "reorder_skills" ? "Reorder skills" : s.kind === "reorder_entries" ? "Reorder projects" : "Add skill"}</span>
-                      <span className="text-muted-foreground">{suggestionTarget(s, sections)}</span>
-                      <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium",
-                        s.evidence === "supported" ? "bg-success-tint text-success" : "bg-caution-tint text-caution")}>
-                        {s.evidence === "supported" ? "Backed by your profile" : "Not verified — check it's true"}
-                      </span>
-                    </div>
-                    {s.kind === "rewrite" && (
-                      <div className="grid items-center gap-1.5 sm:grid-cols-[1fr_auto_1fr]">
-                        <p className="rounded-lg bg-paper-sunk p-2 text-muted-foreground line-through decoration-muted-foreground/40">{s.before}</p>
-                        <ArrowRight className="hidden size-4 text-muted-foreground sm:block" aria-hidden />
-                        <p className="rounded-lg bg-lavender/60 p-2 text-foreground dark:bg-lavender/15">{s.after}</p>
-                      </div>
-                    )}
-                    {s.kind === "reorder" && (() => {
-                      const b = sections[s.where.section]?.blocks[s.where.block];
-                      const top = b && s.order?.length ? b.bullets[s.order[0]]?.text : null;
-                      return top ? <p className="text-xs">Move to the top: <span className="italic">“{top}”</span></p> : null;
-                    })()}
-                    {s.kind === "add_skill" && <p>Add <span className="rounded-full bg-route-tint px-2 py-0.5 font-medium text-route">{s.skill ?? s.after}</span> to your skills.</p>}
-                    {s.kind === "reorder_skills" && <p className="text-xs">New order: <span className="font-medium">{s.after}</span>{(s.order?.length ?? 0) > 6 ? "…" : ""}</p>}
-                    {s.kind === "reorder_entries" && (() => {
-                      const b = sections[s.where.section]?.blocks[s.order?.[0] ?? -1];
-                      const t = b?.type === "entry" ? b.content.title : null;
-                      return t ? <p className="text-xs">Move to the top: <span className="font-medium">{t}</span></p> : null;
-                    })()}
-                    <p className="mt-2 text-xs text-muted-foreground">{s.reason}</p>
-                    <div className="mt-2.5 flex justify-end gap-1.5">
-                      <Button size="xs" variant="ghost" onClick={() => done(s.id)}><X /> Dismiss</Button>
-                      <Button size="xs" disabled={readOnly} onClick={() => { if (onAccept(s)) done(s.id); }}><Check /> Accept</Button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+          ) : CATEGORY_ORDER.map((cat) => {
+            const group = list.filter((s) => (s.category ?? "writing") === cat);
+            if (!group.length) return null;
+            return (
+              <section key={cat} aria-label={CATEGORY_TITLE[cat]} className="space-y-2">
+                <h3 className="text-[13px] font-semibold text-heading">{CATEGORY_TITLE[cat]} <span className="readout font-normal text-muted-foreground">({group.length})</span></h3>
+                <ul className="space-y-2.5">
+                  {group.map((s) => {
+                    const applicable = !["confirm", "gap"].includes(s.kind);
+                    return (
+                      <li key={s.id} className="rounded-2xl bg-card p-3 text-sm ring-1 ring-border animate-in fade-in-0 duration-200" aria-label={`Suggestion: ${s.reason}`} data-suggestion={s.id}>
+                        <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="font-semibold text-heading">{KIND_TITLE[s.kind] ?? s.kind}</span>
+                          <span className="text-muted-foreground">{suggestionTarget(s, sections)}</span>
+                          <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            s.kind === "gap" ? "bg-paper-sunk text-muted-foreground" : s.evidence === "supported" ? "bg-success-tint text-success" : "bg-caution-tint text-caution")}>
+                            {s.kind === "gap" ? "No evidence in your profile" : s.kind === "confirm" ? "Only you can add this" : s.evidence === "supported" ? "Backed by your verified data" : "Not verified, check it's true"}
+                          </span>
+                        </div>
+                        {(s.kind === "rewrite" || s.kind === "edit_field") && (
+                          <div className="grid items-center gap-1.5 sm:grid-cols-[1fr_auto_1fr]">
+                            <p className="rounded-lg bg-paper-sunk p-2 break-words text-muted-foreground line-through decoration-muted-foreground/40">{s.before}</p>
+                            <ArrowRight className="hidden size-4 text-muted-foreground sm:block" aria-hidden />
+                            <p className="rounded-lg bg-lavender/60 p-2 break-words text-foreground dark:bg-lavender/15">{s.after}</p>
+                          </div>
+                        )}
+                        {s.kind === "reorder" && s.where && (() => {
+                          const b = sections[s.where.section]?.blocks[s.where.block];
+                          const top = b && s.order?.length ? b.bullets[s.order[0]]?.text : null;
+                          return top ? <p className="text-xs">Move to the top: <span className="italic">“{top}”</span></p> : null;
+                        })()}
+                        {s.kind === "add_skill" && <p>Add <span className="rounded-full bg-route-tint px-2 py-0.5 font-medium text-route">{s.skill ?? s.after}</span> to your skills.</p>}
+                        {s.kind === "reorder_skills" && <p className="text-xs">New order: <span className="font-medium">{s.after}</span>{(s.order?.length ?? 0) > 6 ? "…" : ""}</p>}
+                        {s.kind === "reorder_entries" && s.where && (() => {
+                          const b = sections[s.where.section]?.blocks[s.order?.[0] ?? -1];
+                          const t = b?.type === "entry" ? b.content.title : null;
+                          return t ? <p className="text-xs">Move to the top: <span className="font-medium">{t}</span></p> : null;
+                        })()}
+                        <p className="mt-2 text-xs text-foreground/85">{s.reason}</p>
+                        {(s.why || s.effect) && (
+                          <dl className="mt-1.5 grid gap-x-3 gap-y-0.5 text-xs sm:grid-cols-[auto_1fr]">
+                            {s.why && <><dt className="font-medium text-heading">Why</dt><dd className="text-muted-foreground">{s.why}</dd></>}
+                            {s.effect && <><dt className="font-medium text-heading">Effect</dt><dd className="text-muted-foreground">{s.effect}</dd></>}
+                          </dl>
+                        )}
+                        <div className="mt-2.5 flex flex-wrap justify-end gap-1.5">
+                          <Button size="xs" variant="ghost" onClick={() => done(s.id)}><X /> {s.kind === "gap" ? "Got it" : "Ignore"}</Button>
+                          {s.kind === "gap" && <Button size="xs" variant="outline" render={<Link to="/career?tab=gaps" />}>See ways to build it</Button>}
+                          {s.where && onGoTo && <Button size="xs" variant="outline" onClick={() => goTo(s)}>Go to <ArrowRight /></Button>}
+                          {applicable && <Button size="xs" disabled={readOnly} onClick={() => { if (onAccept(s)) done(s.id); }}><Check /> Accept</Button>}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            );
+          })}
     </div>
   );
 }

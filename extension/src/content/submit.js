@@ -43,7 +43,8 @@
     const own = adapter.submitErrors?.();
     if (own?.length) return own;
     const root = adapter.root() || document.body;
-    return [...root.querySelectorAll("[aria-invalid='true'], [role=alert], .error:not(:empty), [class*='error-message']")]
+    const sel = "[aria-invalid='true'], [role=alert], .error:not(:empty), [class*='error-message']";
+    return (adapter.deep ? JP.dom.deepAll(root, sel) : [...root.querySelectorAll(sel)])
       .filter(visible).map((e) => (e.matches("input,select,textarea") ? (JP.scan.labelFor(e, adapter) || "A field") + " is invalid" : textOf(e)))
       .filter(Boolean).slice(0, 8);
   }
@@ -114,7 +115,8 @@
     const onClick = (e) => {
       if (!e.isTrusted) return;
       const btn = submitButton(adapter);
-      if (btn && (e.target === btn || btn.contains(e.target))) onSubmit("click");
+      // composedPath: a button inside a web component is seen from the document as its host element.
+      if (btn && (e.composedPath?.() || [e.target]).some((n) => n === btn || (n?.nodeType === 1 && btn.contains(n)))) onSubmit("click");
     };
     // (A submit event caused by JobPilot's own authorised click is also "trusted", so the panel stops this watcher
     // before an assisted submission.)

@@ -1,11 +1,11 @@
-import { useId, useState } from "react";
-import { Download, Eye, FileText, Loader2, Sparkles } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import { Download, Eye, FileText, Loader2, Sparkles, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { downloadFile, errorMessage, previewFile } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { useApplyWorkspace, useResumes } from "@/services/queries";
+import { useApplyWorkspace, useResumeAction, useResumes } from "@/services/queries";
 import { exportVersion, fetchPreview, useStudioVersions } from "@/features/studio/api";
 import { templateName } from "@/features/studio/templateCopy";
 import type { PackageResume } from "@/types/api";
@@ -30,13 +30,17 @@ async function previewStudio(id: number) {
 }
 
 /**
- * Which resume goes with this application: an upload or a Resume Studio version. The user's pick is recorded on the
- * application and Smart Apply attaches exactly that file; it is never swapped back to the default behind their back.
+ * Which resume goes with this application: an upload or a Resume Studio version. Nothing is chosen for the user: a
+ * recommendation (with its reason) is shown, and the application isn't ready until they pick or confirm one. The pick
+ * is recorded on the application (with the exact revision and file hash) and Smart Apply attaches exactly that file;
+ * it is never swapped for another behind their back.
  */
-export function ResumeChooser({ appId, resume, locked }: { appId: number; resume: PackageResume; locked: boolean }) {
+export function ResumeChooser({ appId, resume, locked, uploadOn }: { appId: number; resume: PackageResume; locked: boolean; uploadOn?: string }) {
   const uploads = useResumes();
   const versions = useStudioVersions();
   const ws = useApplyWorkspace();
+  const upload = useResumeAction();
+  const fileRef = useRef<HTMLInputElement>(null);
   const name = useId();
   const current = keyOf(resume);
   // The row ticked here but not yet used; otherwise the resume the application has.
@@ -57,7 +61,22 @@ export function ResumeChooser({ appId, resume, locked }: { appId: number; resume
   if (current && !options.some((o) => o.value === current) && resume.kind && resume.id) {
     options.unshift({ value: current, kind: resume.kind, id: resume.id, name: resume.name ?? "Chosen resume", meta: "Chosen for this application", pdf: resume.format !== "docx" });
   }
+  const rec = resume.recommended ?? null;
+  const recKey = rec ? `${rec.kind}:${rec.id}` : "";
   const loading = uploads.isLoading || versions.isLoading;
+  const addFile = (f: File | undefined) => {
+    if (!f) return;
+    const before = new Set((Array.isArray(uploads.data) ? uploads.data : []).map((r) => r.id));
+    // Stored as another resume: it doesn't replace your default or change your profile.
+    upload.mutate({ kind: "upload", file: f, makeDefault: false }, {
+      onSuccess: async () => {
+        const list = (await uploads.refetch()).data ?? [];
+        const added = list.find((r) => !before.has(r.id));
+        if (added) { setPick(`upload:${added.id}`); toast.success(`${added.original_filename} uploaded. Click "Use this resume" to choose it.`); }
+      },
+      onError: (e) => setFailed(errorMessage(e)),
+    });
+  };
   const chosen = options.find((o) => o.value === pick);
 
   const use = () => {
@@ -89,7 +108,17 @@ export function ResumeChooser({ appId, resume, locked }: { appId: number; resume
 
   return (
     <WsSection title="Resume for this application" testId="ws-resume"
-               aside={resume.kind ? (resume.selected_by === "you" ? <Chip tone="ok">Chosen by you</Chip> : <Chip tone="neutral">Your default resume</Chip>) : null}>
+               aside={resume.selected_by === "you" ? <Chip tone="ok">Chosen by you</Chip> : options.length ? <Chip tone="warn">Not chosen yet</Chip> : null}>
+      {!current && rec && !locked && (
+        <div className="mb-2.5 flex flex-wrap items-center gap-2 rounded-xl bg-route-tint/50 px-3 py-2 text-[13px] ring-1 ring-route/15" data-testid="ws-resume-recommendation">
+          <Sparkles className="size-4 shrink-0 text-route" aria-hidden />
+          <span className="min-w-0 flex-1"><span className="font-medium">Suggested: {rec.name}</span> <span className="text-muted-foreground">· {rec.why}</span></span>
+          <Button size="xs" variant="outline" className="bg-card" disabled={pick === recKey} onClick={() => setPick(recKey)}>Select it</Button>
+        </div>
+      )}
+      {!current && options.length > 0 && !locked && (
+        <p className="mb-2 text-xs text-muted-foreground">Pick the resume to send. JobPilot doesn't choose one for you, and Smart Apply attaches only the one you pick.</p>
+      )}
       {loading && !options.length ? (
         <p className="flex items-center gap-2 text-[13px] text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading your resumes…</p>
       ) : !options.length ? (
@@ -121,7 +150,16 @@ export function ResumeChooser({ appId, resume, locked }: { appId: number; resume
       {failed && <p role="alert" className="text-[13px] text-destructive">{failed}</p>}
       {locked ? <p className="text-xs text-muted-foreground">This application was submitted, so its resume can't change.</p> : options.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">Smart Apply attaches exactly the resume you choose here.</p>
+          <span className="flex flex-wrap items-center gap-2">
+            <p className="text-xs text-muted-foreground">
+              {uploadOn ? `On ${uploadOn} you upload the file yourself: download the one you choose here so it's exactly the version JobPilot records`
+                        : "Smart Apply attaches exactly the resume you choose here"}{current ? ". You can change it until you submit." : "."}
+            </p>
+            <input ref={fileRef} type="file" accept=".pdf,.docx" className="hidden" aria-label="Upload another resume file" onChange={(e) => { addFile(e.target.files?.[0]); e.target.value = ""; }} />
+            <Button size="xs" variant="ghost" disabled={upload.isPending} onClick={() => fileRef.current?.click()}>
+              {upload.isPending ? <Loader2 className="animate-spin" /> : <Upload />} Upload another file
+            </Button>
+          </span>
           <Button size="sm" variant={pick !== current ? "default" : "outline"} disabled={!chosen || pick === current || ws.isPending} onClick={use}>
             {ws.isPending && ws.variables?.kind === "resume" && <Loader2 className="animate-spin" />} Use this resume
           </Button>

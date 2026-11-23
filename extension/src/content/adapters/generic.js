@@ -10,22 +10,26 @@
   const KNOWN = [
     [/(^|\.)icims\.com$/, "iCIMS"], [/(^|\.)(successfactors\.(com|eu)|sapsf\.(com|eu|cn))$/, "SAP SuccessFactors"],
     [/(^|\.)taleo\.net$/, "Oracle Taleo"], [/(^|\.)oraclecloud\.com$/, "Oracle Recruiting"], [/(^|\.)zohorecruit\.(com|in|eu)$/, "Zoho Recruit"],
-    [/(^|\.)freshteam\.com$/, "Freshteam"], [/(^|\.)darwinbox\.(in|com)$/, "Darwinbox"], [/(^|\.)smartrecruiters\.com$/, "SmartRecruiters"],
+    [/(^|\.)freshteam\.com$/, "Freshteam"], [/(^|\.)darwinbox\.(in|com)$/, "Darwinbox"], [/(^|\.)(smartrecruiters\.com|smartr\.me)$/, "SmartRecruiters"],
   ];
   const platformName = (h = location.hostname) => (KNOWN.find(([re]) => re.test(h)) || [null, "Employer site"])[1];
 
-  /** The application form: the visible form (or main region) with the most fillable fields, if it asks for an email or name. */
-  function root() {
-    const cands = [...document.querySelectorAll("form")].filter(visible);
-    if (!cands.length) cands.push(document.querySelector("main") || document.body);
-    let best = null; let n = 0;
+  function best(cands) {
+    let pick = null; let n = 0;
     for (const f of cands) {
       const fields = [...f.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]), select, textarea")].filter(visible);
       const identity = fields.some((e) => e.type === "email" || /e-?mail|first.?name|full.?name|surname|last.?name/i.test(`${e.name} ${e.id} ${e.getAttribute("autocomplete")} ${e.getAttribute("aria-label")}`) ||
         [...(e.labels || [])].some((l) => /e-?mail|first name|full name|last name/i.test(l.textContent)));
-      if (identity && fields.length > n) { best = f; n = fields.length; }
+      if (identity && fields.length > n) { pick = f; n = fields.length; }
     }
-    return n >= 2 ? best : null;
+    return n >= 2 ? pick : null;
+  }
+
+  /** The application form: the visible <form> with the most fillable fields that asks for an e-mail or name. Many
+   *  application pages are not a <form> at all, or have only an unrelated one (a search box, a newsletter): then the
+   *  main region (or the page) is used when it asks for them. */
+  function root() {
+    return best([...document.querySelectorAll("form")].filter(visible)) || best([document.querySelector("main") || document.body]);
   }
 
   JP.adapters.generic = {

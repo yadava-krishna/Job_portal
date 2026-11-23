@@ -179,6 +179,24 @@ describe("Apply Workspace", () => {
     await waitFor(() => expect(screen.getByTestId("workspace-primary")).toHaveTextContent("Open on LinkedIn"));
   });
 
+  it("on a portal (native hand-off) the job opens only after a resume is chosen, in this browser, and opening isn't applying", async () => {
+    mockServer({ ...nativePkg, readiness: { ...nativePkg.readiness, resume: false, resume_choice_needed: true } });
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const first = wrap(<ApplyDialog item={item} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId("workspace-primary")).toHaveTextContent("Open on LinkedIn"));
+    expect(screen.getByTestId("workspace-primary")).toBeDisabled();
+    expect(screen.getByText(/upload the resume you choose above/)).toBeInTheDocument();
+    expect(screen.getByText(/JobPilot never sees your LinkedIn password/)).toBeInTheDocument();
+    first.unmount();
+    mockServer(nativePkg);  // resume chosen
+    wrap(<ApplyDialog item={item} onClose={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId("workspace-primary")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("workspace-primary"));
+    expect(open).toHaveBeenCalledWith(item.job.job_url, "_blank", "noopener,noreferrer");
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith(expect.stringContaining("/handoff?smart=false")));
+    expect(api.post).not.toHaveBeenCalledWith(expect.stringContaining("/confirm"), expect.anything());
+  });
+
   it("an uncertain submission goes straight to the check step and never offers to submit again", async () => {
     mockServer({ ...basePkg, action: "resolve_uncertain" }, { ...app, status: "CONFIRMATION_PENDING", apply_state: "submission_uncertain", apply_state_label: "Submission uncertain: please check" });
     const open = vi.spyOn(window, "open").mockReturnValue(null);

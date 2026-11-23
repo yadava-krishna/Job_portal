@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+from core import textclean
+
 log = logging.getLogger(__name__)
 
 
@@ -113,7 +115,7 @@ def extract_text(path: Path) -> tuple[str, int]:
         count = doc.page_count
     finally:
         doc.close()
-    text = "\n".join(pages)
+    text = "\n".join(_join_lone_markers("\n".join(pages).split("\n")))
     if len(text.strip()) < 100:
         raise ResumeParseError(
             f"{path.name} contains almost no extractable text. It may be a scanned image; "
@@ -123,6 +125,26 @@ def extract_text(path: Path) -> tuple[str, int]:
 
 
 _DATEISH = re.compile(rf"^\s*({_DATE_TOKEN})(\s*(–|—|-|to)\s*(present|current|now|till date|{_DATE_TOKEN}))?\s*$", re.I)
+
+
+def _join_lone_markers(lines: list[str]) -> list[str]:
+    """A bullet marker extracted as a line of its own ("•" then "Built the dashboard"): one line, "• Built the
+    dashboard". Otherwise the bullet text looks like a heading and can be taken for the next role's title."""
+    out: list[str] = []
+    for ln in lines:
+        if out and out[-1].strip() in ("•", "-", "–", "▪", "◦", "*") and ln.strip():
+            out[-1] = f"• {ln.strip()}"
+        else:
+            out.append(ln)
+    return out
+
+
+def _clean_line(text: str) -> str:
+    """Normalise one extracted line (core.textclean): Symbol/Wingdings bullets become "•", invisible characters and
+    ligatures are fixed. A replacement character (U+FFFD) opening a line is an unmapped bullet glyph (Word's Symbol
+    font bullets often extract that way): it becomes "•" too. Anywhere else it is kept, so the checker can flag it."""
+    t = textclean.clean(text).strip()
+    return re.sub(r"^\ufffd+\s*", "• ", t) if t.startswith("\ufffd") else t
 
 
 def _page_text(page) -> str:
@@ -137,7 +159,7 @@ def _page_text(page) -> str:
             if not spans:
                 continue
             x0, y0, x1, y1 = ln["bbox"]
-            lines.append({"x0": x0, "y0": y0, "x1": x1, "y1": y1, "text": "".join(s["text"] for s in ln["spans"]).strip(),
+            lines.append({"x0": x0, "y0": y0, "x1": x1, "y1": y1, "text": _clean_line("".join(s["text"] for s in ln["spans"])),
                           "size": max(s.get("size", 0) for s in spans)})
     if not lines:
         return ""
@@ -205,7 +227,7 @@ def _docx_text(path: Path) -> tuple[str, int]:
     out: list[str] = []
 
     def para_text(p) -> str:
-        t = " ".join(p.text.split())
+        t = " ".join(_clean_line(p.text).split())
         if not t:
             return ""
         style = (p.style.name if p.style is not None else "") or ""

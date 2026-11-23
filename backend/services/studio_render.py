@@ -148,8 +148,13 @@ def normalize_settings(template_key: str, raw: dict[str, Any] | None) -> tuple[d
 # ---------------------------------------------------------------------------------------------------------------
 # Content model -> render model (shared by PDF and DOCX).
 
-def _s(v: Any) -> str:
-    return "" if v is None else " ".join(str(v).split())
+def _s(v: Any, *, bullet: bool = False) -> str:
+    """Printable text: normalised (core.textclean: invisible characters, odd spaces, ligatures, Symbol-font bullets)
+    and whitespace collapsed. Unreadable characters (U+FFFD, other private-use code points) are kept: the checker
+    reports where they are rather than the renderer silently guessing."""
+    from core.textclean import clean
+
+    return "" if v is None else " ".join(clean(str(v), bullet=bullet).split())
 
 
 def format_date(value: Any, fmt: str) -> str:
@@ -234,7 +239,7 @@ def render_model(doc: dict[str, Any], template_key: str, settings: dict[str, Any
                 if skills:
                     items.append({"kind": "skills", "label": _s(c.get("label")), "items": skills})
             elif b["type"] == "entry":
-                bullets = [_s(u.get("text")) for u in b.get("bullets") or [] if u.get("approved", True) and _s(u.get("text"))]
+                bullets = [_s(u.get("text"), bullet=True) for u in b.get("bullets") or [] if u.get("approved", True) and _s(u.get("text"), bullet=True)]
                 title, org = _s(c.get("title")), _s(c.get("organization"))
                 if not (title or org or bullets):
                     continue
@@ -302,9 +307,11 @@ a {{ color: inherit; text-decoration: none; }}
 .t {{ font-weight: 700; }}
 .o {{ font-style: italic; color: #1f2937; }}
 .meta {{ font-size: {size - 0.5:.1f}pt; color: #4b5563; overflow-wrap: anywhere; }}
-ul {{ margin: {2 * sp:.1f}pt 0 0 0; padding-left: 12pt; }}
-li {{ margin: 0 0 {1.5 * sp:.1f}pt 0; padding-left: 2pt; break-inside: avoid; orphans: 2; widows: 2; }}
-li::marker {{ color: {accent if tpl['category'] != 'ats' else '#111827'}; }}
+ul {{ margin: {2 * sp:.1f}pt 0 0 0; padding-left: 0; list-style: none; }}
+/* The bullet is inline text with a hanging indent (not a list marker): text extraction then reads "• Built …" in
+   order, instead of the markers coming out as stray lines at the end of the page. */
+li {{ margin: 0 0 {1.5 * sp:.1f}pt 0; padding-left: 9pt; text-indent: -7pt; break-inside: avoid; orphans: 2; widows: 2; }}
+li::before {{ content: "• "; white-space: pre; color: {accent if tpl['category'] != 'ats' else '#111827'}; }}
 p {{ margin: 0 0 {3 * sp:.1f}pt 0; orphans: 2; widows: 2; }}
 .skills {{ margin: 0 0 {2 * sp:.1f}pt 0; }}
 .skills .k {{ font-weight: 700; }}

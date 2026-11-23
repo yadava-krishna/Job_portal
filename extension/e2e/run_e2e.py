@@ -240,6 +240,10 @@ def run_browser(args, ext_id, api, c, H, seed, tmp):
             pop.wait_text("Fill with JobPilot")
             check(f"{ats}: platform detected and job recognised as yours", "In your JobPilot jobs" in pop.text(), pop.text()[:200])
             if ats == "lever":
+                # V3.1: nothing is preselected; the user chooses the resume, then attaches it.
+                sel = pop.page.locator("select[aria-label='Resume to attach']")
+                check("lever: no resume preselected, Attach waits for a choice", sel.input_value() == "" and pop.page.get_by_role("button", name="Attach", exact=True).is_disabled())
+                sel.select_option(sel.locator("option:not([disabled])").first.get_attribute("value"))
                 pop.click("Attach")
                 pop.wait_text("Attached and checked")
                 name = page.evaluate("() => document.querySelector('input[type=file][name=resume]').files[0]?.name")
@@ -451,6 +455,8 @@ def run_live(ctx, sw, ext_id, c, H, submissions):
             check(f"live {ats}: form detected", False, pop.text()[:200]); pop.page.close(); page.close(); continue
         check(f"live {ats}: form detected", True)
         if ats == "lever":
+            sel = pop.page.locator("select[aria-label='Resume to attach']")
+            sel.select_option(sel.locator("option:not([disabled])").first.get_attribute("value"))
             pop.click("Attach")
             pop.page.locator("#app").get_by_text("Attached").or_(pop.page.locator("#app").get_by_text("Download resume")).first.wait_for(timeout=30000)
             page.wait_for_timeout(5000)

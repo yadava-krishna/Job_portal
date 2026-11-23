@@ -8,6 +8,8 @@ not configured in the private beta.
 from __future__ import annotations
 
 import os
+import threading
+import time
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
@@ -38,7 +40,9 @@ class LocalStorage:
     def put(self, key: str, data: bytes) -> str:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
+        # A temporary name per write: two requests writing the same key at once (e.g. the preview and the check
+        # exporting the same resume revision) each rename their own complete file; the last one wins atomically.
+        tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident()}-{time.monotonic_ns()}.tmp")
         tmp.write_bytes(data)
         os.replace(tmp, path)
         return key

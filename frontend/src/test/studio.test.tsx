@@ -106,7 +106,7 @@ describe("resume studio editor", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Suggestions" }));
     expect(await screen.findByText(rewrite.after!)).toBeInTheDocument();
-    expect(screen.getByText("Backed by your profile")).toBeInTheDocument();
+    expect(screen.getByText("Backed by your verified data")).toBeInTheDocument();
     expect(api.put).not.toHaveBeenCalled();  // suggest-only: nothing is applied until accepted
     fireEvent.click(screen.getByRole("button", { name: /Accept/ }));
     await waitFor(() => expect(screen.queryByRole("button", { name: /Accept/ })).toBeNull());

@@ -1,128 +1,162 @@
-// Settings -> Portal Connections. For LinkedIn, Naukri and Indeed: what JobPilot can do (jobs in, profile guidance,
-// application hand-off), what it can't (no account connection exists, no automation on the portals), and the actions
-// that actually work. There is no Connect button because there is nothing approved to connect to.
-import { useState } from "react";
-import { Check, Copy, ExternalLink, Link2, Loader2, Sparkles, X } from "lucide-react";
+// Settings -> Portal Connections: three cards (LinkedIn, Naukri, Indeed) with each portal's real state and the actions
+// that work for it, "Find or import jobs" below them, and side panels for details, the profile checklist, preparing an
+// application, and (admins only) setting up LinkedIn/Indeed sign-in. The capability model and every rule behind it live
+// on the backend (portal_service); this page never shows a button the server can't honour.
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CircleAlert, Loader2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/app/common";
+import { ApplyDialog } from "@/components/app/ApplyDialog";
+import { GuidedImportDialog } from "@/components/app/ImportDialog";
 import { Panel } from "@/components/settings/primitives";
-import { Chip } from "@/features/apply/parts";
 import { api, errorMessage } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import type { JobDetail, UserJob } from "@/types/api";
+import { FindJobs } from "./portals/FindJobs";
+import { usePortalActions, type SetTransient, type Transient } from "./portals/hooks";
+import { PortalSheet } from "./portals/PortalSheet";
+import { PrepareSheet } from "./portals/PrepareSheet";
+import { ProviderCard, type CardIntent } from "./portals/ProviderCard";
+import { SetupSheet } from "./portals/SetupSheet";
+import { PLATFORM, RETURN_KEY, takePending, useIsAdmin, type Portal, type PortalKey } from "./portals/types";
 
-type Cap = { available: boolean; detail: string; status?: string };
-interface Portal {
-  portal: "linkedin" | "naukri" | "indeed"; name: string; url: string; actions: ("optimize" | "open" | "import")[];
-  capabilities: Record<"source" | "profile_guidance" | "account_connection" | "application_handoff" | "assisted_submission", Cap>;
+export type { Portal } from "./portals/types";
+
+/** Back from LinkedIn/Indeed (oauth-callback.html left the answer in this tab): finish it, once. */
+function useOAuthReturn(handlers: {
+  linked: (p: Portal) => Promise<void>; tested: (p: Portal) => void; failed: (message: string, portal: PortalKey | null, test: boolean) => void;
+}) {
+  const [busy, setBusy] = useState(() => { try { return !!sessionStorage.getItem(RETURN_KEY); } catch { return false; } });
+  const ran = useRef(false);
+  const h = useRef(handlers);
+  useEffect(() => { h.current = handlers; });
+  useEffect(() => {
+    if (ran.current) return;
+    ran.current = true;
+    let raw: string | null = null;
+    try { raw = sessionStorage.getItem(RETURN_KEY); sessionStorage.removeItem(RETURN_KEY); } catch { /* storage blocked */ }
+    const pending = takePending();
+    let body: Record<string, string> | null = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch { /* unreadable: nothing to finish */ }
+    if (!body) { void Promise.resolve().then(() => setBusy(false)); return; }
+    api.post<Portal>("/portals/oauth/complete", body)
+      .then(async ({ data }) => { if (data.setup_test) h.current.tested(data); else await h.current.linked(data); })
+      .catch((e) => h.current.failed(errorMessage(e), pending?.portal ?? null, pending?.purpose === "test"))
+      .finally(() => setBusy(false));
+  }, []);
+  return busy;
 }
-interface ReviewItem { key: string; label: string; state: "ok" | "improve" | "missing"; existing: string | null; suggestion: string | null; why: string; copy: boolean; done_at: string | null }
-interface Review { portal: string; name: string; items: ReviewItem[]; completeness: number; source: string }
 
-const CAP_LABELS: [keyof Portal["capabilities"], string][] = [
-  ["source", "Jobs into JobPilot"], ["profile_guidance", "Profile checklist"], ["application_handoff", "Apply with JobPilot's help"],
-  ["account_connection", "Account connection"], ["assisted_submission", "Automatic filling or submitting"],
-];
+type OpenPanel = { kind: "details" | "checklist" | "prepare"; portal: PortalKey } | { kind: "setup"; portal: "linkedin" | "indeed" } | null;
 
 export function PortalConnections() {
-  const portals = useQuery({ queryKey: ["portals"], queryFn: async () => (await api.get<Portal[]>("/portals")).data, staleTime: 3_600_000 });
-  const [open, setOpen] = useState<string | null>(null);
+  const qc = useQueryClient();
   const navigate = useNavigate();
+  const isAdmin = useIsAdmin();
+  const portals = useQuery({ queryKey: ["portals"], queryFn: async () => (await api.get<Portal[]>("/portals")).data, staleTime: 60_000 });
+  const [transient, setTransientMap] = useState<Partial<Record<PortalKey, Transient>>>({});
+  const [panel, setPanel] = useState<OpenPanel>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [importFor, setImportFor] = useState<{ platform: "LinkedIn" | "Naukri" | "Indeed" | null } | null>(null);
+  const [applyJob, setApplyJob] = useState<UserJob | null>(null);
+
+  const setTransient: SetTransient = useCallback((portal, t) => setTransientMap((m) => ({ ...m, [portal]: t ?? undefined })), []);
+  const replace = useCallback((row: Portal) => qc.setQueryData<Portal[]>(["portals"], (old) => old?.map((p) => (p.portal === row.portal ? row : p))), [qc]);
+  // The first list request may have left before the link was made (and an in-flight first load is reused, not
+  // refetched): drop it, show the new row, then load the list again.
+  const fresh = useCallback(async (row: Portal) => {
+    await qc.cancelQueries({ queryKey: ["portals"] });
+    replace(row);
+    await qc.invalidateQueries({ queryKey: ["portals"] });
+  }, [qc, replace]);
+
+  const finishing = useOAuthReturn({
+    linked: async (row) => { await fresh(row); toast.success(`${row.name} connected${row.identity?.simulated ? " (simulated, not your real account)" : ""}${row.identity?.name ? ` as ${row.identity.name}` : ""}.`); },
+    tested: (row) => {
+      const t = row.setup_test!;
+      void qc.invalidateQueries({ queryKey: ["portal-setup"] });
+      void fresh(row);
+      if (t.status === "verified") toast.success(`${row.name} sign-in verified${t.simulated ? " (simulated)" : ""}. Nothing was linked.`);
+      setPanel({ kind: "setup", portal: t.provider as "linkedin" | "indeed" });
+    },
+    failed: (message, portal, test) => {
+      if (test && (portal === "linkedin" || portal === "indeed")) {
+        void qc.invalidateQueries({ queryKey: ["portal-setup"] });
+        void qc.invalidateQueries({ queryKey: ["portals"] });
+        toast.error(message);
+        setPanel({ kind: "setup", portal });
+      } else if (portal) {
+        setTransient(portal, { kind: "failed", message });
+      } else {
+        setProblem(message);
+      }
+    },
+  });
+
+  const prepare = useCallback(async (userJobId: number) => {
+    try { setApplyJob((await api.get<JobDetail>(`/jobs/${userJobId}`)).data); }
+    catch (e) { toast.error(errorMessage(e)); }
+  }, []);
+
+  const rows = portals.data ?? [];
+  const intent = (p: Portal, i: CardIntent) => {
+    if (i === "import") setImportFor({ platform: PLATFORM[p.portal] });
+    else if (i === "setup") setPanel({ kind: "setup", portal: p.portal as "linkedin" | "indeed" });
+    else setPanel({ kind: i, portal: p.portal });
+  };
+  const current = panel && panel.kind !== "setup" ? rows.find((p) => p.portal === panel.portal) ?? null : null;
+
   return (
     // The section's own heading reads "Portal Connections" (Settings header), so the panel carries only the promise.
     <Panel description={null}>
       <p className="mb-4 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-        Finding jobs never needs a portal login, and JobPilot never signs in to a portal for you.
+        Sign-in goes through each portal's own page, so JobPilot never asks for a portal password or OTP. Applying always happens on the portal,
+        by you. JobPilot gets you there prepared.
       </p>
-      {portals.isLoading ? <LoadingState /> : portals.isError ? <p role="alert" className="text-sm text-destructive">{errorMessage(portals.error)}</p> : (
-        <ul className="space-y-3" data-testid="portal-connections">
-          {portals.data!.map((p) => (
-            <li key={p.portal} className="rounded-xl ring-1 ring-border" data-testid={`portal-${p.portal}`}>
-              <div className="flex flex-wrap items-start justify-between gap-3 p-4">
-                <div className="min-w-0">
-                  <h4 className="flex items-center gap-2 font-display text-[15px] font-bold text-heading">
-                    {p.name}<Chip tone="neutral" title="JobPilot has no approved way to connect to your account here">Not connected</Chip>
-                  </h4>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {p.actions.includes("optimize") && (
-                    <Button size="sm" variant={open === p.portal ? "secondary" : "default"} aria-expanded={open === p.portal}
-                            onClick={() => setOpen((o) => (o === p.portal ? null : p.portal))}><Sparkles /> Optimize profile</Button>
-                  )}
-                  <Button size="sm" variant="outline" render={<a href={p.url} target="_blank" rel="noopener noreferrer" />}><ExternalLink /> Open {p.name}</Button>
-                  <Button size="sm" variant="outline" onClick={() => navigate("/discover?add=1")}><Link2 /> Import job link</Button>
-                </div>
-              </div>
-              <dl className="grid gap-x-4 gap-y-2 border-t px-4 py-3 sm:grid-cols-2 lg:grid-cols-3">
-                {CAP_LABELS.map(([k, label]) => (
-                  <div key={k} className="min-w-0" title={p.capabilities[k].detail}>
-                    <dt className="flex items-center gap-1.5 text-xs font-medium">
-                      {p.capabilities[k].available ? <Check className="size-3.5 text-success" aria-hidden /> : <X className="size-3.5 text-muted-foreground" aria-hidden />}
-                      <span className={cn(!p.capabilities[k].available && "text-muted-foreground")}>{label}</span>
-                      <span className="sr-only">{p.capabilities[k].available ? ": available" : ": not available"}</span>
-                    </dt>
-                    <dd className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{p.capabilities[k].detail}</dd>
-                  </div>
-                ))}
-              </dl>
-              {open === p.portal && <PortalChecklist portal={p.portal} />}
-            </li>
-          ))}
-        </ul>
+      {finishing && <p role="status" className="mb-3 flex items-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" /> Finishing the sign-in…</p>}
+      {problem && (
+        <div role="alert" className="mb-3 flex items-start gap-2 rounded-xl bg-caution-tint px-3 py-2.5 text-sm text-caution ring-1 ring-caution/25">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden /><span className="flex-1">{problem}</span>
+          <Button size="icon-sm" variant="ghost" aria-label="Dismiss" onClick={() => setProblem(null)}><X /></Button>
+        </div>
       )}
+      {portals.isLoading ? <LoadingState /> : portals.isError ? <p role="alert" className="text-sm text-destructive">{errorMessage(portals.error)}</p> : (
+        <>
+          <ul className="space-y-3" data-testid="portal-connections">
+            {rows.map((p) => (
+              <CardWithActions key={p.portal} p={p} transient={transient[p.portal] ?? null} isAdmin={isAdmin} onRow={replace}
+                               setTransient={setTransient} onIntent={(i) => intent(p, i)} />
+            ))}
+          </ul>
+          <FindJobs portals={rows} onImport={() => setImportFor({ platform: null })} />
+        </>
+      )}
+      {current && panel && (panel.kind === "details" || panel.kind === "checklist") && (
+        <SheetWithActions p={current} view={panel.kind} onClose={() => setPanel(null)} onRow={replace} setTransient={setTransient} />
+      )}
+      <PrepareSheet p={panel?.kind === "prepare" ? current : null} onClose={() => setPanel(null)}
+                    onPick={(j) => { setPanel(null); setApplyJob(j); }}
+                    onImport={() => { const pl = current ? PLATFORM[current.portal] : null; setPanel(null); setImportFor({ platform: pl }); }} />
+      {isAdmin && <SetupSheet provider={panel?.kind === "setup" ? panel.portal : null} onClose={() => setPanel(null)} />}
+      <GuidedImportDialog open={!!importFor} onOpenChange={(o) => { if (!o) { setImportFor(null); void qc.invalidateQueries({ queryKey: ["portals"] }); } }} platform={importFor?.platform ?? null}
+                          onPrepare={(id) => void prepare(id)} onView={(id) => navigate(`/discover?job=${id}`)} />
+      <ApplyDialog item={applyJob} onClose={() => { setApplyJob(null); void qc.invalidateQueries({ queryKey: ["portals"] }); }} />
     </Panel>
   );
 }
 
-function PortalChecklist({ portal }: { portal: string }) {
-  const qc = useQueryClient();
-  const review = useQuery({ queryKey: ["portal-review", portal], queryFn: async () => (await api.get<Review>(`/portals/${portal}/review`)).data, retry: false });
-  const mark = useMutation({
-    mutationFn: async ({ key, done }: { key: string; done: boolean }) => (await api.put<Review>(`/portals/${portal}/review/${key}`, { done })).data,
-    onSuccess: (data) => qc.setQueryData(["portal-review", portal], data),
-    onError: (e) => toast.error(errorMessage(e)),
-  });
-  if (review.isLoading) return <div className="border-t p-4"><LoadingState /></div>;
-  if (review.isError) return <p role="alert" className="border-t p-4 text-sm text-caution">{errorMessage(review.error)}</p>;
-  const r = review.data!;
-  return (
-    <div className="border-t bg-paper-sunk/50 p-4" data-testid={`checklist-${portal}`}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">{r.source}</p>
-        <span className="readout text-xs font-medium text-heading" aria-label={`${r.completeness}% complete`}>{r.completeness}% done</span>
-      </div>
-      <ol className="space-y-2">
-        {r.items.map((it) => (
-          <li key={it.key} className="rounded-lg bg-card p-3 ring-1 ring-border/70" data-testid={`item-${it.key}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[13px] font-semibold text-heading">{it.label}</span>
-                {it.done_at ? <Chip tone="ok">Done</Chip> : it.state === "ok" ? <Chip tone="ok">Looks good</Chip>
-                  : <Chip tone="warn">{it.state === "missing" ? "Missing" : "Can improve"}</Chip>}
-              </div>
-              <Button size="xs" variant="ghost" disabled={mark.isPending} aria-pressed={!!it.done_at}
-                      onClick={() => mark.mutate({ key: it.key, done: !it.done_at })}>
-                {mark.isPending && mark.variables?.key === it.key ? <Loader2 className="animate-spin" /> : <Check />} {it.done_at ? "Mark not done" : "Mark done"}
-              </Button>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">{it.why}</p>
-            {it.existing && <p className="mt-1.5 text-xs"><span className="text-muted-foreground">Now: </span><span className="whitespace-pre-line break-words">{it.existing}</span></p>}
-            {it.suggestion && it.suggestion !== it.existing && (
-              <div className="mt-1.5 flex items-start gap-2 rounded-md bg-route-tint/50 px-2.5 py-1.5 text-xs">
-                <p className="min-w-0 flex-1 whitespace-pre-line break-words"><span className="text-muted-foreground">Suggested: </span>{it.suggestion}</p>
-              </div>
-            )}
-            {it.copy && it.suggestion && (
-              <Button size="xs" variant="outline" className="mt-1.5"
-                      onClick={() => navigator.clipboard?.writeText(it.suggestion!).then(() => toast.success("Copied. Paste it on the portal."), () => toast.error("Couldn't copy. Select the text instead."))}>
-                <Copy /> Copy
-              </Button>
-            )}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
+function CardWithActions({ p, transient, isAdmin, onRow, setTransient, onIntent }: {
+  p: Portal; transient: Transient | null; isAdmin: boolean; onRow: (r: Portal) => void; setTransient: SetTransient; onIntent: (i: CardIntent) => void;
+}) {
+  const actions = usePortalActions(p, onRow, setTransient);
+  return <ProviderCard p={p} transient={transient} actions={actions} isAdmin={isAdmin} onIntent={onIntent} />;
+}
+
+function SheetWithActions({ p, view, onClose, onRow, setTransient }: {
+  p: Portal; view: "details" | "checklist"; onClose: () => void; onRow: (r: Portal) => void; setTransient: SetTransient;
+}) {
+  const actions = usePortalActions(p, onRow, setTransient);
+  return <PortalSheet p={p} view={view} onClose={onClose} actions={actions} />;
 }

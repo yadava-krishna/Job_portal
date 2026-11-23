@@ -71,10 +71,30 @@ async function main() {
       h("p", {}, "Smart Apply works on employer application forms: Greenhouse, Lever and Ashby out of the box, and Workday, iCIMS, SuccessFactors, Taleo and other employer sites once you allow them."),
       missingCard(missing));
   }
-  if (!d.form) {
-    return show(h("h2", {}, `${d.platform} page`), note("warn", "No application form is visible yet. Click Apply on the page, then open JobPilot again."));
-  }
+  if (!d.form) return noFormView(d);
   formView(d, missing);
+}
+
+/** No application form recognised: say why, from what the page actually holds, and what to do next. */
+function noFormView(d) {
+  const g = d.diagnostics || { reason: "no_fields" };
+  const again = h("button", { type: "button", onclick: main }, "Check again");
+  const apply = d.platform === "SmartRecruiters" ? "I'm interested" : "Apply";
+  const why = {
+    no_fields: `No application form is on this page yet. Click “${apply}” on the page; when the form shows, click Check again.`,
+    fields_unrecognised: `JobPilot can see ${g.lightFields + g.deepFields} field${g.lightFields + g.deepFields === 1 ? "" : "s"} here but none asks for your name or e-mail, so it isn't treated as an application form. If the form is further down or on the next step, go there and click Check again.`,
+    closed_components: "This page builds its form from components the extension isn't allowed to read, so JobPilot can't fill it. Use Download resume and fill it yourself, then record the application in JobPilot.",
+    frame: `The form is inside a frame from ${g.frameHost}. Allow Smart Apply on that site to fill it.`,
+  }[g.reason] || "No application form was recognised on this page.";
+  return show(
+    h("h2", {}, `${d.platform} page`),
+    note(g.reason === "no_fields" ? "warn" : "bad", why),
+    g.reason === "frame" ? h("button", { type: "button", class: "primary", onclick: async () => {
+      try { if (await chrome.permissions.request({ origins: [g.origin] })) main(); } catch { /* the user closed Chrome's prompt */ }
+    } }, `Allow Smart Apply on ${g.frameHost}`) : null,
+    h("details", { class: "muted" }, h("summary", {}, "What JobPilot found"),
+      h("p", {}, `Fields on the page: ${g.lightFields ?? 0}; inside page components: ${g.deepFields ?? 0}; components: ${g.shadowHosts ?? 0}; forms: ${g.forms ?? 0}.`)),
+    h("div", { class: "row" }, again, h("button", { type: "button", onclick: downloadResume(null, null) }, "Download my resume")));
 }
 
 /** Sites whose terms forbid automation: never touched. Copy-ready details and the resume instead. */
@@ -181,14 +201,20 @@ function formView(d, missing) {
     : null;
 
   const opts = resumeOptions(resumes);
-  // Shown first: the resume picked here earlier for this page, else the one chosen for this application in JobPilot.
-  const pre = session?.resume || session?.packageResume || null;
-  const chosen = pre ? `${pre.kind}:${pre.id}:${pre.format}` : opts[0]?.value;
-  const select = h("select", { "aria-label": "Resume to attach" }, opts.map((o) => h("option", { value: o.value, selected: o.value === chosen }, o.label)));
-  // Only a resume the user actually picked here overrides the application's own choice.
-  let picked = Boolean(session?.resume);
-  select.addEventListener("change", () => { picked = true; });
+  // Shown first: the resume picked here earlier for this page, else the one the user chose for this application in
+  // JobPilot. Nothing is preselected otherwise: the user chooses (JobPilot never attaches a default on its own).
+  const fromPkg = !session?.resume && session?.packageResumeConfirmed ? session.packageResume : null;
+  const pre = session?.resume || fromPkg || null;
+  const chosen = pre ? `${pre.kind}:${pre.id}:${pre.format}` : "";
+  const select = h("select", { "aria-label": "Resume to attach" },
+    h("option", { value: "", disabled: true, selected: !chosen }, "Choose a resume…"),
+    opts.map((o) => h("option", { value: o.value, selected: o.value === chosen }, o.label)));
   const choice = () => parseChoice(select.value);
+  // Only a resume the user picked here (or saw preselected here and attached) overrides the application's choice.
+  let picked = Boolean(session?.resume);
+  const origin = h("p", { class: "muted" }, session?.resume ? "Picked here for this page." : fromPkg ? "Chosen for this application in JobPilot."
+    : "Not chosen yet. Pick the resume to send with this application.");
+  select.addEventListener("change", () => { picked = true; origin.textContent = "Picked here. JobPilot attaches exactly this file."; syncButtons(); });
   const pickedChoice = () => (picked ? choice() : null);
 
   const overwrite = h("input", { type: "checkbox" });
@@ -209,23 +235,29 @@ function formView(d, missing) {
 
   const attach = (replace) => async (e) => {
     const done = busy(e.currentTarget, "Attaching…");
-    const r = await send("attachResume", { ...target, replace, resume: pickedChoice() });
+    // The file shown in the list is the one attached: the user sees and confirms it by clicking Attach.
+    const r = await send("attachResume", { ...target, replace, resume: choice() });
     done();
     if (!r.ok) return resumeMsg.replaceChildren(note("bad", r.error));
     const res = r.data || {};
-    if (res.ok) return resumeMsg.replaceChildren(note("ok", `Attached and checked: ${res.name} (${Math.round(res.size / 1024)} KB).`, res.note ? h("div", {}, res.note) : null));
+    if (res.ok) return resumeMsg.replaceChildren(note("ok", `Attached and checked on the form: ${res.name} (${Math.round(res.size / 1024)} KB).`, res.note ? h("div", {}, res.note) : null));
     resumeMsg.replaceChildren(note("warn", res.reason || "Could not attach the file.",
-      res.needsConfirm ? h("div", { class: "row" }, h("button", { type: "button", onclick: attach(true) }, "Replace")) : null));
+      res.needsConfirm ? h("div", { class: "row" }, h("button", { type: "button", onclick: attach(true) }, "Replace")) : null,
+      res.manual ? h("div", { class: "row" }, h("button", { type: "button", onclick: downloadResume(choice, resumeMsg) }, "Download it to attach yourself")) : null));
   };
+  const attachBtn = h("button", { type: "button", onclick: attach(false) }, form.resumeAttached ? "Replace" : "Attach");
+  const dlBtn = h("button", { type: "button", onclick: downloadResume(choice, resumeMsg) }, form.resumeField ? "Download" : "Download resume");
+  function syncButtons() { attachBtn.disabled = dlBtn.disabled = !choice(); }
+  syncButtons();
 
   const resumeCard = h("div", { class: "card" },
     h("strong", {}, "Resume"),
-    opts.length ? select : h("p", { class: "muted" }, "No resume in JobPilot yet."),
-    form.resumeFirst ? h("p", { class: "muted" }, "Lever: attach your resume first. Lever reads it and may fill some fields; then click Fill.") : null,
+    opts.length ? [select, origin] : h("p", { class: "muted" }, "No resume in JobPilot yet. Upload one in Settings or build one in Resume Studio."),
+    form.resumeFirst ? h("p", { class: "muted" }, `${form.platform}: attach your resume first. ${form.platform} reads it and may fill some fields; then click Fill.`) : null,
     form.resumeField
-      ? h("div", { class: "row" }, h("button", { type: "button", disabled: !opts.length, onclick: attach(false) }, form.resumeAttached ? "Replace" : "Attach"),
-          h("button", { type: "button", disabled: !opts.length, onclick: downloadResume(choice, resumeMsg) }, "Download"))
-      : h("div", {}, h("p", { class: "muted" }, "No resume field found on this part of the form."), h("button", { type: "button", disabled: !opts.length, onclick: downloadResume(choice, resumeMsg) }, "Download resume")),
+      ? h("div", { class: "row" }, attachBtn, dlBtn)
+      : h("div", {}, h("p", { class: "muted" }, "No resume field found on this part of the form: download it and attach it yourself if the form asks."), dlBtn),
+    form.coverLetterField ? h("p", { class: "muted" }, "This form also takes a cover letter file. Attach it on the page yourself.") : null,
     resumeMsg);
 
   const ref = h("input", { type: "text", maxlength: "200", placeholder: "Reference ID (optional)", "aria-label": "Reference ID" });

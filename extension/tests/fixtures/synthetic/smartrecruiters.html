@@ -1,0 +1,105 @@
+<!doctype html>
+<!--
+  SIMULATED SmartRecruiters "OneClick" application form (synthetic, written for JobPilot's tests; not a copy of
+  SmartRecruiters' markup). It reproduces the structural traits that broke detection:
+    * fields live in web components (spl-*) with their <input> and <label> inside shadow roots;
+    * there is no <form> element around the application, and the page has an unrelated search <form>;
+    * phone has a separate country-code select, e-mail has a confirmation field, location is an autocomplete;
+    * experience and education are sections of entries (SmartRecruiters fills them from the attached resume);
+    * the resume is a file input inside a drop-zone component; the submit button is inside a component.
+  Shadow roots are declarative (<template shadowrootmode>): Chrome builds them when it parses the page; the unit
+  tests attach them with tests/unit/helpers.js#attachShadows (jsdom does not).
+-->
+<html lang="en"><head><meta charset="utf-8"><title>Data Analyst - Fintech Example Co - SmartRecruiters</title></head>
+<body>
+<header><form class="site-search" role="search"><input type="search" name="q" aria-label="Search jobs"></form></header>
+<main class="oc-app">
+  <h1 class="job-title">Data Analyst, Payments Risk</h1>
+  <div class="company-name">Fintech Example Co</div>
+
+  <section class="oc-section" id="personal">
+    <h2>Personal information</h2>
+    <spl-input formcontrolname="firstName" required><template shadowrootmode="open"><label for="first-name-input">First name<span aria-hidden="true">*</span></label><input id="first-name-input" type="text" autocomplete="given-name" required aria-required="true"></template></spl-input>
+    <spl-input formcontrolname="lastName" required><template shadowrootmode="open"><label for="last-name-input">Last name<span aria-hidden="true">*</span></label><input id="last-name-input" type="text" autocomplete="family-name" required aria-required="true"></template></spl-input>
+    <spl-input formcontrolname="email" required><template shadowrootmode="open"><label for="email-input">Email<span aria-hidden="true">*</span></label><input id="email-input" type="email" required aria-required="true"></template></spl-input>
+    <spl-input formcontrolname="confirmEmail" required><template shadowrootmode="open"><label for="confirm-email-input">Confirm your email<span aria-hidden="true">*</span></label><input id="confirm-email-input" type="email" required aria-required="true"></template></spl-input>
+    <spl-phone-field formcontrolname="phoneNumber" required><template shadowrootmode="open">
+      <label for="phone-country">Country code</label>
+      <select id="phone-country"><option value="">Select</option><option value="IN">India (+91)</option><option value="US">United States (+1)</option><option value="CA">Canada (+1)</option><option value="GB">United Kingdom (+44)</option></select>
+      <label for="phone-number">Phone number<span aria-hidden="true">*</span></label><input id="phone-number" type="tel" required aria-required="true">
+    </template></spl-phone-field>
+    <spl-autocomplete formcontrolname="location"><template shadowrootmode="open">
+      <label for="location-input">City</label>
+      <input id="location-input" type="text" role="combobox" aria-controls="location-list" aria-expanded="false" autocomplete="off">
+      <ul id="location-list" role="listbox"><li role="option">Bengaluru, Karnataka, India</li><li role="option">Bengaluru Rural, Karnataka, India</li><li role="option">Mumbai, Maharashtra, India</li></ul>
+    </template></spl-autocomplete>
+  </section>
+
+  <section class="oc-section" id="experience"><h2>Experience</h2><ul class="entries"></ul>
+    <spl-button><template shadowrootmode="open"><button type="button">+ Add</button></template></spl-button></section>
+  <section class="oc-section" id="education"><h2>Education</h2><ul class="entries"></ul>
+    <spl-button><template shadowrootmode="open"><button type="button">+ Add</button></template></spl-button></section>
+
+  <section class="oc-section" id="web">
+    <h2>On the web</h2>
+    <spl-input formcontrolname="linkedin"><template shadowrootmode="open"><label for="linkedin-input">LinkedIn</label><input id="linkedin-input" type="url"></template></spl-input>
+    <spl-input formcontrolname="website"><template shadowrootmode="open"><label for="website-input">Website</label><input id="website-input" type="url"></template></spl-input>
+  </section>
+
+  <section class="oc-section" id="resume">
+    <h2>Resume</h2>
+    <spl-dropzone formcontrolname="resume" class="resume-upload" required><template shadowrootmode="open">
+      <label for="resume-input">Resume<span aria-hidden="true">*</span></label>
+      <input id="resume-input" type="file" accept=".pdf,.doc,.docx,.odt,.rtf" required>
+      <div class="file-name"></div>
+    </template></spl-dropzone>
+  </section>
+
+  <section class="oc-section" id="message">
+    <h2>Message to the Hiring Team</h2>
+    <spl-textarea formcontrolname="message"><template shadowrootmode="open"><label for="message-input">Message to the Hiring Team</label><textarea id="message-input"></textarea></template></spl-textarea>
+  </section>
+
+  <section class="oc-section" id="screening">
+    <h2>Screening questions</h2>
+    <spl-select formcontrolname="q-sponsorship" required><template shadowrootmode="open"><label for="q1">Will you now or in the future require visa sponsorship to work in India?<span aria-hidden="true">*</span></label>
+      <select id="q1" required><option value="">Select</option><option>Yes</option><option>No</option></select></template></spl-select>
+    <spl-input formcontrolname="q-notice" required><template shadowrootmode="open"><label for="q2">What is your notice period?<span aria-hidden="true">*</span></label><input id="q2" type="text" required></template></spl-input>
+    <spl-select formcontrolname="q-gender"><template shadowrootmode="open"><label for="q3">Gender</label>
+      <select id="q3"><option value="">Select</option><option>Male</option><option>Female</option><option>Prefer not to say</option></select></template></spl-select>
+  </section>
+
+  <section class="oc-section" id="consent">
+    <spl-checkbox formcontrolname="privacy" required><template shadowrootmode="open"><input id="privacy" type="checkbox" required><label for="privacy">I agree to the privacy policy<span aria-hidden="true">*</span></label></template></spl-checkbox>
+  </section>
+
+  <spl-button class="submit"><template shadowrootmode="open"><button type="submit">Submit</button></template></spl-button>
+</main>
+<script>
+/* SIMULATED component behaviour (runs in Chrome only; jsdom ignores it): the city autocomplete sets its value when an
+   option is clicked; Submit checks required fields like the real form would, then shows a thank-you page. Nothing is
+   sent anywhere. */
+(() => {
+  const roots = () => [...document.querySelectorAll("*")].map((e) => e.shadowRoot).filter(Boolean);
+  for (const sr of roots()) {
+    const box = sr.querySelector("[role=listbox]");
+    if (!box) continue;
+    const input = sr.querySelector("[role=combobox]");
+    box.hidden = true;
+    input.addEventListener("input", () => { box.hidden = !input.value; });
+    for (const o of box.querySelectorAll("[role=option]")) o.addEventListener("click", () => { input.value = o.textContent; box.hidden = true; input.dispatchEvent(new Event("change", { bubbles: true, composed: true })); });
+  }
+  document.querySelector("spl-button.submit").shadowRoot.querySelector("button").addEventListener("click", (e) => {
+    e.preventDefault();
+    let bad = 0;
+    for (const sr of roots()) for (const el of sr.querySelectorAll("[required]")) {
+      const empty = el.type === "checkbox" ? !el.checked : el.type === "file" ? !el.files.length : !el.value;
+      el.setAttribute("aria-invalid", String(empty));
+      sr.querySelector(".error-message")?.remove();
+      if (empty) { bad++; const m = document.createElement("div"); m.className = "error-message"; m.setAttribute("role", "alert"); m.textContent = "This field is required"; el.after(m); }
+    }
+    if (!bad) document.querySelector("main").innerHTML = "<h1>Thank you for applying!</h1><p>Your application has been submitted to Fintech Example Co. (simulated page: nothing was sent)</p>";
+  });
+})();
+</script>
+</body></html>

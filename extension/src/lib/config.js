@@ -16,7 +16,7 @@ export const PLATFORMS = [
 ];
 export const OPTIONAL_PLATFORMS = [
   { id: "workday", name: "Workday", re: /(^|\.)(myworkdayjobs\.com|myworkdaysite\.com)$/ },
-  { id: "generic", name: "SmartRecruiters", re: /(^|\.)smartrecruiters\.com$/ },
+  { id: "smartrecruiters", name: "SmartRecruiters", re: /(^|\.)(smartrecruiters\.com|smartr\.me)$/ },
   { id: "generic", name: "iCIMS", re: /(^|\.)icims\.com$/ },
   { id: "generic", name: "SAP SuccessFactors", re: /(^|\.)(successfactors\.(com|eu)|sapsf\.(com|eu|cn))$/ },
   { id: "generic", name: "Oracle Taleo", re: /(^|\.)taleo\.net$/ },
@@ -73,6 +73,7 @@ export const CONTENT_FILES = [
   "src/content/adapters/lever.js",
   "src/content/adapters/ashby.js",
   "src/content/adapters/workday.js",
+  "src/content/adapters/smartrecruiters.js",
   "src/content/adapters/generic.js",
   "src/content/panel.js",
 ];
