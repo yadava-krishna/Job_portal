@@ -67,7 +67,7 @@ SUMMARY = {
     "naukri": "Opens naukri.com in your browser. Bring Naukri jobs in by link and prep applications here.",
     "indeed": "Link your Indeed sign-in and bring Indeed jobs in by link.",
 }
-LABELS = {"not_configured": "Not configured", "not_linked": "Ready to connect", "linked": "Connected",
+LABELS = {"setup_error": "Setup needs attention", "not_configured": "Not configured", "not_linked": "Ready to connect", "linked": "Connected",
           "reconnect_required": "Reconnect required", "authorization_required": "Provider authorization required",
           "native_only": "Opens in browser"}
 
@@ -97,12 +97,12 @@ def connections(db: Session | None = None, settings: BackendSettings | None = No
 
     linked: dict[str, ExternalIdentity] = {}
     counts: dict[str, int] = {}
-    tests: dict[str, dict[str, Any] | None] = {}
+    tests: dict[str, Any] = {}
     if db is not None and user is not None:
         linked = {r.provider: r for r in db.execute(select(ExternalIdentity).where(ExternalIdentity.user_id == user.id)).scalars()}
         counts = _listing_counts(db, user)
     if db is not None:
-        tests = {p: portal_setup_service.last_test(portal_setup_service._row(db, p)) for p in identity_providers.PROVIDERS}
+        tests = {p: portal_setup_service._row(db, p) for p in identity_providers.PROVIDERS}
     is_admin = getattr(user, "role", "user") == "admin"
     out = []
     for p in PORTALS:
@@ -110,19 +110,27 @@ def connections(db: Session | None = None, settings: BackendSettings | None = No
         prov = identity_providers.get(settings, p, db) if settings is not None else None
         ident = linked.get(p)
         view = connection_service.public(ident, prov) if ident else None
-        setup = portal_setup_service.setup_state(prov, tests.get(p)) if prov is not None else None
+        # One readiness per provider decides the status, the reason and whether Connect is offered (and allowed:
+        # connection_service.start enforces the same).
+        ready = portal_setup_service.readiness(prov, portal_setup_service.last_test(tests.get(p), prov)) if prov is not None else None
         reason = None
         if p == "naukri":
             prov_state, prov_detail = "unavailable", SIGN_IN["naukri"]
-        elif prov is None or not prov.configured:
+        elif prov is None or (ready and ready["state"] == "missing_configuration"):
             prov_state, prov_detail = "not_configured", "Not set up on this JobPilot server yet."
-            reason = (f"{name} sign-in isn't set up on this JobPilot server yet. "
-                                    + ("Set it up with your developer app's credentials." if is_admin else
-                                       f"A JobPilot admin needs to add {name} developer app credentials."))
-        elif setup == "authorization_required":
-            prov_state, prov_detail = "authorization_required", f"{name} hasn't accepted JobPilot's app yet."
+            reason = ((ready["detail"] if is_admin and ready and prov and prov.client_id else
+                       f"{name} sign-in isn't set up on this JobPilot server yet. Set it up with your developer app's credentials.") if is_admin else
+                      f"{name} sign-in isn't set up on this JobPilot server yet. A JobPilot admin needs to add {name} developer app credentials.")
+        elif ready["state"] == "authorization_required":
+            prov_state, prov_detail = "authorization_required", f"{name} hasn't approved JobPilot's app yet."
             reason = (f"{name} refused JobPilot's app in the last test, so connecting won't work yet. "
-                                    + ("Check the app in setup, then test again." if is_admin else "A JobPilot admin is sorting it out."))
+                      + ("Check the app in setup, then test again." if is_admin else "A JobPilot admin is sorting it out."))
+        elif ready["blocks_connect"]:  # invalid_credentials | invalid_callback
+            prov_state = "setup_error"
+            prov_detail = {"invalid_credentials": f"{name} rejected the app's client ID or secret.",
+                           "invalid_callback": f"{name} sign-in has no usable callback URL."}[ready["state"]]
+            reason = (f"{prov_detail} {ready['detail'] or ''}".strip() if is_admin else
+                      f"{name} sign-in needs an admin to fix its setup, so connecting won't work yet.")
         else:
             prov_state, prov_detail = "available", SIGN_IN[p]
             if prov.simulated:
@@ -186,7 +194,8 @@ def connections(db: Session | None = None, settings: BackendSettings | None = No
         out.append({"portal": p, "name": name, "url": HOME[p], "kind": "native" if p == "naukri" else "oauth",
                     "simulated": bool(prov and prov.simulated), "summary": SUMMARY[p], "reason": reason,
                     "status": status_, "status_label": label, "limited": limited, "identity": view,
-                    "setup_state": setup if is_admin else None,
+                    "setup_state": ready["state"] if is_admin and ready else None,
+                    "readiness": ({**ready, "detail": ready["detail"] if is_admin else None} if ready else None),
                     "scopes": {"requested": requested, "granted": granted},
                     "capabilities": caps, "actions": actions})
     return out

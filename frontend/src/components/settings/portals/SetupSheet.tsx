@@ -16,8 +16,9 @@ import { PortalLogo } from "./PortalLogo";
 import { leaveForSignIn, when, type SetupRow, type SetupState } from "./types";
 
 const STATE: Record<SetupState, [string, ChipTone]> = {
-  not_configured: ["Not configured", "neutral"], simulated: ["Local simulator", "warn"], ready_to_test: ["Ready to test", "check"],
-  verified: ["Verified", "ok"], authorization_required: ["Provider authorization required", "warn"], failed: ["Test failed", "fail"],
+  missing_configuration: ["Not configured", "neutral"], invalid_callback: ["Callback URL problem", "fail"], invalid_credentials: ["Credentials rejected", "fail"],
+  authorization_required: ["Provider authorization required", "warn"], provider_unavailable: ["Provider temporarily unavailable", "warn"],
+  consent_declined: ["Test cancelled", "neutral"], verified: ["Verified", "ok"], unverified: ["Not tested yet", "check"], simulated: ["Local simulator", "warn"],
 };
 
 const useSetupRows = (enabled: boolean) =>
@@ -68,7 +69,7 @@ function Steps({ row }: { row: SetupRow }) {
   const tested = row.last_test?.status === "verified" && !row.last_test.simulated;
   return (
     <>
-    {row.last_test && <LastTest row={row} />}
+    <ReadinessBanner row={row} />
     <ol className="space-y-6 border-l border-dashed border-border/80 pl-0 [&>li]:-ml-px" data-testid={`setup-steps-${row.provider}`}>
       <Step n={1} title={li ? "Create a LinkedIn developer app" : "Register in Indeed's Partner Console"} done={row.configured}>
         {li ? (
@@ -95,7 +96,7 @@ function Steps({ row }: { row: SetupRow }) {
         </div>
         <p data-testid="scope-status">
           Approval: {tested ? <span className="font-medium text-success">confirmed by a real sign-in on {when(row.last_test!.at)}</span>
-            : row.state === "authorization_required" ? <span className="font-medium text-caution">{row.name} refused the app in the last test</span>
+            : row.state === "authorization_required" ? <span className="font-medium text-caution">{row.name} hasn't approved the app (last test)</span>
             : "not verified yet. Run the test in step 5."}
         </p>
         {li && row.links.docs && (
@@ -174,19 +175,38 @@ function Credentials({ row }: { row: SetupRow }) {
       </div>
     );
   }
+  const storage = row.secret_storage;
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save.mutate(); }} data-testid="credentials-form">
+      {!storage.can_save && (
+        <p role="alert" data-testid="secret-storage-off" className="rounded-lg bg-caution-tint px-3 py-2 text-caution ring-1 ring-caution/25">
+          Saving secrets is off. {storage.detail} Set it on the backend and restart (generate one with
+          <code className="mx-1">python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>),
+          or use {row.env_names.join(" and ")} instead. Everything else in JobPilot keeps working.
+        </p>
+      )}
+      {row.secret_status === "unreadable" && (
+        <p role="alert" data-testid="secret-unreadable" className="rounded-lg bg-caution-tint px-3 py-2 text-caution ring-1 ring-caution/25">
+          {row.problem} Until then, {row.name} sign-in is off; entering the secret again replaces the unreadable one.
+        </p>
+      )}
+      {row.secret_status === "needs_rotation" && (
+        <p role="note" className="rounded-lg bg-paper-sunk px-3 py-2 ring-1 ring-border">
+          The saved secret opens only with ENCRYPTION_KEY_PREVIOUS. Run <code>python -m backend.scripts.connector_secrets rotate --from previous --apply</code>,
+          then remove the previous key.
+        </p>
+      )}
       <p>Copy both from the app's <b className="text-foreground">Auth</b> {row.provider === "indeed" ? "credentials page" : "tab"}. The secret is stored encrypted on
         the backend and is never shown again, not even to admins. Or set {row.env_names.join(" and ")} on the server instead.</p>
       <Field label="Client ID" htmlFor={`cid-${row.provider}`}>
         <Input id={`cid-${row.provider}`} value={clientId} onChange={(e) => setClientId(e.target.value)} autoComplete="off" spellCheck={false} className="font-mono text-xs" />
       </Field>
-      <Field label="Client Secret" htmlFor={`cs-${row.provider}`} hint={row.has_secret ? "A secret is saved. Leave this empty to keep it." : undefined}>
+      <Field label="Client Secret" htmlFor={`cs-${row.provider}`} hint={row.has_secret && row.secret_status !== "unreadable" ? "A secret is saved. Leave this empty to keep it." : undefined}>
         <Input id={`cs-${row.provider}`} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="new-password" spellCheck={false}
                placeholder={row.has_secret ? "••••••••••••  (saved)" : ""} className="font-mono text-xs" />
       </Field>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={save.isPending || !clientId.trim() || (!secret && !row.has_secret)}>
+        <Button type="submit" size="sm" disabled={!storage.can_save || save.isPending || !clientId.trim() || (!secret && (!row.has_secret || row.secret_status === "unreadable"))}>
           {save.isPending ? <Loader2 className="animate-spin" /> : <KeyRound />} Save credentials
         </Button>
         {row.client_id && !removing && <Button type="button" size="sm" variant="ghost" onClick={() => setRemoving(true)}><Trash2 /> Remove</Button>}
@@ -227,16 +247,25 @@ function TestConnection({ row }: { row: SetupRow }) {
   );
 }
 
-function LastTest({ row }: { row: SetupRow }) {
-  const t = row.last_test!;
+function ReadinessBanner({ row }: { row: SetupRow }) {
+  const r = row.readiness;
+  const t = row.last_test;
+  const tone = r.state === "verified" ? "bg-success-tint text-success ring-success/25"
+    : r.blocks_connect ? "bg-caution-tint text-caution ring-caution/25" : "bg-paper-sunk text-foreground ring-border";
   return (
-    <div data-testid="last-test" role="status" className={cn("mb-5 rounded-xl px-3.5 py-2.5 text-sm ring-1",
-      t.status === "verified" ? "bg-success-tint text-success ring-success/25" : t.status === "cancelled" ? "bg-paper-sunk text-foreground ring-border" : "bg-caution-tint text-caution ring-caution/25")}>
-      <p className="font-semibold">
-        {t.status === "verified" ? `Verified with ${t.simulated ? "the local simulator (not the real " + row.name + ")" : "the real " + row.name}`
-          : t.status === "cancelled" ? "Last test was cancelled" : t.status === "authorization_required" ? `${row.name} refused the app` : "Last test failed"} · {when(t.at)}
-      </p>
-      {t.detail && <p className="mt-0.5 text-xs leading-relaxed">{t.detail}</p>}
+    <div className="mb-5 space-y-2">
+      <div data-testid="readiness" data-state={r.state} role="status" className={cn("rounded-xl px-3.5 py-2.5 text-sm ring-1", tone)}>
+        <p className="font-semibold">
+          {STATE[r.state][0]}{t?.at ? ` · last real test ${when(t.at)}` : ""}
+          <span className="font-normal"> · {r.blocks_connect ? "Connect is off for everyone until this is fixed" : "candidates can connect"}</span>
+        </p>
+        {r.detail && <p className="mt-0.5 text-xs leading-relaxed">{r.detail}</p>}
+      </div>
+      {row.simulated_test && (
+        <p data-testid="simulated-test" className="rounded-lg bg-paper-sunk px-3 py-2 text-xs text-muted-foreground ring-1 ring-border">
+          SIMULATED test ({row.simulated_test.status.replace(/_/g, " ")}, {when(row.simulated_test.at)}) against the local simulator. It doesn't count for the real {row.name}.
+        </p>
+      )}
     </div>
   );
 }

@@ -105,6 +105,85 @@ class CredentialCipher:
             return None
 
 
+class ConnectorKeyError(Exception):
+    """state: missing | invalid. The message is safe to show an admin; it never contains a key."""
+
+    def __init__(self, state: str, message: str):
+        super().__init__(message)
+        self.state = state
+        self.message = message
+
+
+def connector_key_id(key: str) -> str:
+    """A short public identifier of an encryption key (not the key, and not usable to recover it): lets the server say
+    which key a saved secret was encrypted with, so a rotation or a lost key is diagnosable."""
+    return hashlib.sha256(b"jobpilot-connector-key-id:" + key.encode()).hexdigest()[:16]
+
+
+def legacy_jwt_derived_key(settings: BackendSettings) -> str:
+    """The key CredentialCipher derives from JWT_SECRET when ENCRYPTION_KEY is unset. Used ONLY by the recovery tool
+    (backend/scripts/connector_secrets.py) to read connector secrets saved before V3.3 hardening; never to encrypt."""
+    return base64.urlsafe_b64encode(hashlib.sha256(("credential-key:" + settings.jwt_secret).encode()).digest()).decode()
+
+
+class ConnectorSecretCipher:
+    """Encrypts portal developer credentials (LinkedIn/Indeed client secrets) with the dedicated ENCRYPTION_KEY only.
+
+    Unlike CredentialCipher it never falls back to a key derived from JWT_SECRET and never generates a key: without a
+    valid ENCRYPTION_KEY it refuses (ConnectorKeyError), so connector secrets can't silently depend on the JWT secret
+    or become unreadable after a restart. ENCRYPTION_KEY_PREVIOUS, when set, is tried for reading only (rotation)."""
+
+    def __init__(self, settings: BackendSettings, key: str | None = None):
+        key = key if key is not None else settings.encryption_key
+        if not key:
+            raise ConnectorKeyError("missing", "ENCRYPTION_KEY isn't set on the server. Connector secrets need their own "
+                                               "encryption key (a Fernet key), separate from JWT_SECRET.")
+        try:
+            self._fernet = Fernet(key.encode() if isinstance(key, str) else key)
+        except (ValueError, TypeError):
+            raise ConnectorKeyError("invalid", "ENCRYPTION_KEY isn't a valid Fernet key (32 url-safe base64-encoded bytes).") from None
+        self.key_id = connector_key_id(key)
+        prev = getattr(settings, "encryption_key_previous", None) if key == settings.encryption_key else None
+        self._previous = None
+        if prev:
+            try:
+                self._previous = (Fernet(prev.encode()), connector_key_id(prev))
+            except (ValueError, TypeError):
+                self._previous = None
+
+    @staticmethod
+    def status(settings: BackendSettings) -> tuple[str, str | None, str | None]:
+        """(ok | missing | invalid, admin-facing detail, key id)."""
+        try:
+            c = ConnectorSecretCipher(settings)
+        except ConnectorKeyError as exc:
+            return exc.state, exc.message, None
+        return "ok", None, c.key_id
+
+    def encrypt(self, value: str) -> str:
+        return self._fernet.encrypt(value.encode()).decode()
+
+    def _fernet_try(self, value: str) -> str | None:
+        """This key only (no previous key): the plaintext, or None."""
+        try:
+            return self._fernet.decrypt(value.encode()).decode()
+        except InvalidToken:
+            return None
+
+    def decrypt(self, value: str) -> tuple[str | None, str | None]:
+        """(plaintext, key id that opened it), or (None, None) when neither the current nor the previous key can."""
+        try:
+            return self._fernet.decrypt(value.encode()).decode(), self.key_id
+        except InvalidToken:
+            pass
+        if self._previous:
+            try:
+                return self._previous[0].decrypt(value.encode()).decode(), self._previous[1]
+            except InvalidToken:
+                pass
+        return None, None
+
+
 class RateLimiter:
     """Sliding-window limiter keyed by (bucket, client). In-process: one backend worker."""
 

@@ -39,8 +39,9 @@ LEEWAY_SECONDS = 60
 
 
 class ProviderError(Exception):
-    """kind: denied | invalid_grant | invalid_token | unauthorized | client | provider_error | network
-    (client: the provider refused JobPilot's app itself, e.g. a wrong client secret or an app not yet approved)"""
+    """kind: denied | invalid_grant | invalid_token | unauthorized | client | client_unauthorized | redirect |
+    provider_error | network. client: the app's credentials were rejected (invalid_client); client_unauthorized: the
+    app isn't approved for the product or scopes; redirect: the callback URL isn't registered."""
 
     def __init__(self, kind: str, message: str):
         super().__init__(message)
@@ -106,29 +107,40 @@ def _redirect(settings: BackendSettings, explicit: str | None) -> str:
     return f"{base}/oauth-callback.html" if base else ""
 
 
-def credentials(settings: BackendSettings, key: str, db: Any = None) -> tuple[str, str, str]:
-    """(client_id, client_secret, source). Server environment settings win; otherwise what an admin saved in Portal
-    Connections (the secret decrypted here, on the backend only)."""
+def credentials(settings: BackendSettings, key: str, db: Any = None) -> tuple[str, str, str, str | None]:
+    """(client_id, client_secret, source, issue). Server environment settings win; otherwise what an admin saved in
+    Portal Connections, decrypted here on the backend with the dedicated ENCRYPTION_KEY only (never a key derived from
+    JWT_SECRET). `issue` says why saved credentials can't be used (no key, or a key that can't open them)."""
     env_id, env_secret = getattr(settings, f"{key}_client_id", None) or "", getattr(settings, f"{key}_client_secret", None) or ""
     if env_id or env_secret:
-        return env_id, env_secret, "env"
+        return env_id, env_secret, "env", None
     if db is not None:
         from sqlalchemy import select
 
         from backend.models import PortalProviderConfig
-        from backend.security import CredentialCipher
+        from backend.security import ConnectorKeyError, ConnectorSecretCipher
 
         row = db.execute(select(PortalProviderConfig).where(PortalProviderConfig.provider == key)).scalar_one_or_none()
         if row is not None and row.client_id and row.client_secret_encrypted:
-            return row.client_id, CredentialCipher(settings).decrypt(row.client_secret_encrypted) or "", "admin"
-    return "", "", ""
+            name = {"linkedin": "LinkedIn", "indeed": "Indeed"}.get(key, key)
+            try:
+                secret, _ = ConnectorSecretCipher(settings).decrypt(row.client_secret_encrypted)
+            except ConnectorKeyError as exc:
+                return row.client_id, "", "admin", f"The saved {name} secret can't be read: {exc.message}"
+            if secret is None:
+                return row.client_id, "", "admin", (
+                    f"The saved {name} secret can't be decrypted with this server's ENCRYPTION_KEY"
+                    + (f" (it was saved with key {row.client_secret_key_id})" if row.client_secret_key_id else "")
+                    + ". Restore that key (or set it as ENCRYPTION_KEY_PREVIOUS), or enter the secret again.")
+            return row.client_id, secret, "admin", None
+    return "", "", "", None
 
 
 def get(settings: BackendSettings, key: str, db: Any = None) -> Provider | None:
     """The provider as this server is set up. Pass `db` to include credentials an admin saved in Portal Connections."""
     if key not in PROVIDERS:
         return None
-    client_id, client_secret, source = credentials(settings, key, db)
+    client_id, client_secret, source, issue = credentials(settings, key, db)
     if key == "linkedin":
         p = Provider(
             key="linkedin", name="LinkedIn",
@@ -160,7 +172,7 @@ def get(settings: BackendSettings, key: str, db: Any = None) -> Provider | None:
     if dev and settings.environment != "production" and source != "admin":
         p = _replace(p, authorize_url=dev["authorize"], token_url=dev["token"], userinfo_url=dev["userinfo"], jwks_url=dev["jwks"],
                      issuers=(dev["issuer"],), simulated=True)
-    return _replace(p, problem=_problem(p, settings))
+    return _replace(p, problem=issue or _problem(p, settings))
 
 
 def _replace(p: Provider, **kw: Any) -> Provider:
@@ -231,9 +243,15 @@ def _token_request(p: Provider, form: dict[str, str]) -> dict[str, Any]:
     data = _json(resp) if resp.content else {}
     if resp.status_code != 200 or "access_token" not in data:
         err = str(data.get("error") or "")
-        if err in ("invalid_client", "unauthorized_client"):
-            raise ProviderError("client", f"{p.name} refused JobPilot's app ({err}): check the client ID and secret, and that "
-                                          f"{p.name} has approved the app for sign-in.")
+        if err == "invalid_client":
+            raise ProviderError("client", f"{p.name} rejected JobPilot's app credentials (invalid_client): check the client ID and secret.")
+        if err in ("unauthorized_client", "invalid_scope"):
+            raise ProviderError("client_unauthorized", f"{p.name} hasn't authorised JobPilot's app for this sign-in ({err}): "
+                                                       f"check that {p.name} approved the product and scopes.")
+        if err in ("invalid_redirect_uri", "redirect_uri_mismatch"):
+            raise ProviderError("redirect", f"{p.name} didn't accept the callback URL ({err}): register exactly {p.redirect_uri}.")
+        if resp.status_code >= 500:
+            raise ProviderError("provider_error", f"{p.name} returned an error ({resp.status_code}). Try again later.")
         if err in ("invalid_grant", "invalid_request", "invalid_redirect_uri") or resp.status_code in (400, 401):
             raise ProviderError("invalid_grant", f"{p.name} didn't accept the sign-in (it may have expired). Start again.")
         raise ProviderError("provider_error", f"{p.name} returned an error ({resp.status_code}).")

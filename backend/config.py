@@ -22,6 +22,7 @@ class BackendSettings(BaseModel):
     refresh_token_days: int = 14
     # Fernet key for encrypting third-party credentials (IMAP passwords). Derived from jwt_secret if unset.
     encryption_key: str | None = None
+    encryption_key_previous: str | None = None  # read-only during a key rotation (connector secrets)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:3000"])
     registration_invite_code: str | None = None
     trust_proxy_headers: bool = True
@@ -146,6 +147,7 @@ def get_settings() -> BackendSettings:
         "access_token_minutes": int(_env("ACCESS_TOKEN_MINUTES", 15)),
         "refresh_token_days": int(_env("REFRESH_TOKEN_DAYS", 14)),
         "encryption_key": _env("ENCRYPTION_KEY"),
+        "encryption_key_previous": _env("ENCRYPTION_KEY_PREVIOUS"),
         "cors_origins": _env("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"),
         "registration_invite_code": _env("REGISTRATION_INVITE_CODE"),
         "trust_proxy_headers": _env("TRUST_PROXY_HEADERS", "true").lower() == "true",

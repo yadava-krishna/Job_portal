@@ -586,10 +586,15 @@ class PortalProviderConfig(Base, TimestampMixin):
     client_secret_encrypted: Mapped[str | None] = mapped_column(Text)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # verified | authorization_required | cancelled | failed
+    # verified | invalid_credentials | invalid_callback | authorization_required | provider_unavailable | cancelled | failed
     last_test_status: Mapped[str | None] = mapped_column(String(30))
     last_test_detail: Mapped[str | None] = mapped_column(String(300))
     last_test_simulated: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    # V3.3 hardening (migration 0019): the public id of the ENCRYPTION_KEY that encrypted the secret, the configuration
+    # fingerprint the last real test ran against, and the last simulated test, kept apart from the real result.
+    client_secret_key_id: Mapped[str | None] = mapped_column(String(16))
+    last_test_config: Mapped[str | None] = mapped_column(String(64))
+    simulated_test: Mapped[dict[str, Any] | None] = mapped_column(JSONType)
 
 
 class Interview(Base, TimestampMixin):

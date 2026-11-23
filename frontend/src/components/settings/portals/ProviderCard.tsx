@@ -11,7 +11,7 @@ import type { Portal } from "./types";
 export type CardIntent = "details" | "checklist" | "prepare" | "setup" | "import";
 
 const TONE: Record<Portal["status"], ChipTone> = {
-  linked: "ok", not_linked: "check", not_configured: "neutral", reconnect_required: "warn", authorization_required: "warn", native_only: "check",
+  linked: "ok", not_linked: "check", not_configured: "neutral", setup_error: "warn", reconnect_required: "warn", authorization_required: "warn", native_only: "check",
 };
 
 interface Btn { key: string; label: string; icon: React.ReactNode; onClick?: () => void; href?: string; disabled?: boolean }
@@ -53,7 +53,7 @@ export function ProviderCard({ p, transient, actions, isAdmin, onIntent }: {
     primary = importBtn;
     secondary = [openBtn, prepareBtn];
   } else if (has("setup")) {  // not configured, or refused by the portal: an admin fixes the setup
-    primary = { key: "setup", label: p.status === "authorization_required" ? "Review setup" : `Set up ${p.name}`, icon: <Settings2 />, onClick: () => onIntent("setup") };
+    primary = { key: "setup", label: p.status === "not_configured" ? `Set up ${p.name}` : "Review setup", icon: <Settings2 />, onClick: () => onIntent("setup") };
     secondary = [importBtn, openBtn];
   } else {  // a candidate on a server without the portal's sign-in: what still works
     primary = importBtn;
@@ -87,7 +87,7 @@ export function ProviderCard({ p, transient, actions, isAdmin, onIntent }: {
             {id?.simulated && <p className="text-xs font-medium text-caution" data-testid={`simulated-${p.portal}`}>Simulated test account from a local test server. This is not your {p.name} account.</p>}
             {note && (
               <p role={kind === "failed" || kind === "unavailable" ? "alert" : undefined}
-                 className={`text-xs leading-relaxed ${kind || p.status === "reconnect_required" || p.status === "authorization_required" ? "text-caution" : "text-muted-foreground"}`}>{note}</p>
+                 className={`text-xs leading-relaxed ${kind || ["reconnect_required", "authorization_required", "setup_error"].includes(p.status) ? "text-caution" : "text-muted-foreground"}`}>{note}</p>
             )}
             {opened && p.kind === "native" && (
               <div className="rounded-lg bg-route-tint/50 px-3 py-2 text-xs leading-relaxed" role="status" data-testid="naukri-return">

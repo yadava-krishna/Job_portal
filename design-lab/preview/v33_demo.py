@@ -85,21 +85,25 @@ def main() -> None:
     tmp = Path(tempfile.mkdtemp(prefix="jobpilot-v33-demo-"))
     sim = SimulatedProvider()
     app_url = f"http://localhost:{FRONT}"
-    plain, plain_api, plain_db = backend(tmp, "plain", {})
+    from cryptography.fernet import Fernet
+
+    plain, plain_api, plain_db = backend(tmp, "plain", {"ENCRYPTION_KEY": Fernet.generate_key().decode()})
+    nokey, nokey_api, nokey_db = backend(tmp, "nokey", {})  # no ENCRYPTION_KEY: saving connector secrets must be off
     simb, sim_api, _ = backend(tmp, "sim", {
         "LINKEDIN_CLIENT_ID": "sim-linkedin-client", "LINKEDIN_CLIENT_SECRET": "sim-linkedin-secret",
         "INDEED_CLIENT_ID": "sim-indeed-client", "INDEED_CLIENT_SECRET": "sim-indeed-secret", "OAUTH_DEV_ENDPOINTS": json.dumps(sim.endpoints())})
     fe = subprocess.Popen(["npx", "vite", "--port", str(FRONT), "--strictPort"], cwd=ROOT / "frontend", stdout=open(tmp / "vite.log", "w"),
                           stderr=subprocess.STDOUT, start_new_session=True)
     try:
-        for u in (f"{plain_api}/api/v1/health", f"{sim_api}/api/v1/health", f"{app_url}/"):
+        for u in (f"{plain_api}/api/v1/health", f"{sim_api}/api/v1/health", f"{nokey_api}/api/v1/health", f"{app_url}/"):
             wait(u)
         cand = account(plain_api, tmp, "v33.candidate@example.com")
         admin = account(plain_api, tmp, "v33.admin@example.com", plain_db, admin=True)
         simc = account(sim_api, tmp, "v33.sim@example.com")
-        drive(app_url, plain_api, cand, admin, sim_api, simc, sim)
+        nokey_admin = account(nokey_api, tmp, "v33.nokey.admin@example.com", nokey_db, admin=True)
+        drive(app_url, plain_api, cand, admin, sim_api, simc, sim, nokey_api, nokey_admin)
     finally:
-        plain.terminate(); simb.terminate(); os.killpg(fe.pid, signal.SIGTERM); sim.server.shutdown()
+        nokey.terminate(); plain.terminate(); simb.terminate(); os.killpg(fe.pid, signal.SIGTERM); sim.server.shutdown()
     failed = [r for r in results if not r[1]]
     (OUT / "demo_results.json").write_text(json.dumps(results, indent=1))
     print(f"\n{len(results) - len(failed)} passed, {len(failed)} failed")
@@ -121,7 +125,7 @@ def context(br, api: str, who: dict, *, theme="light", viewport=(1440, 1000), vi
 
 
 def portals(pg, app_url: str):
-    pg.goto(f"{app_url}/#/settings?tab=portals")
+    pg.goto(f"{app_url}/#/settings?tab=portals", timeout=120000)
     pg.get_by_test_id("portal-connections").wait_for(timeout=30000)
     pg.wait_for_timeout(900)
 
@@ -131,7 +135,7 @@ def escape(pg):
     pg.wait_for_timeout(500)
 
 
-def drive(app_url, plain_api, cand, admin, sim_api, simc, sim) -> None:
+def drive(app_url, plain_api, cand, admin, sim_api, simc, sim, nokey_api, nokey_admin) -> None:
     with sync_playwright() as p:
         br = p.chromium.launch(channel="chromium")
         shot = lambda pg, name, full=False: pg.screenshot(path=str(OUT / f"{name}.png"), full_page=full)  # noqa: E731
@@ -285,7 +289,7 @@ def drive(app_url, plain_api, cand, admin, sim_api, simc, sim) -> None:
         st.get_by_label("Client Secret").fill("demo-not-a-real-secret")
         check("setup: the secret field is masked", st.get_by_label("Client Secret").get_attribute("type") == "password")
         st.get_by_role("button", name="Save credentials").click()
-        st.get_by_text("Ready to test").wait_for(timeout=20000)
+        st.locator("[data-testid=readiness][data-state=unverified]").wait_for(timeout=20000)
         ap.wait_for_timeout(500)
         shot(ap, "q19_credentials_saved_ready_to_test")
         raw = httpx.get(f"{plain_api}/api/v1/admin/portals", headers=admin["h"]).text
@@ -302,10 +306,11 @@ def drive(app_url, plain_api, cand, admin, sim_api, simc, sim) -> None:
               and q["client_id"] == ["demo-not-a-real-client-id"] and q["redirect_uri"] == [f"{app_url}/oauth-callback.html"])
         # SIMULATED answer: what LinkedIn sends back for an app it hasn't approved.
         ap.goto(f"{app_url}/oauth-callback.html?error=unauthorized_client&state={q['state'][0]}")
-        ap.get_by_test_id("last-test").wait_for(timeout=30000)
+        ap.locator("[data-testid=readiness][data-state=authorization_required]").wait_for(timeout=30000)
         ap.wait_for_timeout(600)
         shot(ap, "q21_test_result_refused_SIMULATED_ANSWER")
-        check("test: the refusal is shown as the result, nothing linked", "refused the app" in ap.get_by_test_id("last-test").inner_text())
+        check("test: the refusal is shown as the result and turns Connect off", "Connect is off for everyone" in ap.get_by_test_id("readiness").inner_text())
+        check("test: the backend refuses Connect too", httpx.post(f"{plain_api}/api/v1/portals/linkedin/connect", headers=cand["h"]).status_code == 409)
 
         cctx = context(br, plain_api, cand)
         cp = cctx.new_page()
@@ -329,10 +334,29 @@ def drive(app_url, plain_api, cand, admin, sim_api, simc, sim) -> None:
         ap.get_by_test_id("portal-linkedin").get_by_role("button", name="Review setup").click()
         ap.get_by_test_id("setup-sheet").get_by_role("button", name="Remove").click()
         ap.get_by_role("group", name="Remove credentials").get_by_role("button", name="Remove").click()
-        ap.get_by_test_id("setup-sheet").get_by_text("Not configured").wait_for(timeout=20000)
+        ap.locator("[data-testid=readiness][data-state=missing_configuration]").wait_for(timeout=20000)
         check("setup: removing the credentials turns LinkedIn sign-in off again",
               httpx.get(f"{plain_api}/api/v1/portals", headers=cand["h"]).json()[0]["status"] == "not_configured")
         actx.close()
+
+        # ---- A server without ENCRYPTION_KEY: saving connector secrets is off -------------------------------------------
+        nctx = context(br, nokey_api, nokey_admin)
+        npg = nctx.new_page()
+        portals(npg, app_url)
+        npg.get_by_role("button", name="Set up LinkedIn").click()
+        nst = npg.get_by_test_id("setup-sheet")
+        nst.get_by_test_id("secret-storage-off").wait_for(timeout=20000)
+        nst.get_by_label("Client ID").fill("demo-not-a-real-client-id")
+        nst.get_by_label("Client Secret").fill("demo-not-a-real-secret")
+        npg.wait_for_timeout(400)
+        nst.get_by_test_id("secret-storage-off").scroll_into_view_if_needed()
+        shot(npg, "q30_no_encryption_key_saving_off")
+        check("no ENCRYPTION_KEY: Save is disabled and the reason is shown", nst.get_by_role("button", name="Save credentials").is_disabled()
+              and "ENCRYPTION_KEY" in nst.get_by_test_id("secret-storage-off").inner_text())
+        r = httpx.put(f"{nokey_api}/api/v1/admin/portals/linkedin/credentials", headers=nokey_admin["h"], json={"client_id": "demo-client", "client_secret": "demo-secret"})
+        check("no ENCRYPTION_KEY: the API refuses to store a secret", r.status_code == 409 and "demo-secret" not in r.text, str(r.status_code))
+        check("no ENCRYPTION_KEY: the rest of JobPilot works", httpx.get(f"{nokey_api}/api/v1/jobs", headers=nokey_admin["h"]).status_code == 200)
+        nctx.close()
 
         # ---- Candidate on the SIMULATED-provider server: connection flow ------------------------------------------------
         sctx = context(br, sim_api, simc)

@@ -72,7 +72,7 @@
  [
   "second Naukri job imported",
   true,
-  "{\"run\":{\"id\":2,\"trigger\":\"manual\",\"status\":\"completed\",\"sources\":[\"user_job_url\"],\"started_at\":\"2026-11-23T11:35:12.199795\",\"completed_at\":\"2026-11-23T11:35:12.222215\",\"jobs_found\":1,\"jobs_new\":1,\"job"
+  "{\"run\":{\"id\":2,\"trigger\":\"manual\",\"status\":\"completed\",\"sources\":[\"user_job_url\"],\"started_at\":\"2026-11-23T12:20:14.031298\",\"completed_at\":\"2026-11-23T12:20:14.058225\",\"jobs_found\":1,\"jobs_new\":1,\"job"
  ],
  [
   "find jobs: Naukri listing count reflects the import",
@@ -130,7 +130,12 @@
   ""
  ],
  [
-  "test: the refusal is shown as the result, nothing linked",
+  "test: the refusal is shown as the result and turns Connect off",
+  true,
+  ""
+ ],
+ [
+  "test: the backend refuses Connect too",
   true,
   ""
  ],
@@ -146,6 +151,21 @@
  ],
  [
   "setup: removing the credentials turns LinkedIn sign-in off again",
+  true,
+  ""
+ ],
+ [
+  "no ENCRYPTION_KEY: Save is disabled and the reason is shown",
+  true,
+  ""
+ ],
+ [
+  "no ENCRYPTION_KEY: the API refuses to store a secret",
+  true,
+  "409"
+ ],
+ [
+  "no ENCRYPTION_KEY: the rest of JobPilot works",
   true,
   ""
  ],

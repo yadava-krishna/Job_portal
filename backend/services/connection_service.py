@@ -39,6 +39,24 @@ STATE_TTL = timedelta(minutes=10)
 CANCELLED = {"user_cancelled_login", "user_cancelled_authorize", "access_denied", "consent_required", "login_required"}
 # The provider refused JobPilot's app itself (not the user): wrong credentials, an unapproved app or scope.
 APP_REFUSED = {"unauthorized_client", "invalid_client", "invalid_scope", "unsupported_response_type"}
+TEMPORARY = {"server_error", "temporarily_unavailable"}
+REDIRECT_REFUSED = {"redirect_uri_mismatch", "invalid_redirect_uri"}
+
+
+def test_verdict(error: str, kind: str | None) -> str:
+    """An admin's failed setup test, as a readiness verdict (portal_setup_service): from the `error` on the portal's
+    redirect, or the kind of error the token/userinfo endpoints gave."""
+    if error in CANCELLED:
+        return "cancelled"
+    if error == "invalid_client" or kind == "client":
+        return "invalid_credentials"
+    if error in REDIRECT_REFUSED or kind == "redirect":
+        return "invalid_callback"
+    if error in APP_REFUSED or kind == "client_unauthorized":
+        return "authorization_required"
+    if error in TEMPORARY or kind in ("network", "provider_error"):
+        return "provider_unavailable"
+    return "failed"
 
 
 def _aware(dt: datetime | None) -> datetime | None:
@@ -68,6 +86,12 @@ def identity(db: Session, user: User, provider: str) -> ExternalIdentity | None:
 def effective_status(row: ExternalIdentity, p: Provider | None, now: datetime | None = None) -> tuple[str, str | None]:
     """linked | reconnect_required, with the reason shown to the user."""
     now = now or utcnow()
+    if p is not None and bool((row.checks or {}).get("simulated")) != bool(p.simulated):
+        # Linked through the local simulator while the server now uses the real portal (or the other way round): it's
+        # not a real account here, and its tokens must never be sent to the other server.
+        return "reconnect_required", (f"This link was made with the local simulator, not the real {p.name}. Connect your real "
+                                      f"{p.name} account." if not p.simulated else
+                                      f"This server now uses the local simulator. Your real {p.name} link isn't used here.")
     if row.status == "reconnect_required":
         return "reconnect_required", row.status_detail
     exp = _aware(row.access_expires_at)
@@ -87,6 +111,13 @@ def start(db: Session, settings: BackendSettings, user: User, provider: str, *, 
     p = provider_or_404(settings, provider, db)
     if not p.configured:
         raise HTTPException(status.HTTP_409_CONFLICT, p.problem)
+    if purpose == "link":  # the backend, not just the page, refuses a setup known to be broken
+        from backend.services import portal_setup_service
+
+        ready = portal_setup_service.provider_readiness(db, settings, p)
+        if ready["blocks_connect"]:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"{p.name} sign-in isn't available right now: an admin needs to fix the "
+                                                          f"setup ({ready['state'].replace('_', ' ')}). Nothing was started.")
     now = utcnow()
     # Old pending sign-ins for this user and portal are dropped: only the newest can complete.
     db.execute(delete(OAuthState).where(OAuthState.user_id == user.id, OAuthState.provider == p.key))
@@ -132,9 +163,7 @@ def complete(db: Session, settings: BackendSettings, user: User, *, state: str, 
     try:
         out = _complete(db, settings, user, row, p, code=code, error=error, iss=iss, test=True, seen=seen)
     except HTTPException as exc:
-        err = _safe_code(error)
-        verdict = ("cancelled" if err in CANCELLED else
-                   "authorization_required" if err in APP_REFUSED or seen.get("kind") == "client" else "failed")
+        verdict = test_verdict(_safe_code(error), seen.get("kind"))
         if seen.get("claimed"):  # this attempt got as far as the provider (not a stale or reused sign-in)
             portal_setup_service.record_test(db, p, verdict, str(exc.detail))
         raise
@@ -165,7 +194,7 @@ def _complete(db: Session, settings: BackendSettings, user: User, row: OAuthStat
         db.commit()
         if _safe_code(error) in CANCELLED:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"You cancelled on {p.name}. {nothing}")
-        if _safe_code(error) in APP_REFUSED:
+        if _safe_code(error) in APP_REFUSED | REDIRECT_REFUSED:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"{p.name} refused JobPilot's app ({_safe_code(error)}): the app's "
                                                              f"credentials, redirect URL or approval need an admin's attention. {nothing}")
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"{p.name} didn't complete the sign-in ({_safe_code(error) or 'error'}). {nothing}")

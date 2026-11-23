@@ -27,7 +27,10 @@ def sclient(app_env, monkeypatch, fake):
     from backend.config import get_settings
     from backend.main import create_app
 
+    from cryptography.fernet import Fernet
+
     monkeypatch.setenv("PUBLIC_APP_URL", APP)
+    monkeypatch.setenv("ENCRYPTION_KEY", Fernet.generate_key().decode())  # connector secrets need a dedicated key
     for k in ("LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET", "INDEED_CLIENT_ID", "INDEED_CLIENT_SECRET", "OAUTH_DEV_ENDPOINTS"):
         monkeypatch.delenv(k, raising=False)
     get_settings.cache_clear()
@@ -88,7 +91,7 @@ def test_only_admins_reach_setup(sclient):
     assert "setup" not in r["actions"] and r["setup_state"] is None and "CLIENT" not in r["reason"]
     a = make_admin(sclient)
     ra = rows(sclient, a)["linkedin"]
-    assert "setup" in ra["actions"] and ra["setup_state"] == "not_configured" and "Set it up" in ra["reason"]
+    assert "setup" in ra["actions"] and ra["setup_state"] == "missing_configuration" and "Set it up" in ra["reason"]
     assert "setup" not in rows(sclient, a)["naukri"]["actions"]  # Naukri has nothing to set up
 
 
@@ -98,7 +101,7 @@ def test_setup_shows_the_real_callback_from_configuration(sclient, monkeypatch):
     a = make_admin(sclient)
     li, ind = setup_rows(sclient, a)["linkedin"], setup_rows(sclient, a)["indeed"]
     assert li["redirect_uri"] == f"{APP}/oauth-callback.html" and li["redirect_from"] == "PUBLIC_APP_URL" and li["redirect_problem"] is None
-    assert li["state"] == "not_configured" and li["configured"] is False and li["has_secret"] is False and li["client_id"] is None
+    assert li["state"] == "missing_configuration" and li["configured"] is False and li["has_secret"] is False and li["client_id"] is None
     assert li["links"]["console"] == "https://www.linkedin.com/developers/apps" and li["product"] == "Sign In with LinkedIn using OpenID Connect"
     assert li["scopes"] == ["openid", "profile", "email"] and li["env_names"] == ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"]
     assert ind["links"]["console"] == "https://docs.indeed.com/getstarted/partner-console"
@@ -128,7 +131,7 @@ def test_saved_credentials_are_encrypted_and_never_returned(sclient):
     r = save(sclient, a, "linkedin", "li-client", "li-secret")
     assert r.status_code == 200 and "li-secret" not in r.text
     out = r.json()
-    assert out["configured"] and out["source"] == "admin" and out["has_secret"] and out["client_id"] == "li-client" and out["state"] == "ready_to_test"
+    assert out["configured"] and out["source"] == "admin" and out["has_secret"] and out["client_id"] == "li-client" and out["state"] == "unverified"
     assert "li-secret" not in sclient.get(f"{API}/admin/portals", headers=a).text
     from backend.config import get_settings
     from backend.db import session_factory
@@ -174,7 +177,7 @@ def test_admin_saved_credentials_never_use_the_simulator(sclient, monkeypatch):
     get_settings.cache_clear()
     save(sclient, a, "linkedin", "li-client", "li-secret")
     li = setup_rows(sclient, a)["linkedin"]
-    assert li["simulated"] is False and li["state"] == "ready_to_test"
+    assert li["simulated"] is False and li["state"] == "unverified"
     url = sclient.post(f"{API}/admin/portals/linkedin/test", headers=a).json()["authorization_url"]
     assert url.startswith("https://www.linkedin.com/oauth/v2/authorization?")
 
@@ -194,20 +197,26 @@ def test_linkedin_test_connection_verifies_and_links_nothing(sclient, fake):
     assert "AT-li" not in r.text
 
 
-def test_refused_app_shows_provider_authorization_required(sclient, fake):
+def test_rejected_credentials_and_unapproved_app_block_connect_with_their_own_states(sclient, fake):
     a = make_admin(sclient)
     c = auth(register(sclient, "cand@example.com"))
     save(sclient, a, "linkedin", "li-client", "wrong-secret")
     _, r = run_test(sclient, a, fake, "linkedin", fake.accounts["li-sub-1"])
-    assert r.status_code == 502 and "refused JobPilot's app" in r.json()["detail"]
+    assert r.status_code == 502 and "invalid_client" in r.json()["detail"]
     s = setup_rows(sclient, a)["linkedin"]
-    assert s["state"] == "authorization_required" and s["last_test"]["status"] == "authorization_required"
+    assert s["state"] == "invalid_credentials" and s["readiness"]["blocks_connect"] is True
+    li = rows(sclient, c)["linkedin"]
+    assert li["status"] == "setup_error" and li["status_label"] == "Setup needs attention" and "connect" not in li["actions"]
+    assert li["readiness"] == {"state": "invalid_credentials", "blocks_connect": True, "detail": None}  # no technical detail for candidates
+    blocked = sclient.post(f"{API}/portals/linkedin/connect", headers=c)
+    assert blocked.status_code == 409 and "invalid credentials" in blocked.json()["detail"]
+    # The portal refusing the app at its own sign-in page: not approved for the product/scopes.
+    _, r = run_test(sclient, a, fake, "linkedin", fake.accounts["li-sub-1"], code=None, error="unauthorized_client")
+    assert r.status_code == 502 and "refused JobPilot's app" in r.json()["detail"]
     li = rows(sclient, c)["linkedin"]
     assert li["status"] == "authorization_required" and li["status_label"] == "Provider authorization required"
     assert "connect" not in li["actions"] and "refused" in li["reason"]
-    # The provider refusing at its own sign-in page counts the same.
-    _, r = run_test(sclient, a, fake, "linkedin", fake.accounts["li-sub-1"], code=None, error="unauthorized_client")
-    assert r.status_code == 502 and setup_rows(sclient, a)["linkedin"]["last_test"]["status"] == "authorization_required"
+    assert sclient.post(f"{API}/portals/linkedin/connect", headers=c).status_code == 409
     # New credentials clear the old verdict.
     save(sclient, a, "linkedin", "li-client", "li-secret")
     assert setup_rows(sclient, a)["linkedin"]["last_test"] is None and rows(sclient, c)["linkedin"]["status"] == "not_linked"
@@ -226,7 +235,7 @@ def test_indeed_setup_test_uses_pkce_and_iss_and_records_cancel(sclient, fake):
     # Cancelling on Indeed is recorded as cancelled, not as a broken setup.
     _, r = run_test(sclient, a, fake, "indeed", INDEED_ACCT, code=None, error="access_denied")
     s = setup_rows(sclient, a)["indeed"]
-    assert r.status_code == 400 and s["last_test"]["status"] == "cancelled" and s["state"] == "ready_to_test"
+    assert r.status_code == 400 and s["last_test"]["status"] == "cancelled" and s["state"] == "consent_declined"
 
 
 def test_a_candidate_cannot_finish_an_admins_test(sclient, fake):

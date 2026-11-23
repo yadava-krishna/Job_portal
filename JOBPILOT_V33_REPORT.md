@@ -206,6 +206,47 @@ Video: `v33/video/`.
 - **Gap to decide on:** the candidate connect endpoint doesn't itself refuse when the last admin test was "refused".
   The UI hides the button; a direct API call would just get the portal's own refusal.
 
+## Connector hardening (follow-up)
+**Root causes fixed**
+- Saved connector secrets could fall back to a key derived from `JWT_SECRET`. They now require `ENCRYPTION_KEY`
+  (`ConnectorSecretCipher`), and saving is off without it.
+- Connect was hidden only in the page. `connection_service.start` now refuses blocked configurations itself.
+- One "refused" verdict covered every failure. Readiness now separates missing configuration, invalid callback, invalid
+  credentials, missing approval, temporary outage, declined consent, verified and unverified. Only the first four
+  block Connect.
+- A simulated test could overwrite the real result. It is now stored separately.
+- A simulator-linked identity looked linked on a real server. It now needs a reconnect, and its token is never sent.
+- A test result for old settings still applied. Results now carry a configuration fingerprint.
+
+**Before changing keys, existing encrypted records were inspected** (read-only counts):
+- Production has 0 saved connector secrets, 0 linked identities and 0 pending sign-ins.
+- Production's `ENCRYPTION_KEY` is set and is a valid Fernet key.
+- No connector secret was ever encrypted under the `JWT_SECRET` fallback, so no rotation is needed.
+- The recovery procedure is in `docs/PORTAL_CONNECTIONS.md`.
+
+**Files changed**
+- `backend/security.py`: `ConnectorSecretCipher`, `connector_key_id`, `legacy_jwt_derived_key`.
+- `backend/config.py`: `ENCRYPTION_KEY_PREVIOUS`.
+- `backend/services/identity_providers.py`, `portal_setup_service.py`, `connection_service.py`, `portal_service.py`.
+- `backend/models/__init__.py`, plus new `backend/migrations/versions/0019_connector_hardening.py`.
+- New `backend/scripts/connector_secrets.py`.
+- `frontend/src/components/settings/portals/{types.ts,ProviderCard.tsx,SetupSheet.tsx}`.
+- Tests: `frontend/src/test/portals.test.tsx` (+5) and new `tests/api/test_v33_connector_hardening.py` (18).
+- `design-lab/preview/v33_demo.py` (+4 checks, `q30`), `docs/PORTAL_CONNECTIONS.md`.
+
+**Security tests added**
+- No key, or an invalid key: nothing is stored and other features keep working.
+- Secrets are encrypted with the dedicated key and not the JWT-derived one.
+- Lost key: the secret is reported unreadable and is never silently kept.
+- Rotation with the previous key, and legacy JWT-key recovery, through the tool (dry run and apply).
+- Every readiness outcome, and whether it blocks Connect.
+- A temporary outage doesn't block.
+- A changed callback invalidates an old result.
+- A candidate's forged `error` can't change readiness.
+- A simulated test can't change the real result.
+- A simulated identity is never shown as linked, and its token isn't sent.
+- Simulator endpoints are ignored in production.
+
 ## Real-provider verification
 - **Not verified live.** No LinkedIn or Indeed developer credentials exist.
 - In the demo, the admin test really targeted `https://www.linkedin.com/oauth/v2/authorization` with the right

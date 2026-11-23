@@ -34,7 +34,7 @@ const BASE = ["open", "import", "prepare", "browse"] as Portal["actions"];
 const portal = (p: Portal["portal"], name: string, o: Partial<Portal> = {}): Portal => ({
   portal: p, name, url: { linkedin: "https://www.linkedin.com/jobs/", naukri: "https://www.naukri.com/", indeed: "https://in.indeed.com/" }[p],
   kind: p === "naukri" ? "native" : "oauth", summary: `${name} summary line.`, reason: p === "naukri" ? null : NOT_SET.replace(/LinkedIn/g, name),
-  status: "not_configured", status_label: "Not configured", limited: false, setup_state: null,
+  status: "not_configured", status_label: "Not configured", limited: false, setup_state: null, readiness: null,
   identity: null, scopes: { requested: p === "linkedin" ? ["openid", "profile", "email"] : [], granted: [] },
   actions: [...(p !== "indeed" ? ["optimize"] : []), ...BASE] as Portal["actions"], capabilities: caps() as Portal["capabilities"], ...o,
 });
@@ -56,7 +56,9 @@ const REVIEW = { portal: "linkedin", name: "LinkedIn", completeness: 50, source:
   items: [{ key: "headline", label: "Headline", state: "improve", existing: "Analyst", suggestion: "Senior Analyst at Alpha | Excel", why: "Mention the role.", copy: true, done_at: null }] };
 const setupRow = (o: Partial<SetupRow> = {}): SetupRow => ({
   provider: "linkedin", name: "LinkedIn", product: "Sign In with LinkedIn using OpenID Connect",
-  links: { console: "https://www.linkedin.com/developers/apps", docs: "https://learn.microsoft.com/x" }, state: "not_configured", configured: false,
+  links: { console: "https://www.linkedin.com/developers/apps", docs: "https://learn.microsoft.com/x" }, state: "missing_configuration", configured: false,
+  readiness: { state: "missing_configuration", blocks_connect: true, detail: "Not set up on this JobPilot server." },
+  secret_status: null, secret_storage: { state: "ok", detail: null, key_id: "0123456789abcdef", can_save: true }, simulated_test: null,
   problem: "Not set up on this JobPilot server: an admin needs to add LinkedIn developer app credentials (Set up LinkedIn in Portal Connections, or LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET).",
   source: null, editable: true, client_id: null, has_secret: false, redirect_uri: "https://jobs.example.test/oauth-callback.html", redirect_from: "PUBLIC_APP_URL",
   redirect_problem: null, scopes: ["openid", "profile", "email"], simulated: false, pkce: false, env_names: ["LINKEDIN_CLIENT_ID", "LINKEDIN_CLIENT_SECRET"],
@@ -380,9 +382,9 @@ describe("Naukri hand-off, guided import and preparing an application", () => {
 describe("Admin setup (LinkedIn, Indeed)", () => {
   beforeEach(() => {
     auth.role = "admin";
-    rows = [{ ...portal("linkedin", "LinkedIn"), setup_state: "not_configured", actions: ["optimize", ...BASE, "setup"],
+    rows = [{ ...portal("linkedin", "LinkedIn"), setup_state: "missing_configuration", actions: ["optimize", ...BASE, "setup"],
               reason: "LinkedIn sign-in isn't set up on this JobPilot server yet. Set it up with your developer app's credentials." },
-            naukri, { ...portal("indeed", "Indeed"), setup_state: "not_configured", actions: [...BASE, "setup"] }];
+            naukri, { ...portal("indeed", "Indeed"), setup_state: "missing_configuration", actions: [...BASE, "setup"] }];
     setup = [setupRow(), setupRow({ provider: "indeed", name: "Indeed", product: "3-legged OAuth (Indeed Partner Console)", links: { console: "https://docs.indeed.com/getstarted/partner-console" },
                                     scopes: ["email", "offline_access"], pkce: true, env_names: ["INDEED_CLIENT_ID", "INDEED_CLIENT_SECRET"] })];
     api.get.mockImplementation(async (url: string) => ({
@@ -396,7 +398,7 @@ describe("Admin setup (LinkedIn, Indeed)", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     api.put.mockImplementation(async (_url: string, body: Record<string, string>) => ({
-      data: setupRow({ state: "ready_to_test", configured: true, problem: null, source: "admin", client_id: body.client_id, has_secret: true }),
+      data: setupRow({ state: "unverified", readiness: { state: "unverified", blocks_connect: false, detail: "Set up, but no real LinkedIn sign-in test has passed yet." }, configured: true, problem: null, source: "admin", client_id: body.client_id, has_secret: true }),
     }));
     wrap(<PortalConnections />);
     fireEvent.click(within(await card("linkedin")).getByRole("button", { name: "Set up LinkedIn" }));
@@ -418,7 +420,7 @@ describe("Admin setup (LinkedIn, Indeed)", () => {
     await waitFor(() => expect(api.put).toHaveBeenCalledWith("/admin/portals/linkedin/credentials", { client_id: "86abc123", client_secret: "s3cr3t-value" }));
     await waitFor(() => expect((within(sheet).getByLabelText("Client Secret") as HTMLInputElement).value).toBe(""));
     expect(sheet.textContent).not.toContain("s3cr3t-value");
-    expect(await within(sheet).findByText("Ready to test")).toBeInTheDocument();
+    expect((await within(sheet).findAllByText("Not tested yet")).length).toBeGreaterThan(0);
     expect(within(sheet).getByRole("button", { name: /Test connection/ })).toBeEnabled();
   });
 
@@ -433,7 +435,7 @@ describe("Admin setup (LinkedIn, Indeed)", () => {
   });
 
   it("Test connection runs the real sign-in and shows the verified result when it comes back", async () => {
-    setup[0] = setupRow({ state: "ready_to_test", configured: true, problem: null, source: "admin", client_id: "86abc123", has_secret: true });
+    setup[0] = setupRow({ state: "unverified", readiness: { state: "unverified", blocks_connect: false, detail: "Set up, but no real LinkedIn sign-in test has passed yet." }, configured: true, problem: null, source: "admin", client_id: "86abc123", has_secret: true });
     const assign = mockLocation();
     api.post.mockResolvedValue({ data: { authorization_url: "https://www.linkedin.com/oauth/v2/authorization?state=t" } });
     const first = wrap(<PortalConnections />);
@@ -446,16 +448,17 @@ describe("Admin setup (LinkedIn, Indeed)", () => {
     // Back from LinkedIn.
     sessionStorage.setItem("jobpilot.oauthReturn", JSON.stringify({ state: "t", code: "c" }));
     const test = { provider: "linkedin", status: "verified", simulated: false, at: "2026-11-23T12:00:00Z", detail: "Signed in with LinkedIn, verified the ID token and account. Nothing was linked or kept." };
-    setup[0] = { ...setup[0], state: "verified", last_test: test as SetupRow["last_test"] };
+    setup[0] = { ...setup[0], state: "verified", readiness: { state: "verified", blocks_connect: false, detail: test.detail }, last_test: test as SetupRow["last_test"] };
     api.post.mockResolvedValue({ data: { ...rows[0], setup_test: test } });
     wrap(<PortalConnections />);
     const sheet = await screen.findByTestId("setup-sheet");
-    expect(await within(sheet).findByTestId("last-test")).toHaveTextContent("Verified with the real LinkedIn");
+    expect(await within(sheet).findByTestId("readiness")).toHaveTextContent("Verified · last real test");
+    expect(within(sheet).getByTestId("readiness")).toHaveTextContent("candidates can connect");
     expect(within(sheet).getByTestId("scope-status")).toHaveTextContent("confirmed by a real sign-in");
   });
 
   it("a server on the local simulator can't be 'tested', and env-set credentials aren't editable here", async () => {
-    setup[0] = setupRow({ state: "simulated", configured: true, problem: null, source: "env", editable: false, client_id: "sim-linkedin-client", has_secret: true, simulated: true });
+    setup[0] = setupRow({ state: "simulated", readiness: { state: "simulated", blocks_connect: false, detail: "Signs in with the local simulator." }, configured: true, problem: null, source: "env", editable: false, client_id: "sim-linkedin-client", has_secret: true, simulated: true });
     rows[0] = { ...ready(), simulated: true, status_label: "Ready to connect (simulated)", setup_state: "simulated", actions: ["connect", "optimize", ...BASE, "setup"] };
     wrap(<PortalConnections />);
     const li = await card("linkedin");
@@ -487,6 +490,78 @@ describe("Admin setup (LinkedIn, Indeed)", () => {
     expect(within(li).getByText("Provider authorization required")).toBeInTheDocument();
     expect(within(li).queryByRole("button", { name: /Connect/ })).toBeNull();
     expect(within(li).getByRole("button", { name: "Review setup" })).toBeInTheDocument();
+  });
+});
+
+describe("Connector hardening in the UI", () => {
+  beforeEach(() => {
+    auth.role = "admin";
+    rows = [{ ...portal("linkedin", "LinkedIn"), setup_state: "missing_configuration", actions: ["optimize", ...BASE, "setup"] }, naukri, portal("indeed", "Indeed")];
+    setup = [setupRow(), setupRow({ provider: "indeed", name: "Indeed" })];
+    api.get.mockImplementation(async (url: string) => ({
+      data: url === "/portals" ? rows : url === "/admin/portals" ? setup : url === "/integrations/email" ? { enabled: false, has_password: false } : REVIEW,
+    }));
+    sessionStorage.clear();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("without ENCRYPTION_KEY, saving secrets is off and says why", async () => {
+    setup[0] = setupRow({ secret_storage: { state: "missing", detail: "ENCRYPTION_KEY isn't set on the server.", key_id: null, can_save: false } });
+    wrap(<PortalConnections />);
+    fireEvent.click(within(await card("linkedin")).getByRole("button", { name: "Set up LinkedIn" }));
+    const sheet = await screen.findByTestId("setup-sheet");
+    expect(await within(sheet).findByTestId("secret-storage-off")).toHaveTextContent("ENCRYPTION_KEY isn't set");
+    fireEvent.change(within(sheet).getByLabelText("Client ID"), { target: { value: "86abc123" } });
+    fireEvent.change(within(sheet).getByLabelText("Client Secret"), { target: { value: "s3cr3t" } });
+    expect(within(sheet).getByRole("button", { name: /Save credentials/ })).toBeDisabled();
+  });
+
+  it("rejected credentials: the card follows the backend (no Connect), and the panel says Connect is off", async () => {
+    const r = { state: "invalid_credentials" as const, blocks_connect: true, detail: "LinkedIn rejected JobPilot's app credentials (invalid_client)." };
+    rows[0] = { ...rows[0], status: "setup_error", status_label: "Setup needs attention", setup_state: "invalid_credentials", readiness: r,
+                reason: "LinkedIn rejected the app's client ID or secret." };
+    setup[0] = setupRow({ state: "invalid_credentials", readiness: r, configured: true, problem: null, source: "admin", client_id: "86abc123", has_secret: true, secret_status: "ok" });
+    wrap(<PortalConnections />);
+    const li = await card("linkedin");
+    expect(within(li).getByText("Setup needs attention")).toBeInTheDocument();
+    expect(within(li).queryByRole("button", { name: /Connect/ })).toBeNull();
+    fireEvent.click(within(li).getByRole("button", { name: "Review setup" }));
+    const banner = await within(await screen.findByTestId("setup-sheet")).findByTestId("readiness");
+    expect(banner).toHaveAttribute("data-state", "invalid_credentials");
+    expect(banner).toHaveTextContent("Credentials rejected");
+    expect(banner).toHaveTextContent("Connect is off for everyone");
+  });
+
+  it("a temporary outage doesn't hide Connect: the backend's actions decide", async () => {
+    rows[0] = { ...portal("linkedin", "LinkedIn"), status: "not_linked", status_label: "Ready to connect", reason: null, setup_state: "provider_unavailable",
+                readiness: { state: "provider_unavailable", blocks_connect: false, detail: null }, actions: ["connect", "optimize", ...BASE, "setup"] };
+    wrap(<PortalConnections />);
+    expect(within(await card("linkedin")).getByRole("button", { name: "Connect with LinkedIn" })).toBeEnabled();
+  });
+
+  it("a simulated test is shown apart and never as the real result", async () => {
+    const real = { status: "verified" as const, detail: "Real sign-in passed.", simulated: false, at: "2026-11-23T12:00:00Z" };
+    setup[0] = setupRow({ state: "verified", readiness: { state: "verified", blocks_connect: false, detail: real.detail }, configured: true, problem: null,
+                          source: "admin", client_id: "86abc123", has_secret: true, secret_status: "ok", last_test: real,
+                          simulated_test: { status: "authorization_required", detail: "x", simulated: true, at: "2026-11-23T13:00:00Z" } });
+    wrap(<PortalConnections />);
+    fireEvent.click(within(await card("linkedin")).getByRole("button", { name: "Set up LinkedIn" }));
+    const sheet = await screen.findByTestId("setup-sheet");
+    expect(await within(sheet).findByTestId("readiness")).toHaveAttribute("data-state", "verified");
+    expect(within(sheet).getByTestId("simulated-test")).toHaveTextContent("SIMULATED test (authorization required");
+    expect(within(sheet).getByTestId("simulated-test")).toHaveTextContent("doesn't count for the real LinkedIn");
+  });
+
+  it("an unreadable saved secret is explained and can't be 'kept'", async () => {
+    setup[0] = setupRow({ secret_status: "unreadable", client_id: "86abc123", has_secret: true, source: "admin",
+                          problem: "The saved LinkedIn secret can't be decrypted with this server's ENCRYPTION_KEY (it was saved with key 0123456789abcdef)." });
+    wrap(<PortalConnections />);
+    fireEvent.click(within(await card("linkedin")).getByRole("button", { name: "Set up LinkedIn" }));
+    const sheet = await screen.findByTestId("setup-sheet");
+    expect(await within(sheet).findByTestId("secret-unreadable")).toHaveTextContent("can't be decrypted");
+    expect(within(sheet).getByRole("button", { name: /Save credentials/ })).toBeDisabled();  // needs a new secret
+    fireEvent.change(within(sheet).getByLabelText("Client Secret"), { target: { value: "new-secret" } });
+    expect(within(sheet).getByRole("button", { name: /Save credentials/ })).toBeEnabled();
   });
 });
 

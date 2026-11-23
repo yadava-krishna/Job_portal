@@ -5,7 +5,7 @@ export type PortalKey = "linkedin" | "naukri" | "indeed";
 export type CapKey = "identity_auth" | "account_linked" | "profile_access" | "listings" | "source" | "job_retrieval"
   | "application_handoff" | "native_handoff" | "assisted_submission" | "application_submission" | "profile_guidance" | "reconnect_required";
 export type Action = "connect" | "reconnect" | "check" | "disconnect" | "optimize" | "open" | "import" | "prepare" | "browse" | "setup";
-export type Status = "linked" | "not_linked" | "not_configured" | "reconnect_required" | "authorization_required" | "native_only";
+export type Status = "linked" | "not_linked" | "not_configured" | "setup_error" | "reconnect_required" | "authorization_required" | "native_only";
 export type Cap = { available: boolean; detail: string; state?: string; fields?: string[]; count?: number };
 
 export interface Identity {
@@ -14,23 +14,33 @@ export interface Identity {
   access_expires_at: string | null; can_refresh: boolean;
 }
 
-export interface SetupTest { status: "verified" | "authorization_required" | "cancelled" | "failed"; detail: string | null; simulated: boolean; at: string | null }
+export interface SetupTest {
+  status: "verified" | "invalid_credentials" | "invalid_callback" | "authorization_required" | "provider_unavailable" | "cancelled" | "failed";
+  detail: string | null; simulated: boolean; at: string | null;
+}
+/** The backend's connection readiness: one state, whether it blocks Connect (enforced by the backend), and why. */
+export interface Readiness { state: SetupState; blocks_connect: boolean; detail: string | null }
 
 export interface Portal {
   portal: PortalKey; name: string; url: string; kind: "oauth" | "native"; simulated?: boolean; summary: string; reason: string | null;
   status: Status; status_label: string; limited: boolean; identity: Identity | null;
-  setup_state: SetupState | null; scopes: { requested: string[]; granted: string[] }; actions: Action[];
+  setup_state: SetupState | null; readiness: Readiness | null; scopes: { requested: string[]; granted: string[] }; actions: Action[];
   capabilities: Record<CapKey, Cap>;
   /** Only on the answer to an admin's setup test (POST /portals/oauth/complete). */
   setup_test?: SetupTest & { provider: PortalKey };
 }
 
-export type SetupState = "not_configured" | "simulated" | "ready_to_test" | "verified" | "authorization_required" | "failed";
+export type SetupState = "missing_configuration" | "invalid_callback" | "invalid_credentials" | "authorization_required"
+  | "provider_unavailable" | "consent_declined" | "verified" | "unverified" | "simulated";
 
 export interface SetupRow {
   provider: "linkedin" | "indeed"; name: string; product: string; links: { console: string; docs?: string };
-  state: SetupState; configured: boolean; problem: string | null; source: "env" | "admin" | null; editable: boolean;
-  client_id: string | null; has_secret: boolean; redirect_uri: string | null; redirect_from: string | null; redirect_problem: string | null;
+  state: SetupState; readiness: Readiness; configured: boolean; problem: string | null; source: "env" | "admin" | null; editable: boolean;
+  client_id: string | null; has_secret: boolean;
+  /** ok | needs_rotation (opened by ENCRYPTION_KEY_PREVIOUS) | unreadable (no key opens it) | overridden (environment wins) */
+  secret_status: "ok" | "needs_rotation" | "unreadable" | "overridden" | null;
+  secret_storage: { state: "ok" | "missing" | "invalid"; detail: string | null; key_id: string | null; can_save: boolean };
+  simulated_test: SetupTest | null; redirect_uri: string | null; redirect_from: string | null; redirect_problem: string | null;
   scopes: string[]; simulated: boolean; pkce: boolean; env_names: string[]; last_test: SetupTest | null; updated_at: string | null;
 }
 

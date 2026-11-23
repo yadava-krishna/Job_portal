@@ -83,6 +83,58 @@ panel. Every call is `CurrentAdmin`-only (`/api/v1/admin/portals...`):
    `INDEED_SCOPES` stays `email offline_access`; JobPilot refuses `employer_access` and any other scope.
 4. Restart the backend. These variables are passed through `docker-compose.yml`; put the values in `.env` only.
 
+## Connector hardening (V3.3)
+
+**Dedicated key.** Saved client secrets use `security.ConnectorSecretCipher`, which accepts only `ENCRYPTION_KEY`, a
+Fernet key. Unlike `CredentialCipher` it never derives a key from `JWT_SECRET` and never generates one.
+
+Without a valid key:
+- `PUT /admin/portals/{p}/credentials` answers 409 and stores nothing;
+- the setup panel shows the reason and disables Save;
+- environment-variable credentials and the rest of JobPilot keep working.
+
+Each saved secret records the public id of its key (`client_secret_key_id`, migration 0019), so a missing or changed
+key is reported by name.
+
+**Readiness** (`readiness` on `/admin/portals` and `/portals`; `connection_service.start` enforces it):
+| State | Blocks Connect | Set by |
+|---|---|---|
+| `missing_configuration` | yes | no credentials, or saved ones no key can open |
+| `invalid_callback` | yes | no usable callback, or `redirect_uri_mismatch` in a test |
+| `invalid_credentials` | yes | `invalid_client` in a test |
+| `authorization_required` | yes | `unauthorized_client`, `invalid_scope` or `unsupported_response_type` in a test |
+| `provider_unavailable` | no | portal 5xx, network error, or `temporarily_unavailable` in a test |
+| `consent_declined` | no | the admin cancelled the test |
+| `verified` | no | a real test passed for exactly this configuration |
+| `unverified` | no | configured, not tested (or tested with other settings) |
+| `simulated` | no | `OAUTH_DEV_ENDPOINTS`; always labelled |
+
+Only an admin's test changes readiness. A candidate's sign-in result can't, because a browser can send any `error`.
+
+A result applies only to the configuration fingerprint it was recorded for: source, client ID, callback and scopes.
+New credentials clear it.
+
+**Simulated vs real**
+- Tests against the simulator are stored in `simulated_test` and never change the real result.
+- An identity linked through the simulator shows "Reconnect required (simulated)" when the server uses the real
+  portal. It never counts as linked, and its token is never sent to the real portal.
+- `OAUTH_DEV_ENDPOINTS` is ignored in production.
+
+**Recovery and rotation** (`backend/scripts/connector_secrets.py`; never prints a secret; dry run unless `--apply`):
+1. **Inspect:** `docker compose exec backend python -m backend.scripts.connector_secrets status` shows, for each secret,
+   which key opens it: `current`, `previous` or `legacy-jwt`.
+2. **Rotate keys:**
+   1. Set the new key as `ENCRYPTION_KEY` and the old one as `ENCRYPTION_KEY_PREVIOUS`, then restart. Sign-in keeps
+      working, because the previous key is read-only.
+   2. `rotate --from previous` (dry run), then `rotate --from previous --apply`.
+   3. `status`, then remove `ENCRYPTION_KEY_PREVIOUS` and restart.
+3. **Secrets saved before hardening without `ENCRYPTION_KEY`** (encrypted under the key derived from `JWT_SECRET`): set a
+   new `ENCRYPTION_KEY`, keep the same `JWT_SECRET`, and run `rotate --from legacy-jwt --apply`.
+4. **The original key is lost:** nothing can decrypt the secret. The tool leaves it untouched; an admin enters the
+   secret again in Settings, which replaces it.
+
+The tool re-encrypts a secret only after the old key opened it and the new ciphertext decrypts to the same value.
+
 ## Guided job import (V3.3)
 
 `POST /api/v1/jobs/import/preview {url}` runs the same parsing as `/jobs/import` (`record_from_mapping`) and saves
