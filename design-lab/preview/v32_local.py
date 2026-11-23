@@ -45,6 +45,12 @@ def main() -> None:
     secret_file = DATA / "jwt_secret"
     if not secret_file.exists():
         secret_file.write_text(secrets.token_hex(32))
+    enc_file = DATA / "encryption_key"  # this local copy's own ENCRYPTION_KEY (connector secrets need a dedicated key)
+    if not enc_file.exists():
+        from cryptography.fernet import Fernet
+
+        enc_file.write_text(Fernet.generate_key().decode())
+        enc_file.chmod(0o600)
     app_url, api = f"http://localhost:{FRONT}", f"http://127.0.0.1:{API_PORT}"
 
     keys = {}
@@ -59,7 +65,7 @@ def main() -> None:
     sim = SimulatedProvider()
     dev = {p: e for p, e in sim.endpoints().items() if p not in real} if "--simulated" in sys.argv else {}
     env = {**os.environ, "DATABASE_URL": f"sqlite:///{DATA / 'local.db'}", "STORAGE_DIR": str(DATA / "storage"),
-           "JWT_SECRET": secret_file.read_text().strip(), "CORS_ORIGINS": app_url, "SCHEDULER_ENABLED": "false",
+           "JWT_SECRET": secret_file.read_text().strip(), "ENCRYPTION_KEY": enc_file.read_text().strip(), "CORS_ORIGINS": app_url, "SCHEDULER_ENABLED": "false",
            "LLM_PROVIDER": "rule_based", "ENVIRONMENT": "development", "DOCS_MODE": "off", "PUBLIC_APP_URL": app_url,
            "OAUTH_DEV_ENDPOINTS": json.dumps(dev)}
     env.pop("REGISTRATION_INVITE_CODE", None)
