@@ -1,0 +1,1 @@
+var e=null;function t(t){e=t}function n(t){e&&e(t)||t()}export{t as n,n as t};

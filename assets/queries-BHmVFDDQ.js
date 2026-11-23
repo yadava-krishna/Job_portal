@@ -1,0 +1,1 @@
+import{M as e,an as t}from"./common-YRvY_HUd.js";var n=()=>t({queryKey:[`summary`,`overview`],queryFn:async()=>(await e.get(`/dashboard/overview`)).data});function r(e){return e.application_id==null?e.user_job_id==null?`/applied`:`/discover?job=${e.user_job_id}`:`/applied?app=${e.application_id}`}export{n,r as t};
